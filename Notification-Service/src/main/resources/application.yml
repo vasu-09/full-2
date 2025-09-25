@@ -1,0 +1,80 @@
+spring:
+  application:
+    name: Notification-Service
+
+  data:
+    web:
+      pageable:
+        default-page-size: 20
+        max-page-size: 200
+        one-indexed-parameters: false  # set true if you prefer page=1 to be the first page
+
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/backend_user_management?allowPublicKeyRetrieval=true&useSSL=false}
+    username: ${SPRING_DATASOURCE_USERNAME:root}
+    password: ${SPRING_DATASOURCE_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
+    show-sql: ${SPRING_JPA_SHOW_SQL:false}
+    properties:
+      hibernate:
+        format_sql: ${SPRING_JPA_FORMAT_SQL:false}
+
+  mail:
+    host: ${SPRING_MAIL_HOST:smtp.gmail.com}
+    port: ${SPRING_MAIL_PORT:587}
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH:true}
+          starttls:
+            enable: ${SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE:true}
+
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI:http://localhost:8080/.well-known/jwks.json}
+
+server:
+  port: ${SERVER_PORT:8093}
+
+logging:
+  level:
+    com:
+      om:
+        Notification_Service: ${LOGGING_LEVEL_COM_OM_NOTIFICATION_SERVICE:INFO}
+    org:
+      hibernate:
+        SQL: ${LOGGING_LEVEL_ORG_HIBERNATE_SQL:WARN}
+        type:
+          descriptor:
+            sql:
+              BasicBinder: ${LOGGING_LEVEL_ORG_HIBERNATE_BINDER:WARN}
+
+feign:
+  client:
+    config:
+      "rtc-service":
+        connectTimeout: ${FEIGN_RTC_CONNECT_TIMEOUT:2000}
+        readTimeout: ${FEIGN_RTC_READ_TIMEOUT:3000}
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      rtc:
+        slidingWindowSize: ${R4J_RTC_SLIDING_WINDOW:100}
+        failureRateThreshold: ${R4J_RTC_FAILURE_RATE_THRESHOLD:50}
+
+
+
+# Keep this custom and read it in a @ConfigurationProperties or @Value
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}

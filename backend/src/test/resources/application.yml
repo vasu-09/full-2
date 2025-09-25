@@ -1,0 +1,49 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;MODE=MySQL
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+  sql:
+    init:
+      mode: never
+  cloud:
+    discovery:
+      enabled: false
+
+
+
+
+jwt:
+  alg: RS256
+  issuer: test
+  kid: test
+  private-key-pem: |
+    -----BEGIN PRIVATE KEY-----
+    MIICdgIBADANBgkqhkiG9w0BAQEFAASCAmAwggJcAgEAAoGBAKY2phcKY8aZFs8k
+    sVPA4JVmkl6vkInzexY/vjYAphOP1HryghCal5Q7UaxjRnPTSQuHNJSyck/5kbYb
+    zJ2CEJCBlTOaCMHL80GyKyQM5LMXRLIIJS7oUoNuQGOJmF//IOlOrAN9qd185xGH
+    4YmWH/rnho/C7YI17N/2KYzrCePrAgMBAAECgYBQbgdnBNcNRg08hXPtpFrI0M6p
+    VOlrZ8+7D3NarGuw8ZuPNwRrRnNs/ltiQNPZvncNRgrSnZslSg4Rglg8K7EZhBg+
+    KyI2nTXvNgK9r2z+wHp1Wu83eWrlhQkn3iMJnkaMIuG9fAry7oF1xLr1SE78ZrQU
+    49bDRr9iQgkE8Hb/MQJBANxhu9itiWF1CO11wD4z5te5glOfllsgu+By5sV92y5l
+    USaOAY0pHNi5McnEgd9Tldpm0j+7yAkk/ODku7Kjl6MCQQDBE7V3O4OXQAVAM1Rv
+    qjen3qPhRUeg8dKIbdiq/bn+acTqKZzbz1RWnc29WUY7jg/fslq/T+zXXIYqmAcb
+    lOcZAkAEGWFIF3o9sNKYsB8CSS7bBl1RNt+yFDrKYvi95ahlBYdr4ypOONyLf25Y
+    pWoRAFoCNPVmMBT5bpGxkS+YlAhnAkAYodQP3xbdr/w7gZDvIg8xqnTL45PM060h
+    XKo8vlwBOis2GJL7dAr1dfJuirosFOavikiLib3Uh+hR/M1DVo7ZAkEAqkbnll5w
+    9zPtpWpHoq5gSMS8C1fDdfIbT0GcCQjowBu3EjyyIPk7LeWasw58pZGzlt0zqT54
+    uLrrhUbrTXdBqA==
+    -----END PRIVATE KEY-----
+  access-ttl-min: 15
+  refresh-ttl-days: 30
+
+eureka:
+  client:
+    enabled: false

@@ -1,0 +1,78 @@
+spring:
+  application:
+    name: Real-Time-Communication
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/backend_user_management?allowPublicKeyRetrieval=true&useSSL=false}
+    username: ${SPRING_DATASOURCE_USERNAME:root}
+    password: ${SPRING_DATASOURCE_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+
+server:
+  port: ${SERVER_PORT:8091}
+
+logging:
+  level:
+    org:
+      hibernate:
+        SQL: WARN           # or INFO/ERROR/OFF
+        type:
+          descriptor:
+            sql:
+              BasicBinder: WARN
+
+outbox:
+  publish:
+    delay: 4000
+call:
+  timeout:
+    sweep:
+      delay: 10000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: ${MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE:health,info,prometheus}
+  metrics:
+    tags:
+      app: ${MANAGEMENT_METRICS_TAGS_APP:rtc}
+      env: ${MANAGEMENT_METRICS_TAGS_ENV:prod}
+  tracing:
+    sampling:
+      probability: ${MANAGEMENT_TRACING_SAMPLING_PROBABILITY:1.0}
+
+turn:
+  secret: ${TURN_SECRET_BASE64:iz/UpRRaJ0JMSdq5TmNpQwfSwiR4ft7oRZAZHCTjFoo=}   # Base64 secret shared with your TURN server (coturn static-auth-secret)
+  ttlSeconds: ${TURN_TTL_SECONDS:600}
+  urls: ${TURN_URLS:stun:turn.example.com:3478,turn:turn.example.com:3478?transport=udp,turn:turn.example.com:3478?transport=tcp}
+
+media:
+  bucket: ${MEDIA_BUCKET:moc-media-bucket}
+  uploadExpirySeconds: ${MEDIA_UPLOAD_EXPIRY_SECONDS:600}
+  downloadExpirySeconds: ${MEDIA_DOWNLOAD_EXPIRY_SECONDS:300}
+
+# Kept as a property so you can override from env; usually this is just an ENV var read by Google SDKs.
+GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:/path/to/moc-service-account.json}
+
+jwt:
+  issuer: ${JWT_ISSUER:http://localhost:8092}
+  jwks-uri: ${JWT_JWKS_URI:http://localhost:8092/.well-known/jwks.json}
+  audience: ${JWT_AUDIENCE:}
+
+# Keep this custom and read it in a @ConfigurationProperties or @Value
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+
+rtc:
+  redis:
+    enabled: false
+    url: ${RTC_REDIS_URL:redis://localhost:6379}

@@ -1,0 +1,62 @@
+spring:
+  application:
+    name: To-Do-List-Service
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/backend_user_management?allowPublicKeyRetrieval=true&useSSL=false}
+    username: ${SPRING_DATASOURCE_USERNAME:root}
+    password: ${SPRING_DATASOURCE_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
+    show-sql: ${SPRING_JPA_SHOW_SQL:false}
+    properties:
+      hibernate:
+        format_sql: ${SPRING_JPA_FORMAT_SQL:false}
+#
+#  redis:
+#    host: ${SPRING_REDIS_HOST:localhost}
+#    port: ${SPRING_REDIS_PORT:6379}
+
+security:
+  oauth2:
+    resourceserver:
+      jwt:
+        issuer-uri: ${AUTH_ISSUER_URI:http://localhost:8092}
+        jwk-set-uri: ${AUTH_JWK_SET_URI:http://localhost:8092/.well-known/jwks.json}
+server:
+  port: ${SERVER_PORT:8090}
+
+logging:
+  level:
+    org:
+      hibernate:
+        SQL: ${LOGGING_LEVEL_ORG_HIBERNATE_SQL:WARN}
+        type:
+          descriptor:
+            sql:
+              BasicBinder: ${LOGGING_LEVEL_ORG_HIBERNATE_BINDER:WARN}
+      springframework:
+        security:
+          oauth2:
+            server:
+              resource: DEBUG
+            jwt: DEBUG
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: ${MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE:health,info,prometheus}
+#
+#razorpay:
+#  api:
+#    key: ${RAZORPAY_API_KEY:rzp_test_1UaYWJMuiMbpzB}
+#    secret: ${RAZORPAY_API_SECRET:tSv3viRgPajAnYVQqUkjVkLT}
+#    webhookSecret: ${RAZORPAY_API_WEBHOOK_SECRET:}
+
+# Keep this custom and read it in a @ConfigurationProperties or @Value
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
