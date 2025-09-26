@@ -25,6 +25,33 @@ In the output, you'll find options to open the app in a
 
 You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
 
+## Connecting to the Spring Boot API gateway
+
+The Expo screens that send and verify OTPs now use a shared Axios client that targets the Spring Boot API gateway on port `8080`. Follow these steps to test end-to-end on Windows:
+
+1. **Start the backend**
+   - Launch the Spring microservices (including the API gateway on port `8080`) from IntelliJ IDEA or via Maven.
+   - Confirm that `http://localhost:8080/auth/send-otp` and `http://localhost:8080/auth/verify-otp` respond as expected.
+
+2. **Allow web clients through CORS**
+   - The gateway and the authentication service now accept `http://localhost:19006` and `http://localhost:8081` by default, which covers Expo Web in development. Override the `CORS_ALLOWED_ORIGINS` environment variable if you serve the web client from a different origin.
+
+3. **Expose the machine IP for Expo Go**
+   - When you run `npx expo start --tunnel` or `--lan`, Expo prints the development host (for example `192.168.1.42`).
+   - Ensure your phone is on the same network and that Windows Firewall allows inbound traffic on port `8080`.
+   - If you prefer, set an explicit URL before starting Expo:
+
+     ```powershell
+     $env:EXPO_PUBLIC_API_URL = 'http://192.168.1.42:8080'
+     npx expo start
+     ```
+
+     On macOS/Linux use `export EXPO_PUBLIC_API_URL=...` instead of the PowerShell command above.
+
+4. **Verify from the app**
+   - The login and OTP screens display the detected API base URL to help you confirm that the device points to the gateway.
+   - Use the login screen to request an OTP and the OTP screen (navigated with the phone number in the route params) to validate it.
+
 ## Get a fresh project
 
 When you're ready, run:

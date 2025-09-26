@@ -1,28 +1,48 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, StatusBar } from 'react-native';
-import axios from 'axios';
+import apiClient, { apiBaseURL } from '../services/apiClient';
 
 const LoginScreen = () => {
   const [phone, setPhone] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState('');
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const sendOtp = async () => {
     try {
-      await axios.post('http://<your-backend-url>/auth/send-otp', { phone });
+      setIsSubmitting(true);
+      setError('');
+      setMessage('');
+
+      await apiClient.post('/auth/send-otp', { phone });
+
       setOtpSent(true);
-    } catch (error) {
-      console.error('Failed to send OTP:', error.message);
+    setMessage('OTP sent successfully.');
+    } catch (err) {
+      console.error('Failed to send OTP:', err.message);
+      setError('Unable to send OTP. Please check your connection and try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const verifyOtp = async () => {
     try {
-      const res = await axios.post('http://<your-backend-url>/auth/verify-otp', { phone, otp });
+      setIsSubmitting(true);
+      setError('');
+      setMessage('');
+
+      const res = await apiClient.post('/auth/verify-otp', { phone, otp });
       const token = res.data.token;
       console.log('Logged in. Token:', token);
-    } catch (error) {
-      console.error('OTP verification failed:', error.message);
+     setMessage('OTP verified. Logged in successfully.');
+    } catch (err) {
+      console.error('OTP verification failed:', err.message);
+      setError('Invalid OTP or server error. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -30,6 +50,10 @@ const LoginScreen = () => {
     <View style={styles.container}>
       <StatusBar backgroundColor="#535846" barStyle="light-content" />
       <Text style={styles.logo}>MoC</Text>
+       <Text style={styles.baseUrl}>API: {apiBaseURL}</Text>
+
+      {!!message && <Text style={styles.success}>{message}</Text>}
+      {!!error && <Text style={styles.error}>{error}</Text>}
 
       {!otpSent ? (
         <>
@@ -42,8 +66,12 @@ const LoginScreen = () => {
             placeholder="e.g. 9876543210"
             placeholderTextColor="#888"
           />
-          <TouchableOpacity style={styles.button} onPress={sendOtp}>
-            <Text style={styles.buttonText}>Send OTP</Text>
+           <TouchableOpacity
+            style={[styles.button, isSubmitting && styles.buttonDisabled]}
+            onPress={sendOtp}
+            disabled={isSubmitting}
+          >
+            <Text style={styles.buttonText}>{isSubmitting ? 'Sending…' : 'Send OTP'}</Text>
           </TouchableOpacity>
         </>
       ) : (
@@ -57,8 +85,12 @@ const LoginScreen = () => {
             placeholder="e.g. 123456"
             placeholderTextColor="#888"
           />
-          <TouchableOpacity style={styles.button} onPress={verifyOtp}>
-            <Text style={styles.buttonText}>Verify OTP</Text>
+          <TouchableOpacity
+            style={[styles.button, isSubmitting && styles.buttonDisabled]}
+            onPress={verifyOtp}
+            disabled={isSubmitting}
+          >
+            <Text style={styles.buttonText}>{isSubmitting ? 'Verifying…' : 'Verify OTP'}</Text>
           </TouchableOpacity>
         </>
       )}
@@ -79,6 +111,12 @@ const styles = StyleSheet.create({
     color: '#64792A',
     alignSelf: 'center',
     marginBottom: 40,
+  },
+  baseUrl: {
+    fontSize: 12,
+    color: '#555',
+    textAlign: 'center',
+    marginBottom: 16,
   },
   label: {
     fontSize: 18,
@@ -102,10 +140,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     elevation: 2,
   },
+  buttonDisabled: {
+    opacity: 0.7,
+  },
   buttonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  success: {
+    color: '#2f855a',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  error: {
+    color: '#c53030',
+    textAlign: 'center',
+    marginBottom: 16,
   },
 });
 

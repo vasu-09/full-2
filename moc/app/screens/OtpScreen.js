@@ -1,10 +1,18 @@
-import axios from 'axios';
 import React, { useRef, useState } from 'react';
 import { StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useRoute } from '@react-navigation/native';
+
+import apiClient, { apiBaseURL } from '../services/apiClient';
 
 const OtpScreen = () => {
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const inputs = useRef([]);
+   const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const route = useRoute();
+  const phoneNumber = route?.params?.phone ?? route?.params?.phoneNumber ?? '';
 
   const handleChange = (text, index) => {
     if (!/^\d?$/.test(text)) return; // Allow only single digit
@@ -19,13 +27,21 @@ const OtpScreen = () => {
   const verifyOtp = async () => {
     const otpValue = otp.join('');
     try {
-      const res = await axios.post('http://<your-backend-url>/auth/verify-otp', {
-        phone: '9876543210', // Replace with dynamic
+      setIsSubmitting(true);
+      setError('');
+      setMessage('');
+
+      const response = await apiClient.post('/auth/verify-otp', {
+        phone: phoneNumber,
         otp: otpValue,
       });
-      console.log('Logged in. Token:', res.data.token);
+     console.log('Logged in. Token:', response.data.token);
+      setMessage('OTP verified. Logged in successfully.');
     } catch (err) {
       console.error('OTP verification failed:', err.message);
+       setError('OTP verification failed. Please check the code and try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -33,6 +49,16 @@ const OtpScreen = () => {
     <View style={styles.container}>
       <StatusBar backgroundColor="#64792A" barStyle="light-content" />
       <Text style={styles.logo}>MoC</Text>
+      <Text style={styles.baseUrl}>API: {apiBaseURL}</Text>
+      {phoneNumber ? (
+        <Text style={styles.phoneLabel}>Sending code to {phoneNumber}</Text>
+      ) : (
+        <Text style={styles.phoneLabelWarning}>
+          No phone number supplied. Navigate to this screen with a `phone` param.
+        </Text>
+      )}
+      {!!message && <Text style={styles.success}>{message}</Text>}
+      {!!error && <Text style={styles.error}>{error}</Text>}
       <Text style={styles.label}>Enter the 6-digit code</Text>
 
       <View style={styles.otpContainer}>
@@ -49,8 +75,12 @@ const OtpScreen = () => {
         ))}
       </View>
 
-      <TouchableOpacity style={styles.button} onPress={verifyOtp}>
-        <Text style={styles.buttonText}>Verify</Text>
+<TouchableOpacity
+        style={[styles.button, isSubmitting && styles.buttonDisabled]}
+        onPress={verifyOtp}
+        disabled={isSubmitting}
+      >
+        <Text style={styles.buttonText}>{isSubmitting ? 'Verifying…' : 'Verify'}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -69,6 +99,22 @@ const styles = StyleSheet.create({
     color: '#64792A',
     alignSelf: 'center',
     marginBottom: 40,
+  },
+  baseUrl: {
+    fontSize: 12,
+    color: '#555',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  phoneLabel: {
+    textAlign: 'center',
+    color: '#333',
+    marginBottom: 12,
+  },
+  phoneLabelWarning: {
+    textAlign: 'center',
+    color: '#c05621',
+    marginBottom: 12,
   },
   label: {
     fontSize: 18,
@@ -97,10 +143,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     elevation: 2,
   },
+  buttonDisabled: {
+    opacity: 0.7,
+  },
   buttonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  success: {
+    color: '#2f855a',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  error: {
+    color: '#c53030',
+    textAlign: 'center',
+    marginBottom: 12,
   },
 });
 
