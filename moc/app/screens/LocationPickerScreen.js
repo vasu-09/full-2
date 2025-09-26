@@ -1,7 +1,7 @@
 // screens/LocationPickerScreen.js
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
-import { useEffect, useImperativeHandle, useRef, useState, forwardRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Dimensions,
   SafeAreaView,
@@ -9,29 +9,13 @@ import {
   Text,
   TouchableOpacity,
   View,
-  Platform
 } from 'react-native';
+import MapView from '../../components/MapView';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
-const MapView =
-  Platform.OS === 'web'
-    ? forwardRef(function WebFallbackMap({ style }, ref) {
-        useImperativeHandle(ref, () => ({
-          animateToRegion: () => {},
-        }));
 
-        return (
-          <View style={[StyleSheet.absoluteFill, style, styles.webFallback]}>
-            <Text style={styles.webFallbackText}>
-              Map preview isn&apos;t available on the web. Please use a mobile
-              device to pick a location.
-            </Text>
-          </View>
-        );
-      })
-    : require('react-native-maps').default;
 
 export default function LocationPickerScreen() {
   const insets = useSafeAreaInsets();
@@ -194,16 +178,7 @@ const styles = StyleSheet.create({
     width: '100%',
     backgroundColor: '#eee',
   },
-  webFallback: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f0f0f0',
-    padding: 16,
-  },
-  webFallbackText: {
-    color: '#333',
-    textAlign: 'center',
-  },
+
   markerFixed: {
     position: 'absolute',
     top: '50%',
