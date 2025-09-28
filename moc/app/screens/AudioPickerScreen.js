@@ -1,5 +1,5 @@
 // screens/AudioPickerScreen.js
-import { Audio } from 'expo-av';
+import { Audio } from 'expo-audio';
 import * as MediaLibrary from 'expo-media-library';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';

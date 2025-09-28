@@ -107,7 +107,7 @@ const styles = StyleSheet.create({
   logo: {
     fontSize: 40,
     fontWeight: 'bold',
-    color: '#64792A',
+    color: '#1f6ea7',
     alignSelf: 'center',
     marginBottom: 40,
   },
@@ -144,11 +144,11 @@ const styles = StyleSheet.create({
     fontSize: 22,
     textAlign: 'center',
     borderBottomWidth: 2,
-    borderColor: '#64792A',
+    borderColor: '#1f6ea7',
     color: '#000',
   },
   button: {
-    backgroundColor: '#64792A',
+    backgroundColor: '#1f6ea7',
     paddingVertical: 14,
     borderRadius: 10,
     alignItems: 'center',

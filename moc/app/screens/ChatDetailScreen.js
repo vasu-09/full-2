@@ -1,6 +1,6 @@
 // ChatDetailScreen.js
 import * as DocumentPicker from 'expo-document-picker';
-import { Audio } from 'expo-av';
+import { Audio } from 'expo-audio';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
