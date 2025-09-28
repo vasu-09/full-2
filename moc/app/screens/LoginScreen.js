@@ -20,7 +20,7 @@ const LoginScreen = () => {
       setIsSubmitting(true);
       setError('');
 
-      await apiClient.post('/auth/send-otp', { phone });
+      await apiClient.post('/auth/otp/send', { phone: trimmedPhone });
 
      router.push({
         pathname: '/screens/OtpScreen',

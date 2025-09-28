@@ -41,7 +41,7 @@ const OtpScreen = () => {
       setError('');
       setMessage('');
 
-      const response = await apiClient.post('/auth/verify-otp', {
+      const response = await apiClient.post('/auth/otp/verify', {
         phone: phoneNumber,
         otp: otpValue,
       });
