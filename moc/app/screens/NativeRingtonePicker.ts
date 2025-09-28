@@ -3,14 +3,12 @@ import { NativeModules } from 'react-native';
 
 const { RingtonePicker } = NativeModules;
 
-const openNativeTonePicker = async (type: 'notification' | 'ringtone') => {
-  try {
-    const result = await RingtonePicker.openRingtonePicker(type);
-    return result; // { uri, title }
-  } catch (error) {
-    console.error('Ringtone Picker Error:', error);
-    return null;
-  }
-};
+const openNativeTonePicker = (type: 'notification' | 'ringtone') =>
+  RingtonePicker.openRingtonePicker(type)
+    .then((result: { uri: string; title: string }) => result)
+    .catch((error: unknown) => {
+      console.error('Ringtone Picker Error:', error);
+      return null;
+    });
 
 export default openNativeTonePicker;

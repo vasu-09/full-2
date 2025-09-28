@@ -1,25 +1,31 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, StatusBar } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useState } from 'react';
+import { StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import apiClient, { apiBaseURL } from '../services/apiClient';
 
 const LoginScreen = () => {
+  const router = useRouter();
   const [phone, setPhone] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
-  const [otp, setOtp] = useState('');
-  const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const sendOtp = async () => {
+    const trimmedPhone = phone.trim();
+    if (!trimmedPhone) {
+      setError('Please enter your phone number before continuing.');
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       setError('');
-      setMessage('');
 
       await apiClient.post('/auth/send-otp', { phone });
 
-      setOtpSent(true);
-    setMessage('OTP sent successfully.');
+     router.push({
+        pathname: '/screens/OtpScreen',
+        params: { phone: trimmedPhone },
+      });
     } catch (err) {
       console.error('Failed to send OTP:', err.message);
       setError('Unable to send OTP. Please check your connection and try again.');
@@ -28,72 +34,32 @@ const LoginScreen = () => {
     }
   };
 
-  const verifyOtp = async () => {
-    try {
-      setIsSubmitting(true);
-      setError('');
-      setMessage('');
-
-      const res = await apiClient.post('/auth/verify-otp', { phone, otp });
-      const token = res.data.token;
-      console.log('Logged in. Token:', token);
-     setMessage('OTP verified. Logged in successfully.');
-    } catch (err) {
-      console.error('OTP verification failed:', err.message);
-      setError('Invalid OTP or server error. Please try again.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  
 
   return (
     <View style={styles.container}>
       <StatusBar backgroundColor="#535846" barStyle="light-content" />
       <Text style={styles.logo}>MoC</Text>
-       <Text style={styles.baseUrl}>API: {apiBaseURL}</Text>
+        <Text style={styles.baseUrl}>API: {apiBaseURL}</Text>
 
-      {!!message && <Text style={styles.success}>{message}</Text>}
       {!!error && <Text style={styles.error}>{error}</Text>}
 
-      {!otpSent ? (
-        <>
-          <Text style={styles.label}>Enter your mobile number</Text>
-          <TextInput
-            style={styles.input}
-            keyboardType="phone-pad"
-            value={phone}
-            onChangeText={setPhone}
-            placeholder="e.g. 9876543210"
-            placeholderTextColor="#888"
-          />
-           <TouchableOpacity
-            style={[styles.button, isSubmitting && styles.buttonDisabled]}
-            onPress={sendOtp}
-            disabled={isSubmitting}
-          >
-            <Text style={styles.buttonText}>{isSubmitting ? 'Sending…' : 'Send OTP'}</Text>
-          </TouchableOpacity>
-        </>
-      ) : (
-        <>
-          <Text style={styles.label}>Enter OTP</Text>
-          <TextInput
-            style={styles.input}
-            keyboardType="numeric"
-            value={otp}
-            onChangeText={setOtp}
-            placeholder="e.g. 123456"
-            placeholderTextColor="#888"
-          />
-          <TouchableOpacity
-            style={[styles.button, isSubmitting && styles.buttonDisabled]}
-            onPress={verifyOtp}
-            disabled={isSubmitting}
-          >
-            <Text style={styles.buttonText}>{isSubmitting ? 'Verifying…' : 'Verify OTP'}</Text>
-          </TouchableOpacity>
-        </>
-      )}
+       <Text style={styles.label}>Enter your mobile number</Text>
+      <TextInput
+        style={styles.input}
+        keyboardType="phone-pad"
+        value={phone}
+        onChangeText={setPhone}
+        placeholder="e.g. 9876543210"
+        placeholderTextColor="#888"
+      />
+      <TouchableOpacity
+        style={[styles.button, isSubmitting && styles.buttonDisabled]}
+        onPress={sendOtp}
+        disabled={isSubmitting}
+      >
+        <Text style={styles.buttonText}>{isSubmitting ? 'Sending…' : 'Send OTP'}</Text>
+      </TouchableOpacity>
     </View>
   );
 };
@@ -108,7 +74,7 @@ const styles = StyleSheet.create({
   logo: {
     fontSize: 40,
     fontWeight: 'bold',
-    color: '#64792A',
+    color: '#1f6ea7',
     alignSelf: 'center',
     marginBottom: 40,
   },
@@ -126,7 +92,7 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderColor: '#64792A',
+    borderColor: '#1f6ea7',
     padding: 12,
     borderRadius: 10,
     marginBottom: 20,
@@ -134,7 +100,7 @@ const styles = StyleSheet.create({
     color: '#000',
   },
   button: {
-    backgroundColor: '#64792A',
+    backgroundColor: '#1f6ea7',
     paddingVertical: 14,
     borderRadius: 10,
     alignItems: 'center',
@@ -147,11 +113,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
-  },
-  success: {
-    color: '#2f855a',
-    textAlign: 'center',
-    marginBottom: 16,
   },
   error: {
     color: '#c53030',

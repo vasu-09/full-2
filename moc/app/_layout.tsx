@@ -17,6 +17,8 @@ export default function RootLayout() {
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="screens/LoginScreen" options={{ headerShown: false }} />
+        <Stack.Screen name="screens/OtpScreen" options={{ headerShown: false }} />
         <Stack.Screen name="screens/CameraScreen" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="screens/NewListScreen" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="screens/ViewListScreen" options={{ presentation: 'fullScreenModal' }} />

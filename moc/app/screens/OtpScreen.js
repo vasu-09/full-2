@@ -1,15 +1,17 @@
 import React, { useRef, useState } from 'react';
 import { StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useRoute } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
 
 import apiClient, { apiBaseURL } from '../services/apiClient';
 
 const OtpScreen = () => {
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const inputs = useRef([]);
-   const [message, setMessage] = useState('');
+  const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const router = useRouter();
 
   const route = useRoute();
   const phoneNumber = route?.params?.phone ?? route?.params?.phoneNumber ?? '';
@@ -26,6 +28,14 @@ const OtpScreen = () => {
 
   const verifyOtp = async () => {
     const otpValue = otp.join('');
+    if (!phoneNumber) {
+      setError('Missing phone number. Please return to the login screen and request a new code.');
+      return;
+    }
+    if (otpValue.length !== 6) {
+      setError('Please enter the 6-digit code sent to your phone.');
+      return;
+    }
     try {
       setIsSubmitting(true);
       setError('');
@@ -35,15 +45,16 @@ const OtpScreen = () => {
         phone: phoneNumber,
         otp: otpValue,
       });
-     console.log('Logged in. Token:', response.data.token);
+      console.log('Logged in. Token:', response.data.token);
       setMessage('OTP verified. Logged in successfully.');
+      router.replace('/screens/MocScreen');
     } catch (err) {
-      console.error('OTP verification failed:', err.message);
+       console.error('OTP verification failed:', err.message);
        setError('OTP verification failed. Please check the code and try again.');
     } finally {
       setIsSubmitting(false);
     }
-  };
+    };
 
   return (
     <View style={styles.container}>
@@ -75,7 +86,7 @@ const OtpScreen = () => {
         ))}
       </View>
 
-<TouchableOpacity
+      <TouchableOpacity
         style={[styles.button, isSubmitting && styles.buttonDisabled]}
         onPress={verifyOtp}
         disabled={isSubmitting}
