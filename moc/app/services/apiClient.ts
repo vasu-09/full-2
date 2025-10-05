@@ -1,4 +1,4 @@
-import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
+import axios, { AxiosError, AxiosHeaders, InternalAxiosRequestConfig } from 'axios';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
@@ -153,10 +153,9 @@ const refreshAccessToken = async (): Promise<string | null> => {
 apiClient.interceptors.request.use(async (config) => {
   const token = await getAccessToken();
   if (token) {
-    if (!config.headers) {
-      config.headers = {};
-    }
-    config.headers.Authorization = `Bearer ${token}`;
+    const headers = AxiosHeaders.from(config.headers ?? {});
+    headers.set('Authorization', `Bearer ${token}`);
+    config.headers = headers;
   }
   return config;
 });
@@ -172,10 +171,9 @@ apiClient.interceptors.response.use(
 
       const newToken = await refreshAccessToken();
       if (newToken) {
-        if (!originalRequest.headers) {
-          originalRequest.headers = {};
-        }
-        originalRequest.headers.Authorization = `Bearer ${newToken}`;
+        const headers = AxiosHeaders.from(originalRequest.headers ?? {});
+        headers.set('Authorization', `Bearer ${newToken}`);
+        originalRequest.headers = headers;
         return apiClient(originalRequest);
       }
     }
