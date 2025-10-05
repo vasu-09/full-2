@@ -1,6 +1,14 @@
-import axios from 'axios';
+import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
+
+import {
+  clearSession,
+  getAccessToken,
+  getRefreshToken,
+  updateSessionTokens,
+} from './authStorage';
+
 
 type ExpoConfig = typeof Constants.expoConfig & {
   debuggerHost?: string | null;
@@ -96,5 +104,85 @@ const apiClient = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+type RetriableRequestConfig = InternalAxiosRequestConfig & {
+  _retry?: boolean;
+};
+
+let refreshPromise: Promise<string | null> | null = null;
+
+const refreshAccessToken = async (): Promise<string | null> => {
+  if (!refreshPromise) {
+    refreshPromise = (async () => {
+      const refreshToken = await getRefreshToken();
+      if (!refreshToken) {
+        return null;
+      }
+
+      try {
+        const { data } = await axios.post(
+          `${apiBaseURL}/auth/refresh`,
+          { refreshToken },
+          { headers: { 'Content-Type': 'application/json' } },
+        );
+
+        await updateSessionTokens({
+          accessToken: data?.accessToken ?? null,
+          refreshToken: data?.refreshToken ?? null,
+          sessionId: data?.sessionId ?? undefined,
+          issuedAt: data?.issuedAt ?? undefined,
+        });
+
+        if (data?.accessToken) {
+          return data.accessToken as string;
+        }
+
+        return null;
+      } catch {
+        await clearSession();
+        return null;
+      } finally {
+        refreshPromise = null;
+      }
+    })();
+  }
+
+  return refreshPromise;
+};
+
+apiClient.interceptors.request.use(async (config) => {
+  const token = await getAccessToken();
+  if (token) {
+    if (!config.headers) {
+      config.headers = {};
+    }
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error: AxiosError) => {
+    const status = error.response?.status;
+    const originalRequest = error.config as RetriableRequestConfig | undefined;
+
+    if (status === 401 && originalRequest && !originalRequest._retry) {
+      originalRequest._retry = true;
+
+      const newToken = await refreshAccessToken();
+      if (newToken) {
+        if (!originalRequest.headers) {
+          originalRequest.headers = {};
+        }
+        originalRequest.headers.Authorization = `Bearer ${newToken}`;
+        return apiClient(originalRequest);
+      }
+    }
+
+    return Promise.reject(error);
+  },
+);
+
 
 export default apiClient;

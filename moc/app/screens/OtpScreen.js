@@ -4,6 +4,7 @@ import { useRoute } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 
 import apiClient, { apiBaseURL } from '../services/apiClient';
+import { saveSession } from '../services/authStorage';
 
 const OtpScreen = () => {
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
@@ -45,7 +46,20 @@ const OtpScreen = () => {
         phone: phoneNumber,
         otp: otpValue,
       });
-      console.log('Logged in. Token:', response.data.token);
+      const { userId, sessionId, accessToken, refreshToken, issuedAt } = response.data ?? {};
+
+      await saveSession({
+        userId,
+        sessionId,
+        accessToken,
+        refreshToken,
+        issuedAt,
+      });
+
+      if (!accessToken || !refreshToken) {
+        setError('Login succeeded but tokens were missing in the response. Please try again.');
+        return;
+      }
       setMessage('OTP verified. Logged in successfully.');
       router.replace('/screens/MocScreen');
     } catch (err) {
