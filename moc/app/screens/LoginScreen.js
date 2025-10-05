@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import apiClient, { apiBaseURL } from '../services/apiClient';
 
 const LoginScreen = () => {
@@ -9,12 +9,7 @@ const LoginScreen = () => {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const sendOtp = async () => {
-    const trimmedPhone = phone.trim();
-    if (!trimmedPhone) {
-      setError('Please enter your phone number before continuing.');
-      return;
-    }
+  const sendOtp = async (trimmedPhone) => {
 
     try {
       setIsSubmitting(true);
@@ -34,6 +29,25 @@ const LoginScreen = () => {
     }
   };
 
+  const handleSendOtp = () => {
+    if (isSubmitting) return;
+
+    const trimmedPhone = phone.trim();
+    if (!trimmedPhone) {
+      setError('Please enter your phone number before continuing.');
+      return;
+    }
+
+    setError('');
+
+    const message = `+91 ${trimmedPhone}\n\nWe’ll send a verification code to this number. Messaging rates may apply.`;
+
+    Alert.alert('Is the phone number below correct?', message, [
+      { text: 'Edit number', style: 'cancel' },
+      { text: 'OK', onPress: () => sendOtp(trimmedPhone) },
+    ]);
+  };
+
   
 
   return (
@@ -44,18 +58,26 @@ const LoginScreen = () => {
 
       {!!error && <Text style={styles.error}>{error}</Text>}
 
-       <Text style={styles.label}>Enter your mobile number</Text>
-      <TextInput
-        style={styles.input}
-        keyboardType="phone-pad"
-        value={phone}
-        onChangeText={setPhone}
-        placeholder="e.g. 9876543210"
-        placeholderTextColor="#888"
-      />
+        <Text style={styles.label}>Enter your mobile number</Text>
+      <View style={styles.inputContainer}>
+        <TextInput
+          style={styles.countryCode}
+          value="+91"
+          editable={false}
+          placeholderTextColor="#888"
+        />
+        <TextInput
+          style={styles.input}
+          keyboardType="phone-pad"
+          value={phone}
+          onChangeText={setPhone}
+          placeholder="e.g. 9876543210"
+          placeholderTextColor="#888"
+        />
+      </View>
       <TouchableOpacity
         style={[styles.button, isSubmitting && styles.buttonDisabled]}
-        onPress={sendOtp}
+         onPress={handleSendOtp}
         disabled={isSubmitting}
       >
         <Text style={styles.buttonText}>{isSubmitting ? 'Sending…' : 'Send OTP'}</Text>
@@ -90,12 +112,29 @@ const styles = StyleSheet.create({
     textAlign: 'left',
     color: '#333',
   },
-  input: {
+   inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     borderWidth: 1,
     borderColor: '#1f6ea7',
-    padding: 12,
     borderRadius: 10,
     marginBottom: 20,
+     overflow: 'hidden',
+  },
+  countryCode: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    fontSize: 16,
+    color: '#000',
+    backgroundColor: '#f0f4f8',
+    borderRightWidth: 1,
+    borderRightColor: '#1f6ea7',
+    minWidth: 60,
+    textAlign: 'center',
+  },
+  input: {
+    flex: 1,
+    padding: 12,
     fontSize: 16,
     color: '#000',
   },

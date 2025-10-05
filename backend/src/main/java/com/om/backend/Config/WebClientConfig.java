@@ -9,6 +9,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.util.StringUtils;
 
 @Configuration
 @RequiredArgsConstructor
@@ -19,12 +20,20 @@ public class WebClientConfig {
 
     @Bean
     public WebClient smsWebClient() {
-        return WebClient.builder()
-                .baseUrl(props.getBaseUrl())
+//        return WebClient.builder()
+//                .baseUrl(props.getBaseUrl())
+        WebClient.Builder builder = WebClient.builder()
                 .exchangeStrategies(ExchangeStrategies.builder()
                         .codecs(cfg -> cfg.defaultCodecs().maxInMemorySize(512 * 1024))
-                        .build())
-                .build();
+//                        .build())
+//                .build();
+                        .build());
+
+        if (StringUtils.hasText(props.getBaseUrl())) {
+            builder.baseUrl(props.getBaseUrl());
+        }
+
+        return builder.build();
     }
 
     /**

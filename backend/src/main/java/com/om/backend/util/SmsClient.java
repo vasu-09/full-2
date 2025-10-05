@@ -9,14 +9,15 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
-import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.util.MultiValueMap;
+//import org.springframework.util.LinkedMultiValueMap;
+//import org.springframework.util.MultiValueMap;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.util.StringUtils;
 
 @Component
 @RequiredArgsConstructor
@@ -33,6 +34,23 @@ public class SmsClient {
     private static final Logger log = LoggerFactory.getLogger(SmsClient.class);
 
     public SendSmsResponse sendOtpMessage(String message, String e164Mobile, boolean requestDlr) {
+
+        if (!props.isExternalSendingEnabled()) {
+            log.info("External SMS sending disabled via configuration; skipping HTTP call to provider.");
+            SendSmsResponse response = new SendSmsResponse();
+            response.setErrorCode(0);
+            response.setErrorDescription("SMS sending disabled via configuration");
+            return response;
+        }
+
+        if (!StringUtils.hasText(props.getBaseUrl())) {
+            log.info("SMS base URL is not configured; cannot deliver OTP externally. Returning stub response.");
+            SendSmsResponse response = new SendSmsResponse();
+            response.setErrorCode(0);
+            response.setErrorDescription("SMS base URL missing");
+            return response;
+        }
+
 
         SendSmsRequest req = new SendSmsRequest(
                 props.getApiKey(),

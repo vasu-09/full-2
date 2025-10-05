@@ -12,6 +12,7 @@ public class SmsProperties {
     private String apiKey;
     private String clientId;
     private String senderId;
+    private boolean externalSendingEnabled = false;
 
     private String numberFormat = "CC91";
 
@@ -21,6 +22,7 @@ public class SmsProperties {
 
     private Dlt dlt = new Dlt();
     private Otp otp = new Otp();
+    private Test test = new Test();
 
     public String getNumberFormat() {
         return numberFormat;
@@ -80,6 +82,21 @@ public class SmsProperties {
 
     public Otp getOtp() {
         return otp;
+    }
+
+    public boolean isExternalSendingEnabled() {
+        return externalSendingEnabled;
+    }
+
+    public void setExternalSendingEnabled(boolean externalSendingEnabled) {
+        this.externalSendingEnabled = externalSendingEnabled;
+    }
+    public Test getTest() {
+        return test;
+    }
+
+    public void setTest(Test test) {
+        this.test = test;
     }
 
 
@@ -152,6 +169,37 @@ public class SmsProperties {
         }
 
 
+    }
+
+    @Data
+    public static class Test {
+        private boolean enabled = false;
+        private String phoneNumber;
+        private String otpCode = "000000";
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getPhoneNumber() {
+            return phoneNumber;
+        }
+
+        public void setPhoneNumber(String phoneNumber) {
+            this.phoneNumber = phoneNumber;
+        }
+
+        public String getOtpCode() {
+            return otpCode;
+        }
+
+        public void setOtpCode(String otpCode) {
+            this.otpCode = otpCode;
+        }
     }
 
 

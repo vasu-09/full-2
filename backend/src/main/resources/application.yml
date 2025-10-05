@@ -27,9 +27,10 @@ server:
   port: ${SERVER_PORT:8092}
 
 sms:
-  base-url: ${SMS_BASE_URL:https://api.mylogin.co.in/api/v2}
+  base-url: ${SMS_BASE_URL:} #https://api.mylogin.co.in/api/v2
   api-key: ${SMS_API_KEY:N9v15Ydho0qL84kMBQGmAMmdE5vfG61D+TF8Nc+X80s=}
   client-id: ${SMS_CLIENT_ID:c5ece875-8559-4e64-805f-c658f0dddc93}
+  external-sending-enabled: ${SMS_EXTERNAL_SENDING_ENABLED:false}
   sender-id: ${SMS_SENDER_ID:MCPNOT}
   numberFormat: CC91        # try CC91 first
   transport: JSON           # if it still fails, try FORM
@@ -41,6 +42,10 @@ sms:
     digits: ${SMS_OTP_DIGITS:6}
     per-minute-limit: ${SMS_OTP_PER_MINUTE_LIMIT:1}
     per-hour-limit: ${SMS_OTP_PER_HOUR_LIMIT:5}
+  test:
+    enabled: ${SMS_TEST_ENABLED:true}
+    phone-number: ${SMS_TEST_PHONE:919876543210}
+    otp-code: ${SMS_TEST_OTP:000000}
 
 
 jwt:
