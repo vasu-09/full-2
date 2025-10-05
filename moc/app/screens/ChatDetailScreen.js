@@ -576,6 +576,7 @@ export default function ChatDetailScreen() {
           }}
         >
           <Text style={styles.headerTitle}>João Pereira</Text>
+            <Text style={styles.headerSubtitle}>last seen today at 9:07 AM</Text>
         </TouchableOpacity>
         <View style={styles.headerActions}>
          <TouchableOpacity
@@ -884,12 +885,17 @@ const styles = StyleSheet.create({
   },
 
   titleContainer: {
-   flex: 1,
+    flex: 1,
     justifyContent: 'center',
+    lignItems: 'flex-start',
   },
   headerTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   headerActions: { flexDirection: 'row' },
-
+  headerSubtitle: {
+    color: '#d8e8f6',
+    fontSize: 12,
+    marginTop: 2,
+  },
   bubble: {
     maxWidth: '80%',
     padding: 8,
