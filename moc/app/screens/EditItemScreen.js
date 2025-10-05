@@ -1,7 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
-  SafeAreaView,
   StatusBar,
   StyleSheet,
   Text,
@@ -9,6 +8,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
 const nextUnit = unit => {

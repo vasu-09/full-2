@@ -4,7 +4,6 @@ import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
   Dimensions,
-  SafeAreaView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -12,7 +11,7 @@ import {
 } from 'react-native';
 import MapView from '../../components/MapView';
 
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {  SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
 

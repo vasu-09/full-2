@@ -1,7 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
-    SafeAreaView,
     StyleSheet,
     Text,
     TextInput,
@@ -9,6 +8,8 @@ import {
     View,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
 
 export default function EditNameScreen() {
   const router = useRouter();

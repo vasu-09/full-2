@@ -5,7 +5,6 @@ import { useEffect, useState } from 'react';
 import {
     FlatList,
     Image,
-    SafeAreaView,
     ScrollView,
     StyleSheet,
     Text,
@@ -13,7 +12,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
 export default function ContactPickerScreen() {

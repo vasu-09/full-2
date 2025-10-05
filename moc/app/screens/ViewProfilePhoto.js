@@ -2,7 +2,6 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
   Image,
-  SafeAreaView,
   StatusBar,
   StyleSheet,
   TouchableOpacity,
@@ -10,6 +9,8 @@ import {
 } from 'react-native';
 
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
 
 export default function ProfilePhotoScreen() {
   const router = useRouter();

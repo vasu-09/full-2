@@ -3,7 +3,6 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
     Image,
-    SafeAreaView,
     StatusBar,
     StyleSheet,
     Text,
@@ -11,6 +10,7 @@ import {
     View,
 } from 'react-native';
 import Modal from 'react-native-modal';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
 export default function ProfilePhotoScreen() {

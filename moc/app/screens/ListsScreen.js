@@ -3,7 +3,6 @@ import { useRouter } from 'expo-router';
 import {
   FlatList,
   Platform,
-  SafeAreaView,
   StatusBar,
   StyleSheet,
   Text,
@@ -11,6 +10,8 @@ import {
   View,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
 
 const HEADER_HEIGHT = 56;
 

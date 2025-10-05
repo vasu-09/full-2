@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useRoute } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
+import { getDeviceMetadata } from '../services/deviceMetadata';
 
 import apiClient, { apiBaseURL } from '../services/apiClient';
 import { saveSession } from '../services/authStorage';
@@ -42,9 +43,15 @@ const OtpScreen = () => {
       setError('');
       setMessage('');
 
+       const metadata = await getDeviceMetadata();
+
       const response = await apiClient.post('/auth/otp/verify', {
         phone: phoneNumber,
         otp: otpValue,
+        deviceModel: route?.params?.deviceModel ?? metadata.deviceModel,
+        platform: route?.params?.platform ?? metadata.platform,
+        appVersion: route?.params?.appVersion ?? metadata.appVersion,
+        fcmToken: route?.params?.fcmToken ?? metadata.fcmToken,
       });
       const { userId, sessionId, accessToken, refreshToken, issuedAt } = response.data ?? {};
 

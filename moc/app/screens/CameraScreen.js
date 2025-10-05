@@ -9,13 +9,12 @@ import {
   ActivityIndicator,
   FlatList,
   Image,
-  SafeAreaView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const CamType = { back: 'back', front: 'front' };
 const CamFlash = { off: 'off', on: 'on', auto: 'auto', torch: 'torch' };

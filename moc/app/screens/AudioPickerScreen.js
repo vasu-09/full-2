@@ -5,14 +5,13 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
     FlatList,
-    SafeAreaView,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
     View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
 export default function AudioPickerScreen() {

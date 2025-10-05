@@ -5,12 +5,13 @@ import { useEffect, useState } from 'react';
 import {
     FlatList,
     Image,
-    SafeAreaView,
     StyleSheet,
     Text,
     TouchableOpacity,
     View
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
 
 export default function PhotoGridScreen() {
   const { albumId, title } = useLocalSearchParams();

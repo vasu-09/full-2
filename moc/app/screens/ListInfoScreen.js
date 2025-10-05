@@ -3,14 +3,13 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
     FlatList,
     Image,
-    SafeAreaView,
     StatusBar,
     StyleSheet,
     Text,
     TouchableOpacity,
     View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
 export default function ListInfoScreen() {

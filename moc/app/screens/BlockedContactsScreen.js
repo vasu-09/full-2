@@ -6,8 +6,9 @@ import {
   TouchableOpacity,
   StyleSheet,
   Image,
-  SafeAreaView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useRouter } from 'expo-router';
 
