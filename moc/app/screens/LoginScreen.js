@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Alert, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Platform, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import apiClient, { apiBaseURL } from '../services/apiClient';
 
 const LoginScreen = () => {
@@ -22,8 +22,17 @@ const LoginScreen = () => {
         params: { phone: trimmedPhone },
       });
     } catch (err) {
-      console.error('Failed to send OTP:', err.message);
-      setError('Unable to send OTP. Please check your connection and try again.');
+      console.error('Failed to send OTP:', err);
+
+      const serverMessage = err?.response?.data?.message;
+      const baseMessage = serverMessage || err?.message || 'Unable to send OTP. Please try again.';
+
+      if (!serverMessage && err?.message === 'Network Error') {
+        setError(`Unable to reach the server at ${apiBaseURL}. Please ensure the API is running and reachable from your device.`);
+        return;
+      }
+
+      setError(baseMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -42,9 +51,20 @@ const LoginScreen = () => {
 
     const message = `+91 ${trimmedPhone}\n\nWe’ll send a verification code to this number. Messaging rates may apply.`;
 
+     if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined') {
+        const confirmed = window.confirm(`Is the phone number below correct?\n\n${message}`);
+        if (confirmed) {
+          void sendOtp(trimmedPhone);
+        }
+      }
+
+      return;
+    }
+
     Alert.alert('Is the phone number below correct?', message, [
       { text: 'Edit number', style: 'cancel' },
-      { text: 'OK', onPress: () => sendOtp(trimmedPhone) },
+      { text: 'OK', onPress: () => { void sendOtp(trimmedPhone);}  },
     ]);
   };
 
