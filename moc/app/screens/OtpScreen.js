@@ -1,7 +1,7 @@
-import React, { useRef, useState } from 'react';
-import { StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useRoute } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
+import { useRef, useState } from 'react';
+import { StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { getDeviceMetadata } from '../services/deviceMetadata';
 
 import apiClient, { apiBaseURL } from '../services/apiClient';
@@ -79,7 +79,7 @@ const OtpScreen = () => {
 
   return (
     <View style={styles.container}>
-      <StatusBar backgroundColor="#64792A" barStyle="light-content" />
+      <StatusBar backgroundColor="#1f6ea7" barStyle="light-content" />
       <Text style={styles.logo}>MoC</Text>
       <Text style={styles.baseUrl}>API: {apiBaseURL}</Text>
       {phoneNumber ? (
