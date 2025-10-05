@@ -1,6 +1,6 @@
 // ChatDetailScreen.js
-import * as DocumentPicker from 'expo-document-picker';
 import { Audio } from 'expo-audio';
+import * as DocumentPicker from 'expo-document-picker';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -545,7 +545,12 @@ export default function ChatDetailScreen() {
       <StatusBar backgroundColor="#1f6ea7" barStyle="light-content" />
 
       {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top }]}>
+      <View
+        style={[
+          styles.header,
+          { paddingTop: insets.top, minHeight: BAR_HEIGHT + insets.top },
+        ]}
+      >
         <TouchableOpacity         onPress={() => {
            if (router.canGoBack()) router.back();
             else router.replace('/screens/MocScreen');
@@ -864,7 +869,7 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#eef5fa' },
 
   header: {
-    height: BAR_HEIGHT,
+    minHeight: BAR_HEIGHT,
     backgroundColor: '#1f6ea7',
     flexDirection: 'row',
     alignItems: 'center',

@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 
 export default function ProfilePhotoScreen() {
@@ -17,6 +17,8 @@ export default function ProfilePhotoScreen() {
   const { uri } = useLocalSearchParams();
 
   const [photoUri] = useState(uri);
+  const insets = useSafeAreaInsets();
+
 
 
 
@@ -24,7 +26,7 @@ export default function ProfilePhotoScreen() {
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="black" barStyle="light-content" />
 
-      <View style={styles.header}>
+       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Icon name="close" size={24} color="#fff" />
         </TouchableOpacity>
@@ -48,7 +50,8 @@ const styles = StyleSheet.create({
     width: '100%',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    padding: 12,
+    paddingHorizontal: 12,
+    paddingBottom: 12,
     zIndex: 2,
   },
   backButton: { padding: 6 },

@@ -27,6 +27,7 @@ const MocScreen = () => {
   const [menuVisible, setMenuVisible] = useState(false);
   const Tab = createMaterialTopTabNavigator();
   const hideMenu = () => setMenuVisible(false);
+  const topBarHeight = 50 + insets.top;
   const [selectedUser, setSelectedUser] = useState(null); // stores clicked user details
 
   const router = useRouter();
@@ -135,7 +136,7 @@ const CallsScreen = () => (
         style={[
           styles.topBar,
           searchActive && styles.topBarSearch,
-          { paddingTop: insets.top },
+         { paddingTop: insets.top, minHeight: topBarHeight },
         ]}
       >
         {searchActive ? (
@@ -176,7 +177,7 @@ const CallsScreen = () => (
     );
   };
 
- const menuTop = insets.top + 50;
+  const menuTop = topBarHeight;
 
 
   const ProfileModal = () => {
@@ -266,7 +267,7 @@ export default MocScreen;
 
 const styles = StyleSheet.create({
   topBar: {
-    height: 50,
+    minHeight: 50,
     backgroundColor: '#1f6ea7',
     flexDirection: 'row',
     alignItems: 'center',
