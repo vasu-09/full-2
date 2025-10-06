@@ -16,8 +16,9 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <SafeAreaProvider>
-        <Stack initialRouteName="screens/LoginScreen" screenOptions={{ headerShown: false }}>
+        <Stack initialRouteName="screens/PremissionsScreen" screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="screens/PremissionsScreen" options={{ headerShown: false }} />
           <Stack.Screen name="screens/LoginScreen" options={{ headerShown: false }} />
           <Stack.Screen name="screens/OtpScreen" options={{ headerShown: false }} />
           <Stack.Screen name="screens/CameraScreen" options={{ presentation: 'fullScreenModal' }} />

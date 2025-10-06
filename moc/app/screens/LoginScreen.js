@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Platform, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Keyboard, Platform, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import apiClient, { apiBaseURL } from '../services/apiClient';
 
 const LoginScreen = () => {
@@ -38,12 +38,23 @@ const LoginScreen = () => {
     }
   };
 
+  const handlePhoneChange = (value) => {
+    const sanitized = value.replace(/\D/g, '').slice(0, 10);
+    setPhone(sanitized);
+
+    if (error) {
+      setError('');
+    }
+  };
+
   const handleSendOtp = () => {
+    Keyboard.dismiss();
+
     if (isSubmitting) return;
 
     const trimmedPhone = phone.trim();
-    if (!trimmedPhone) {
-      setError('Please enter your phone number before continuing.');
+  if (trimmedPhone.length !== 10) {
+      setError('Please enter a valid 10-digit phone number.');
       return;
     }
 
@@ -72,7 +83,7 @@ const LoginScreen = () => {
 
   return (
     <View style={styles.container}>
-      <StatusBar backgroundColor="#535846" barStyle="light-content" />
+      <StatusBar backgroundColor="#1f6ea7" barStyle="light-content" />
       <Text style={styles.logo}>MoC</Text>
         <Text style={styles.baseUrl}>API: {apiBaseURL}</Text>
 
@@ -90,9 +101,10 @@ const LoginScreen = () => {
           style={styles.input}
           keyboardType="phone-pad"
           value={phone}
-          onChangeText={setPhone}
+          onChangeText={handlePhoneChange}
           placeholder="e.g. 9876543210"
           placeholderTextColor="#888"
+          maxLength={10}
         />
       </View>
       <TouchableOpacity
