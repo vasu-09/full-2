@@ -4,8 +4,6 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
   FlatList,
-  Platform,
-  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -16,9 +14,6 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 
-const STATUS_BAR_HEIGHT = Platform.OS === 'android' ? StatusBar.currentHeight : 0;
-
-const TOTAL_HEADER_HEIGHT = STATUS_BAR_HEIGHT ;
 
 const INITIAL_ITEMS = [
   {
@@ -223,7 +218,7 @@ export default function NewListScreen() {
       const nonEmptyItems = items.filter(item => item.name.trim() !== '');
       router.push({
         pathname: '/screens/PreviewScreen',
-        params: { listName, items: JSON.stringify(nonEmptyItems) },
+        params: { listName, items: JSON.stringify(nonEmptyItems), listType  },
       });
     } else {
       const nonEmptyTasks = tasks
@@ -231,7 +226,7 @@ export default function NewListScreen() {
         .map(t => ({ name: t.text, quantity: '', unit: '', price: '', subQuantities: [] }));
       router.push({
         pathname: '/screens/PreviewScreen',
-        params: { listName, items: JSON.stringify(nonEmptyTasks) },
+        params: { listName, items: JSON.stringify(nonEmptyTasks), listType  },
       });
     }
   };

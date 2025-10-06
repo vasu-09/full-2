@@ -1,5 +1,7 @@
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useState } from 'react';
 import {
+  Alert,
   FlatList,
   StatusBar,
   StyleSheet,
@@ -7,16 +9,123 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialIcons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 
-// Dummy data for preview
+import apiClient from '../services/apiClient';
+import { getStoredSession } from '../services/authStorage';
 
 
 export default function PreviewScreen() {
-  const { listName, items } = useLocalSearchParams();
+  const { listName, items, listType = 'Normal List' } = useLocalSearchParams();
   const parsedItems = JSON.parse(items || '[]');
   const router = useRouter();
+  const [isSaving, setIsSaving] = useState(false);
+
+  const isPremiumList = listType === 'Premium List';
+
+  const formatQuantity = (quantity, unit) => {
+    const trimmedQuantity = String(quantity ?? '').trim();
+    const trimmedUnit = String(unit ?? '').trim();
+
+    if (!trimmedQuantity && !trimmedUnit) {
+      return null;
+    }
+
+    return `${trimmedQuantity}${trimmedUnit}`.trim();
+  };
+
+  const formatPrice = (price) => {
+    const trimmedPrice = String(price ?? '').trim();
+
+    if (!trimmedPrice) {
+      return null;
+    }
+
+    return trimmedPrice.startsWith('₹') ? trimmedPrice : `₹${trimmedPrice}`;
+  };
+
+  const buildPremiumItemsPayload = () => parsedItems
+    .filter((item) => item?.name && String(item.name).trim())
+    .map((item) => {
+      const subQuantitiesArray = Array.isArray(item.subQuantities) ? item.subQuantities : [];
+      const subQuantities = subQuantitiesArray
+        .map((sub) => ({
+          quantity: formatQuantity(sub.quantity, sub.unit),
+          priceText: formatPrice(sub.price),
+        }))
+        .filter((sub) => sub.quantity || sub.priceText);
+
+      return {
+        itemName: item.name,
+        quantity: formatQuantity(item.quantity, item.unit),
+        priceText: formatPrice(item.price),
+        subQuantities,
+      };
+    });
+
+  const buildChecklistItemsPayload = () => parsedItems
+    .filter((item) => item?.name && String(item.name).trim())
+    .map((item) => ({
+      itemName: item.name,
+    }));
+
+  const handleSave = async () => {
+    if (isSaving) {
+      return;
+    }
+
+    if (!parsedItems.length) {
+      Alert.alert('Nothing to save', 'Add at least one item before saving the list.');
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      const session = await getStoredSession();
+      const userIdValue = session?.userId ? Number(session.userId) : null;
+
+      if (!userIdValue) {
+        Alert.alert('Unable to create list', 'Please sign in again to continue.');
+        return;
+      }
+
+      const endpoint = isPremiumList ? '/api/lists' : '/api/lists/checklist';
+      const itemsPayload = isPremiumList ? buildPremiumItemsPayload() : buildChecklistItemsPayload();
+
+      if (!itemsPayload.length) {
+        Alert.alert('Nothing to save', 'Add at least one item before saving the list.');
+        return;
+      }
+
+      const payload = {
+        createdByUserId: userIdValue,
+        title: listName || 'Untitled List',
+        items: itemsPayload,
+      };
+
+      const { data } = await apiClient.post(endpoint, payload);
+      const createdListId = data?.id ?? data?.listId ?? null;
+      const resolvedTitle = data?.title ?? listName;
+
+      router.push({
+        pathname: '/screens/LinkListScreen',
+        params: {
+          listName: resolvedTitle,
+          items: JSON.stringify(parsedItems),
+          listId: createdListId != null ? String(createdListId) : undefined,
+          listType,
+        },
+      });
+    } catch (error) {
+      console.error('Failed to save list', error);
+      Alert.alert('Unable to save list', 'Something went wrong while saving your list. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#1f6ea7" barStyle="light-content" />
@@ -45,12 +154,13 @@ export default function PreviewScreen() {
         data={parsedItems}
         keyExtractor={(_, idx) => idx.toString()}
         contentContainerStyle={styles.listContainer}
-         renderItem={({ item }) => {
+          renderItem={({ item }) => {
+          const subQuantities = Array.isArray(item.subQuantities) ? item.subQuantities : [];
           const hasDetails =
             !!item.quantity ||
             !!item.unit ||
             !!item.price ||
-            (item.subQuantities && item.subQuantities.length > 0);
+            subQuantities.length > 0;
           return (
             <View style={styles.itemBlock}>
               <Text style={styles.itemName}>{item.name}</Text>
@@ -58,7 +168,7 @@ export default function PreviewScreen() {
                 <>
                   {(item.quantity || item.unit || item.price) && (
                     <View style={styles.row}>
-                      <Text style={styles.itemQty}>{`${item.quantity}${item.unit}`}</Text>
+                      <Text style={styles.itemQty}>{`${item.quantity || ''}${item.unit || ''}`}</Text>
                       {item.price ? (
                         <Text style={styles.itemPrice}>{`₹${item.price}`}</Text>
                       ) : null}
@@ -66,7 +176,7 @@ export default function PreviewScreen() {
                   )}
                   {item.subQuantities.map((sub, i) => (
                     <View style={styles.subRow} key={i}>
-                      <Text style={styles.subQty}>{`${sub.quantity}${sub.unit}`}</Text>
+                      <Text style={styles.subQty}>{`${sub.quantity || ''}${sub.unit || ''}`}</Text>
                       {sub.price ? (
                         <Text style={styles.subPrice}>{`₹${sub.price}`}</Text>
                       ) : null}
@@ -80,13 +190,12 @@ export default function PreviewScreen() {
       />
 
       {/* Save button */}
-      <TouchableOpacity style={styles.saveBtn} onPress={() =>  {router.push({
-      pathname: '/screens/LinkListScreen',
-      params: {
-        listName,
-        items: JSON.stringify(parsedItems), // ✅ Use the already parsed array
-      },})}}>
-        <Text style={styles.saveText}>Save</Text>
+      <TouchableOpacity
+        style={[styles.saveBtn, isSaving && styles.saveBtnDisabled]}
+        onPress={handleSave}
+        disabled={isSaving}
+      >
+        <Text style={styles.saveText}>{isSaving ? 'Saving…' : 'Save'}</Text>
       </TouchableOpacity>
     </SafeAreaView>
   );
@@ -157,6 +266,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 24,
     elevation: 4,
+  },
+    saveBtnDisabled: {
+    opacity: 0.7,
   },
   saveText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 });
