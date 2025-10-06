@@ -1,6 +1,9 @@
 // LinkListScreen.js
-import { useState } from 'react';
+import * as Contacts from 'expo-contacts';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
   Image,
   StatusBar,
@@ -11,31 +14,177 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import { useRouter, useLocalSearchParams } from 'expo-router';
 
-// Dummy contacts
-const allContacts = [
-  { id: '1',  name: 'Anusha',    img: 'https://randomuser.me/api/portraits/women/15.jpg' },
-  { id: '2',  name: 'Bhanu Sha', img: 'https://randomuser.me/api/portraits/men/4.jpg' },
-  { id: '3',  name: 'Charan',    img: 'https://randomuser.me/api/portraits/men/6.jpg' },
-  { id: '4',  name: 'Damini',    img: 'https://randomuser.me/api/portraits/women/48.jpg' },
-  { id: '5',  name: 'Elephant',  img: 'https://randomuser.me/api/portraits/women/54.jpg' },
-  { id: '6',  name: 'Frog',      img: 'https://randomuser.me/api/portraits/women/87.jpg' },
-  { id: '7',  name: 'Kamkashi',  img: 'https://randomuser.me/api/portraits/women/31.jpg' },
-  { id: '8',  name: 'Vasu',      img: 'https://randomuser.me/api/portraits/men/10.jpg' },
-  { id: '9',  name: 'Kiran',     img: 'https://randomuser.me/api/portraits/men/14.jpg' },
-  { id: '10', name: 'Chinnu',    img: 'https://randomuser.me/api/portraits/women/24.jpg' },
-];
+import apiClient from '../services/apiClient';
 
 const initialSelected = [];
+
+const normalizeToE164 = (value) => {
+  if (!value) {
+    return null;
+  }
+
+  const raw = String(value).trim();
+  if (!raw) {
+    return null;
+  }
+
+  const digits = raw.replace(/\D/g, '');
+  if (!digits) {
+    return null;
+  }
+
+  if (digits.length === 10) {
+    return `+91${digits}`;
+  }
+
+  if (digits.length === 11 && digits.startsWith('0')) {
+    return `+91${digits.slice(1)}`;
+  }
+
+  if (digits.length === 12 && digits.startsWith('91')) {
+    return `+${digits}`;
+  }
+
+  if (digits.length === 13 && digits.startsWith('091')) {
+    return `+91${digits.slice(3)}`;
+  }
+
+  if (digits.length === 14 && digits.startsWith('0091')) {
+    return `+91${digits.slice(4)}`;
+  }
+
+  if (raw.startsWith('+') && digits.length >= 10) {
+    return `+${digits}`;
+  }
+
+  return null;
+};
+
 
 export default function LinkListScreen() {
   const insets = useSafeAreaInsets();
   const [selectedIds, setSelectedIds] = useState(initialSelected);
   const router = useRouter();
+   const [contacts, setContacts] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
 
   const { listName = '', items = '[]' } = useLocalSearchParams();
   const parsedItems = JSON.parse(items);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchContacts = async () => {
+      setIsLoading(true);
+      setErrorMessage('');
+
+      try {
+        const permission = await Contacts.getPermissionsAsync();
+        let status = permission.status;
+
+        if (status !== 'granted') {
+          const request = await Contacts.requestPermissionsAsync();
+          status = request.status;
+        }
+
+        if (status !== 'granted') {
+          if (isMounted) {
+            setContacts([]);
+            setErrorMessage('Allow contact access to find people already using MoC.');
+          }
+          return;
+        }
+
+        const { data } = await Contacts.getContactsAsync({
+          fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Image],
+          sort: Contacts.SortTypes.FirstName,
+        });
+
+        const phoneToContact = new Map();
+
+        data.forEach((contact) => {
+          if (!Array.isArray(contact?.phoneNumbers)) {
+            return;
+          }
+
+          contact.phoneNumbers
+            .map((entry) => normalizeToE164(entry?.number))
+            .filter(Boolean)
+            .forEach((phone) => {
+              if (!phoneToContact.has(phone)) {
+                phoneToContact.set(phone, {
+                  name: contact?.name || phone,
+                  imageUri: contact?.imageAvailable ? contact?.image?.uri : undefined,
+                });
+              }
+            });
+        });
+
+        const phones = Array.from(phoneToContact.keys());
+
+        if (!phones.length) {
+          if (isMounted) {
+            setContacts([]);
+            setErrorMessage('No contacts with phone numbers found on your device.');
+          }
+          return;
+        }
+
+        const { data: matches } = await apiClient.post('/contacts/sync', { phones });
+
+        const matchedContacts = Array.isArray(matches)
+          ? matches
+              .map((match) => {
+                const normalized = normalizeToE164(match?.phone);
+                const info = (normalized && phoneToContact.get(normalized)) || phoneToContact.get(match?.phone) || {};
+
+                const id = match?.userId != null ? String(match.userId) : normalized || match?.phone || Math.random().toString();
+
+                return {
+                  id,
+                  userId: match?.userId,
+                  phone: match?.phone,
+                  name: info?.name || match?.phone || 'Unknown contact',
+                  img: info?.imageUri ?? null,
+                };
+              })
+              .filter((contact, index, arr) => arr.findIndex((c) => c.id === contact.id) === index)
+          : [];
+
+        if (isMounted) {
+          setContacts(matchedContacts);
+          if (!matchedContacts.length) {
+            setErrorMessage('None of your contacts are on MoC yet. Invite them to get started!');
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load contacts from sync endpoint', error);
+        if (isMounted) {
+          setContacts([]);
+          setErrorMessage('Unable to load contacts right now. Please try again later.');
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    fetchContacts();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      const filtered = prev.filter((id) => contacts.some((contact) => contact.id === id));
+      return filtered.length === prev.length ? prev : filtered;
+    });
+  }, [contacts]);
 
   const toggleSelect = id => {
     setSelectedIds(prev =>
@@ -43,11 +192,30 @@ export default function LinkListScreen() {
     );
   };
 
-  const selectedContacts = allContacts.filter(c => selectedIds.includes(c.id));
+  const selectedContacts = contacts.filter(c => selectedIds.includes(c.id));
+
+  const renderContactsEmpty = () => (
+    <View style={styles.emptyContainer}>
+      {isLoading ? (
+        <>
+          <ActivityIndicator size="small" color="#1f6ea7" />
+          <Text style={styles.emptyText}>Syncing your contacts…</Text>
+        </>
+      ) : (
+        <Text style={styles.emptyText}>{errorMessage || 'No contacts available.'}</Text>
+      )}
+    </View>
+  );
 
   const renderSelectedAvatar = ({ item }) => (
     <View style={styles.avatarContainer}>
-      <Image source={{ uri: item.img }} style={styles.avatar} />
+       {item.img ? (
+        <Image source={{ uri: item.img }} style={styles.avatar} />
+      ) : (
+        <View style={[styles.avatar, styles.placeholderAvatarLarge]}>
+          <Icon name="person" size={28} color="#888" />
+        </View>
+      )}
       <Text style={styles.avatarName} numberOfLines={1}>{item.name}</Text>
       <TouchableOpacity
         style={styles.removeIcon}
@@ -66,7 +234,13 @@ export default function LinkListScreen() {
         onPress={() => toggleSelect(item.id)}
       >
         <View style={styles.avatarWrapper}>
-          <Image source={{ uri: item.img }} style={styles.avatarSmall} />
+           {item.img ? (
+            <Image source={{ uri: item.img }} style={styles.avatarSmall} />
+          ) : (
+            <View style={[styles.avatarSmall, styles.placeholderAvatarSmall]}>
+              <Icon name="person" size={20} color="#888" />
+            </View>
+          )}
           {isSelected && (
             <View style={styles.checkOverlay}>
               <Icon name="check" size={14} color="#fff" />
@@ -97,7 +271,7 @@ export default function LinkListScreen() {
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.countText}>{selectedIds.length} of {allContacts.length} contacts</Text>
+      <Text style={styles.countText}>{selectedIds.length} of {contacts.length} contacts</Text>
       <View style={styles.listInfo}>
         <Icon name="shopping-cart" size={32} color="#555" />
         <Text style={styles.listName}>{listName}</Text>
@@ -120,11 +294,12 @@ export default function LinkListScreen() {
 
       <Text style={styles.sectionTitle}>All contacts</Text>
       <FlatList
-        data={allContacts}
+        data={contacts}
         keyExtractor={item => item.id}
         renderItem={renderContact}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
+        ListEmptyComponent={renderContactsEmpty}
       />
 
       <TouchableOpacity
@@ -183,6 +358,11 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   avatar: { width: 56, height: 56, borderRadius: 28 },
+  placeholderAvatarLarge: {
+    backgroundColor: '#e1e6eb',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   avatarName: {
     marginTop: 4,
     fontSize: 12,
@@ -204,6 +384,11 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
     fontStyle: 'italic',
   },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 32,
+  },
 
   contactRow: {
     flexDirection: 'row',
@@ -219,6 +404,11 @@ const styles = StyleSheet.create({
   },
   avatarWrapper: { position: 'relative' },
   avatarSmall: { width: 40, height: 40, borderRadius: 20, marginRight: 12 },
+  placeholderAvatarSmall: {
+    backgroundColor: '#e1e6eb',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   checkOverlay: {
     position: 'absolute',
     bottom: 0,

@@ -14,6 +14,8 @@ import {
 } from 'react-native';
 import {SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { syncContacts } from '../services/contactService';
+
 
 export default function ContactPickerScreen() {
   const insets = useSafeAreaInsets();
@@ -23,6 +25,9 @@ export default function ContactPickerScreen() {
   const [selected, setSelected] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncError, setSyncError] = useState('');
+  const [matchedContacts, setMatchedContacts] = useState([]);
 
   useEffect(() => {
     (async () => {
@@ -33,6 +38,17 @@ export default function ContactPickerScreen() {
         sort: Contacts.SortTypes.FirstName,
       });
       setContacts(data);
+       try {
+        setSyncError('');
+        setIsSyncing(true);
+        const matches = await syncContacts(data);
+        setMatchedContacts(matches);
+      } catch (error) {
+        console.error('Failed to sync contacts', error);
+        setSyncError('Unable to sync contacts with MoC right now.');
+      } finally {
+        setIsSyncing(false);
+      }
     })();
   }, []);
 
@@ -148,6 +164,19 @@ export default function ContactPickerScreen() {
 
       {/* All contacts */}
       <Text style={styles.sectionTitle}>All contacts</Text>
+      <View style={styles.syncStatusWrapper}>
+        {isSyncing ? (
+          <Text style={styles.syncStatusText}>Syncing your contacts…</Text>
+        ) : syncError ? (
+          <Text style={[styles.syncStatusText, styles.syncStatusError]}>{syncError}</Text>
+        ) : matchedContacts.length > 0 ? (
+          <Text style={styles.syncStatusText}>
+            {matchedContacts.length} of your contacts are already on MoC.
+          </Text>
+        ) : (
+          <Text style={styles.syncStatusText}>None of your contacts have joined MoC yet.</Text>
+        )}
+      </View>
       <FlatList
         data={filteredContacts}
         keyExtractor={c => c.id}
@@ -277,8 +306,17 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
 
- 
-
+ syncStatusWrapper: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+  },
+  syncStatusText: {
+    fontSize: 14,
+    color: '#4a4a4a',
+  },
+  syncStatusError: {
+    color: '#b3261e',
+  },
 
 searchHeader: {
     flexDirection: 'row',
