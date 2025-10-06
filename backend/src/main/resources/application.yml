@@ -95,8 +95,8 @@ jwt:
     WO9eVkMwgXMsi7N5ly1nTxLsl7uW9BG/k1nyYPKPCUVIbk20r1K6mhqbsyc0BZSu
     8QIDAQAB
     -----END PUBLIC KEY-----
-  access-ttl-min: ${JWT_ACCESS_TTL_MIN:50000}
-  refresh-ttl-days: ${JWT_REFRESH_TTL_DAYS:180}
+  access-ttl-min: ${JWT_ACCESS_TTL_MIN:15}
+  refresh-ttl-days: ${JWT_REFRESH_TTL_DAYS:18}
 
 media:
   bucket: ${MEDIA_BUCKET:moc-prod}   # default "moc-prod", override via env var MEDIA_BUCKET

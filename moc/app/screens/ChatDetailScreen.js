@@ -540,6 +540,8 @@ export default function ChatDetailScreen() {
     }
   };
 
+  const topInset = Platform.OS === 'android' ? 0 : insets.top;
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar backgroundColor="#1f6ea7" barStyle="light-content" />
@@ -548,7 +550,7 @@ export default function ChatDetailScreen() {
       <View
         style={[
           styles.header,
-          { paddingTop: insets.top, minHeight: BAR_HEIGHT + insets.top },
+          { paddingTop: topInset, minHeight: BAR_HEIGHT + topInset },
         ]}
       >
         <TouchableOpacity         onPress={() => {

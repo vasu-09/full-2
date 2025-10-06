@@ -1,5 +1,4 @@
-import { useRoute } from '@react-navigation/native';
-import { useRouter } from 'expo-router';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useRef, useState } from 'react';
 import { StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { getDeviceMetadata } from '../services/deviceMetadata';
@@ -13,7 +12,7 @@ const OtpScreen = () => {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const router = useRouter();
+  const navigation = useNavigation();
 
   const route = useRoute();
   const phoneNumber = route?.params?.phone ?? route?.params?.phoneNumber ?? '';
@@ -68,7 +67,10 @@ const OtpScreen = () => {
         return;
       }
       setMessage('OTP verified. Logged in successfully.');
-      router.replace('/screens/MocScreen');
+       navigation.reset({
+        index: 0,
+        routes: [{ name: 'screens/MocScreen' }],
+      });
     } catch (err) {
        console.error('OTP verification failed:', err.message);
        setError('OTP verification failed. Please check the code and try again.');

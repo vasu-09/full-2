@@ -10,7 +10,7 @@ import {
     View,
 } from 'react-native';
 import Modal from 'react-native-modal';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
 export default function ProfilePhotoScreen() {
@@ -18,6 +18,7 @@ export default function ProfilePhotoScreen() {
   const { uri } = useLocalSearchParams();
   const [showOptions, setShowOptions] = useState(false);
   const [photoUri, setPhotoUri] = useState(uri);
+  const insets = useSafeAreaInsets();
 
   const openGallery = async () => {
     setShowOptions(false);
@@ -46,7 +47,7 @@ export default function ProfilePhotoScreen() {
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="black" barStyle="light-content" />
 
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Icon name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
