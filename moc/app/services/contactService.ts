@@ -7,7 +7,12 @@ export interface ContactMatch {
   phone: string;
 }
 
-const normalizePhoneNumber = (value: string) => {
+export interface ContactDetails {
+  name: string;
+  imageUri?: string | null;
+}
+
+export const normalizePhoneNumber = (value: string): string | null => {
   const trimmed = value.trim();
   if (!trimmed) {
     return null;
@@ -44,6 +49,27 @@ const collectPhoneNumbers = (contacts: Contact[]): string[] => {
 
   return Array.from(numbers);
 };
+
+export const buildContactIndex = (contacts: Contact[]): Map<string, ContactDetails> => {
+  const index = new Map<string, ContactDetails>();
+
+  contacts.forEach((contact) => {
+    (contact.phoneNumbers ?? []).forEach((phone: PhoneNumber) => {
+      const normalized = phone?.number ? normalizePhoneNumber(phone.number) : null;
+      if (!normalized || index.has(normalized)) {
+        return;
+      }
+
+      index.set(normalized, {
+        name: contact?.name?.trim() || normalized,
+        imageUri: contact?.imageAvailable ? contact?.image?.uri ?? null : null,
+      });
+    });
+  });
+
+  return index;
+};
+
 
 export const syncContacts = async (contacts: Contact[]): Promise<ContactMatch[]> => {
   const phones = collectPhoneNumbers(contacts);

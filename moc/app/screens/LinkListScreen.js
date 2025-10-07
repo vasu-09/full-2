@@ -15,51 +15,13 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
-import apiClient from '../services/apiClient';
+import {
+  buildContactIndex,
+  normalizePhoneNumber,
+  syncContacts,
+} from '../services/contactService';
 
 const initialSelected = [];
-
-const normalizeToE164 = (value) => {
-  if (!value) {
-    return null;
-  }
-
-  const raw = String(value).trim();
-  if (!raw) {
-    return null;
-  }
-
-  const digits = raw.replace(/\D/g, '');
-  if (!digits) {
-    return null;
-  }
-
-  if (digits.length === 10) {
-    return `+91${digits}`;
-  }
-
-  if (digits.length === 11 && digits.startsWith('0')) {
-    return `+91${digits.slice(1)}`;
-  }
-
-  if (digits.length === 12 && digits.startsWith('91')) {
-    return `+${digits}`;
-  }
-
-  if (digits.length === 13 && digits.startsWith('091')) {
-    return `+91${digits.slice(3)}`;
-  }
-
-  if (digits.length === 14 && digits.startsWith('0091')) {
-    return `+91${digits.slice(4)}`;
-  }
-
-  if (raw.startsWith('+') && digits.length >= 10) {
-    return `+${digits}`;
-  }
-
-  return null;
-};
 
 
 export default function LinkListScreen() {
@@ -102,29 +64,9 @@ export default function LinkListScreen() {
           sort: Contacts.SortTypes.FirstName,
         });
 
-        const phoneToContact = new Map();
+         const contactIndex = buildContactIndex(data);
 
-        data.forEach((contact) => {
-          if (!Array.isArray(contact?.phoneNumbers)) {
-            return;
-          }
-
-          contact.phoneNumbers
-            .map((entry) => normalizeToE164(entry?.number))
-            .filter(Boolean)
-            .forEach((phone) => {
-              if (!phoneToContact.has(phone)) {
-                phoneToContact.set(phone, {
-                  name: contact?.name || phone,
-                  imageUri: contact?.imageAvailable ? contact?.image?.uri : undefined,
-                });
-              }
-            });
-        });
-
-        const phones = Array.from(phoneToContact.keys());
-
-        if (!phones.length) {
+        if (!contactIndex.size) {
           if (isMounted) {
             setContacts([]);
             setErrorMessage('No contacts with phone numbers found on your device.');
@@ -132,26 +74,32 @@ export default function LinkListScreen() {
           return;
         }
 
-        const { data: matches } = await apiClient.post('/contacts/sync', { phones });
+        const matches = await syncContacts(data);
 
-        const matchedContacts = Array.isArray(matches)
-          ? matches
-              .map((match) => {
-                const normalized = normalizeToE164(match?.phone);
-                const info = (normalized && phoneToContact.get(normalized)) || phoneToContact.get(match?.phone) || {};
+        const matchedContacts = matches
+          .map((match) => {
+            const normalized = match?.phone ? normalizePhoneNumber(match.phone) : null;
+            const info =
+              (normalized && contactIndex.get(normalized)) ||
+              contactIndex.get(match?.phone ?? '') ||
+              {};
 
-                const id = match?.userId != null ? String(match.userId) : normalized || match?.phone || Math.random().toString();
+            const id =
+              match?.userId != null
+                ? String(match.userId)
+                : normalized || match?.phone || Math.random().toString();
 
-                return {
-                  id,
-                  userId: match?.userId,
-                  phone: match?.phone,
-                  name: info?.name || match?.phone || 'Unknown contact',
-                  img: info?.imageUri ?? null,
-                };
-              })
-              .filter((contact, index, arr) => arr.findIndex((c) => c.id === contact.id) === index)
-          : [];
+            return {
+              id,
+              userId: match?.userId,
+              phone: match?.phone,
+              name: info?.name || match?.phone || 'Unknown contact',
+              img: info?.imageUri ?? null,
+            };
+          })
+          .filter((contact, index, arr) => arr.findIndex((c) => c.id === contact.id) === index);
+
+       
 
         if (isMounted) {
           setContacts(matchedContacts);
@@ -257,7 +205,7 @@ export default function LinkListScreen() {
       <StatusBar backgroundColor="#1f6ea7" barStyle="light-content" />
       <View style={styles.header}>
         <TouchableOpacity onPress={() =>router.push({
-  pathname: '/screens/ViewListScreen',
+  pathname: '/screens/PreviewScreen',
   params: {
     listName: listName,
     items: JSON.stringify(parsedItems), // serialize full items array
@@ -304,7 +252,7 @@ export default function LinkListScreen() {
 
       <TouchableOpacity
         style={[styles.sendFab, { bottom: insets.bottom + 16 }]}
-        onPress={() => router.push({ pathname: '/screens/ViewListScreen', params: { listName, items: JSON.stringify(parsedItems) } })}
+        onPress={() => router.push({ pathname: '/screens/ListScreen', params: { listName, items: JSON.stringify(parsedItems) } })}
       >
         <Icon name="check" size={24} color="#fff" />
       </TouchableOpacity>
