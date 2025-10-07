@@ -4,7 +4,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-   Alert,
+  Alert,
   FlatList,
   RefreshControl,
   StatusBar,
@@ -76,6 +76,7 @@ export default function ViewListScreen() {
   const [editingItemId, setEditingItemId] = useState(null);
   const [editingName, setEditingName] = useState('');
   const [savingItemId, setSavingItemId] = useState(null);
+  const [deletingItemId, setDeletingItemId] = useState(null);
 
   const fetchList = useCallback(async () => {
     if (!listId) {
@@ -224,6 +225,90 @@ export default function ViewListScreen() {
     [isPremiumList, listId, router, startInlineEdit],
   );
 
+   const performDelete = useCallback(
+    async (itemId) => {
+      if (itemId == null) {
+        return;
+      }
+
+      if (!listId) {
+        setListSummary((prev) => {
+          if (!prev) {
+            return prev;
+          }
+
+          const filteredItems = prev.items.filter(
+            (existing) => existing?.id !== itemId,
+          );
+          return { ...prev, items: filteredItems };
+        });
+        return;
+      }
+
+      try {
+        setDeletingItemId(itemId);
+        const session = await getStoredSession();
+        const userIdValue = session?.userId ? Number(session.userId) : null;
+        const headers = userIdValue
+          ? { 'X-User-Id': String(userIdValue) }
+          : undefined;
+
+        const encodedListId = encodeURIComponent(listId);
+        const encodedItemId = encodeURIComponent(itemId);
+
+        const endpoint = isPremiumList
+          ? `/api/lists/${encodedListId}/items/${encodedItemId}`
+          : `/api/lists/${encodedListId}/checklist/items/${encodedItemId}`;
+
+        await apiClient.delete(endpoint, { headers });
+
+        setListSummary((prev) => {
+          if (!prev) {
+            return prev;
+          }
+
+          const filteredItems = prev.items.filter(
+            (existing) => existing?.id !== itemId,
+          );
+          return { ...prev, items: filteredItems };
+        });
+      } catch (deleteError) {
+        console.error('Failed to delete item', deleteError);
+        Alert.alert('Delete failed', 'Unable to delete the item. Please try again.');
+      } finally {
+        setDeletingItemId(null);
+      }
+    },
+    [isPremiumList, listId],
+  );
+
+  const handleDeletePress = useCallback(
+    (item) => {
+      const itemId = item?.id ?? null;
+
+      if (itemId == null) {
+        return;
+      }
+
+      Alert.alert(
+        'Delete item',
+        'This item will be permanently removed and will not be shown again.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: () => {
+              performDelete(itemId);
+            },
+          },
+        ],
+      );
+    },
+    [performDelete],
+  );
+
+
   const renderItem = ({ item }) => {
     const subQuantities = Array.isArray(item?.subQuantities)
       ? item.subQuantities
@@ -280,12 +365,15 @@ export default function ViewListScreen() {
                   <Icon name="edit" size={20} color="#333" />
                 </TouchableOpacity>
                 <TouchableOpacity
-                  onPress={() => {
-                    /* TODO: delete */
-                  }}
+                  onPress={() => handleDeletePress(item)}
                   style={styles.iconSpacing}
+                  disabled={deletingItemId === itemId}
                 >
-                  <Icon name="delete" size={20} color="#333" />
+                 {deletingItemId === itemId ? (
+                    <ActivityIndicator size="small" color="#d00" />
+                  ) : (
+                    <Icon name="delete" size={20} color="#333" />
+                  )}
                 </TouchableOpacity>
               </>
             )}
