@@ -1,6 +1,8 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   StatusBar,
   StyleSheet,
   Text,
@@ -11,6 +13,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import apiClient from '../services/apiClient';
+import { getStoredSession } from '../services/authStorage';
 
 const nextUnit = unit => {
   const units = ['kg', 'gm', 'ps'];
@@ -24,7 +28,8 @@ const parseQuantity = q => {
 };
 
 export default function EditItemScreen() {
-  const { item } = useLocalSearchParams();
+  const { item, listId: rawListId } = useLocalSearchParams();
+  const listId = Array.isArray(rawListId) ? rawListId[0] : rawListId ?? null;
   const parsed = item ? JSON.parse(item) : {};
   const main = parseQuantity(parsed.quantity || '');
   const [name, setName] = useState(parsed.itemName || '');
@@ -37,6 +42,7 @@ export default function EditItemScreen() {
       return { quantity: q.quantity, unit: q.unit, price: s.priceText?.replace(/[^\d]/g, '') || '' };
     })
   );
+   const [isSaving, setIsSaving] = useState(false);
 
   const router = useRouter();
 
@@ -56,6 +62,74 @@ export default function EditItemScreen() {
       return arr;
     });
   };
+
+    const buildQuantityText = (value, valueUnit) => {
+    const qty = value?.trim();
+    if (!qty) {
+      return null;
+    }
+    return `${qty}${valueUnit}`;
+  };
+
+  const buildPriceText = value => {
+    const trimmed = value?.trim();
+    return trimmed ? trimmed : null;
+  };
+
+  const handleSave = async () => {
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      Alert.alert('Update item', 'Please enter a name for the item.');
+      return;
+    }
+
+    if (!listId || parsed?.id == null) {
+      Alert.alert('Update item', 'Missing identifiers to update this item.');
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      const session = await getStoredSession();
+      const userIdValue = session?.userId ? Number(session.userId) : null;
+      const headers = userIdValue ? { 'X-User-Id': String(userIdValue) } : undefined;
+
+      const normalizedSubQuantities = subQuantities
+        .map(sub => {
+          const quantityText = buildQuantityText(sub.quantity, sub.unit);
+          const priceText = buildPriceText(sub.price);
+          if (!quantityText && !priceText) {
+            return null;
+          }
+          return {
+            quantity: quantityText,
+            priceText,
+          };
+        })
+        .filter(Boolean);
+
+      const payload = {
+        itemName: trimmedName,
+        quantity: buildQuantityText(quantity, unit),
+        priceText: buildPriceText(price),
+        subQuantities: normalizedSubQuantities,
+      };
+
+      await apiClient.put(
+        `/api/lists/${encodeURIComponent(listId)}/items/${encodeURIComponent(parsed.id)}`,
+        payload,
+        { headers },
+      );
+
+      router.back();
+    } catch (error) {
+      console.error('Failed to update item', error);
+      Alert.alert('Update failed', 'Unable to update the item. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
 
   return (
     <SafeAreaView style={styles.container}>
@@ -142,8 +216,12 @@ export default function EditItemScreen() {
         </View>
       ))}
 
-      <TouchableOpacity style={styles.saveBtn} onPress={() => router.back()}>
-        <Text style={styles.saveText}>Save</Text>
+       <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={isSaving}>
+        {isSaving ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.saveText}>Save</Text>
+        )}
       </TouchableOpacity>
     </SafeAreaView>
   );

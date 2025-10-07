@@ -1,13 +1,16 @@
 // ViewListScreen.js
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+   Alert,
   FlatList,
   RefreshControl,
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -70,6 +73,9 @@ export default function ViewListScreen() {
   const [listSummary, setListSummary] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [editingItemId, setEditingItemId] = useState(null);
+  const [editingName, setEditingName] = useState('');
+  const [savingItemId, setSavingItemId] = useState(null);
 
   const fetchList = useCallback(async () => {
     if (!listId) {
@@ -105,6 +111,8 @@ export default function ViewListScreen() {
         ...data,
         items: normalizedItems,
       });
+        setEditingItemId(null);
+      setEditingName('');
     } catch (err) {
       console.error('Failed to load list details', err);
       setError('Unable to load list items. Pull to refresh.');
@@ -114,13 +122,107 @@ export default function ViewListScreen() {
     }
   }, [listId]);
 
-  useEffect(() => {
-    fetchList();
-  }, [fetchList]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchList();
+    }, [fetchList]),
+  );
+
 
   const listTitle = listSummary?.title ?? fallbackTitle;
   const listItems = listSummary?.items ?? [];
   const isPremiumList = listSummary?.listType === 'PREMIUM';
+
+  const startInlineEdit = useCallback(
+    (item) => {
+      const itemId = item?.id ?? null;
+      if (!isPremiumList && itemId != null) {
+        setEditingItemId(itemId);
+        setEditingName(item?.itemName ?? '');
+      }
+    },
+    [isPremiumList],
+  );
+
+  const cancelInlineEdit = useCallback(() => {
+    setEditingItemId(null);
+    setEditingName('');
+  }, []);
+
+  const handleInlineSave = useCallback(
+    async (item) => {
+      const itemId = item?.id ?? null;
+      const trimmedName = editingName.trim();
+
+      if (!trimmedName) {
+        Alert.alert('Update item', 'Please enter a name for the item.');
+        return;
+      }
+
+      if (!listId || itemId == null) {
+        setListSummary((prev) => {
+          if (!prev) {
+            return prev;
+          }
+          const updatedItems = prev.items.map((existing) =>
+            existing?.id === itemId ? { ...existing, itemName: trimmedName } : existing,
+          );
+          return { ...prev, items: updatedItems };
+        });
+        cancelInlineEdit();
+        return;
+      }
+
+      try {
+        setSavingItemId(itemId);
+        const session = await getStoredSession();
+        const userIdValue = session?.userId ? Number(session.userId) : null;
+        const headers = userIdValue
+          ? { 'X-User-Id': String(userIdValue) }
+          : undefined;
+
+        await apiClient.put(
+          `/api/lists/${encodeURIComponent(listId)}/checklist/items/${encodeURIComponent(itemId)}`,
+          { itemName: trimmedName },
+          { headers },
+        );
+
+        setListSummary((prev) => {
+          if (!prev) {
+            return prev;
+          }
+          const updatedItems = prev.items.map((existing) =>
+            existing?.id === itemId ? { ...existing, itemName: trimmedName } : existing,
+          );
+          return { ...prev, items: updatedItems };
+        });
+        cancelInlineEdit();
+      } catch (inlineError) {
+        console.error('Failed to update checklist item', inlineError);
+        Alert.alert('Update failed', 'Unable to update the item. Please try again.');
+      } finally {
+        setSavingItemId(null);
+      }
+    },
+    [cancelInlineEdit, editingName, listId],
+  );
+
+  const handleEditPress = useCallback(
+    (item) => {
+      if (isPremiumList) {
+        router.push({
+          pathname: '/screens/EditItemScreen',
+          params: {
+            item: JSON.stringify(item),
+            listId: listId ? String(listId) : '',
+          },
+        });
+      } else {
+        startInlineEdit(item);
+      }
+    },
+    [isPremiumList, listId, router, startInlineEdit],
+  );
 
   const renderItem = ({ item }) => {
     const subQuantities = Array.isArray(item?.subQuantities)
@@ -133,30 +235,60 @@ export default function ViewListScreen() {
 
     const showDetailsRow = isPremiumList && (hasQuantity || hasPriceText);
     const displayPriceText = hasPriceText ? formatPriceText(item.priceText) : '';
+    const itemId = item?.id ?? null;
+    const isEditing = !isPremiumList && editingItemId === itemId;
+    const isSaving = savingItemId === itemId;
     return (
    <View style={styles.itemContainer}>
         {/* Row 1: name + edit/delete */}
         <View style={styles.row1}>
-          <Text style={styles.itemName}>{item.itemName ?? ''}</Text>
+          {isEditing ? (
+            <TextInput
+              value={editingName}
+              onChangeText={setEditingName}
+              style={styles.inlineInput}
+              autoFocus
+              editable={!isSaving}
+            />
+          ) : (
+            <Text style={styles.itemName}>{item.itemName ?? ''}</Text>
+          )}
           <View style={styles.icons}>
-            <TouchableOpacity
-              onPress={() =>
-                router.push({
-                  pathname: '/screens/EditItemScreen',
-                  params: { item: JSON.stringify(item) },
-                })
-              }
-            >
-              <Icon name="edit" size={20} color="#333" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => {
-                /* TODO: delete */
-              }}
-              style={styles.iconSpacing}
-            >
-              <Icon name="delete" size={20} color="#333" />
-            </TouchableOpacity>
+            {isEditing ? (
+              <>
+                <TouchableOpacity
+                  onPress={() => handleInlineSave(item)}
+                  disabled={isSaving}
+                >
+                  {isSaving ? (
+                    <ActivityIndicator size="small" color="#1f6ea7" />
+                  ) : (
+                    <Icon name="check" size={20} color="#1f6ea7" />
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={cancelInlineEdit}
+                  style={styles.iconSpacing}
+                  disabled={isSaving}
+                >
+                  <Icon name="close" size={20} color="#d00" />
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <TouchableOpacity onPress={() => handleEditPress(item)}>
+                  <Icon name="edit" size={20} color="#333" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    /* TODO: delete */
+                  }}
+                  style={styles.iconSpacing}
+                >
+                  <Icon name="delete" size={20} color="#333" />
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </View>
 
@@ -178,8 +310,7 @@ export default function ViewListScreen() {
             ))
           : null}
       </View>
-
-          );
+    );
   };
 
   return (
@@ -292,6 +423,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#111',
+  },
+   inlineInput: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111',
+    borderBottomWidth: 1,
+    borderColor: '#1f6ea7',
+    paddingVertical: 0,
+    marginRight: 8,
   },
   icons: {
     flexDirection: 'row',
