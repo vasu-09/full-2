@@ -36,6 +36,18 @@ const parseSubQuantities = (value) => {
     return [];
   }
 };
+const formatPriceText = (priceText) => {
+  if (priceText == null) {
+    return '';
+  }
+
+  const normalized = String(priceText).trim();
+  if (!normalized) {
+    return '';
+  }
+
+  return normalized.startsWith('₹') ? normalized : `₹${normalized}`;
+};
 
 export default function ViewListScreen() {
   const router = useRouter();
@@ -108,49 +120,66 @@ export default function ViewListScreen() {
 
   const listTitle = listSummary?.title ?? fallbackTitle;
   const listItems = listSummary?.items ?? [];
+  const isPremiumList = listSummary?.listType === 'PREMIUM';
 
   const renderItem = ({ item }) => {
     const subQuantities = Array.isArray(item?.subQuantities)
       ? item.subQuantities
       : [];
+    const hasQuantity =
+      item?.quantity != null && String(item.quantity).trim() !== '';
+    const hasPriceText =
+      isPremiumList && item?.priceText != null && String(item.priceText).trim() !== '';
 
+    const showDetailsRow = isPremiumList && (hasQuantity || hasPriceText);
+    const displayPriceText = hasPriceText ? formatPriceText(item.priceText) : '';
     return (
-    <View style={styles.itemContainer}>
-      {/* Row 1: name + edit/delete */}
-      <View style={styles.row1}>
-        <Text style={styles.itemName}>{item.itemName ?? ''}</Text>
-        <View style={styles.icons}>
-         <TouchableOpacity
-            onPress={() =>
-              router.push({
-                pathname: '/screens/EditItemScreen',
-                params: { item: JSON.stringify(item) },
-              })
-            }
-          >
-            <Icon name="edit" size={20} color="#333" />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => { /* TODO: delete */ }} style={styles.iconSpacing}>
-            <Icon name="delete" size={20} color="#333" />
-          </TouchableOpacity>
+   <View style={styles.itemContainer}>
+        {/* Row 1: name + edit/delete */}
+        <View style={styles.row1}>
+          <Text style={styles.itemName}>{item.itemName ?? ''}</Text>
+          <View style={styles.icons}>
+            <TouchableOpacity
+              onPress={() =>
+                router.push({
+                  pathname: '/screens/EditItemScreen',
+                  params: { item: JSON.stringify(item) },
+                })
+              }
+            >
+              <Icon name="edit" size={20} color="#333" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => {
+                /* TODO: delete */
+              }}
+              style={styles.iconSpacing}
+            >
+              <Icon name="delete" size={20} color="#333" />
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
 
       {/* Row 2: quantity on left, price on right */}
-      <View style={styles.row2}>
-        <Text style={styles.detailText}>{item.quantity ?? ''}</Text>
-        <Text style={styles.detailText}>{item.priceText ?? ''}</Text>
+        {showDetailsRow ? (
+          <View style={styles.row2}>
+            <Text style={styles.detailText}>{item.quantity ?? ''}</Text>
+            <Text style={styles.detailText}>{displayPriceText}</Text>
+          </View>
+        ) : null}
+
+        {/* Sub‑quantities (indented) */}
+        {isPremiumList
+          ? subQuantities.map((sub, i) => (
+              <View key={i} style={styles.subRow}>
+                <Text style={styles.subText}>{sub.quantity}</Text>
+                <Text style={styles.subText}>{formatPriceText(sub.priceText)}</Text>
+              </View>
+            ))
+          : null}
       </View>
 
-      {/* Sub‑quantities (indented) */}
-      {subQuantities.map((sub, i) => (
-        <View key={i} style={styles.subRow}>
-          <Text style={styles.subText}>{sub.quantity}</Text>
-          <Text style={styles.subText}>{sub.priceText}</Text>
-        </View>
-      ))}
-    </View>
-);
+          );
   };
 
   return (

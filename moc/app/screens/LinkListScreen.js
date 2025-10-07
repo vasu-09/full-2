@@ -252,7 +252,7 @@ export default function LinkListScreen() {
 
       <TouchableOpacity
         style={[styles.sendFab, { bottom: insets.bottom + 16 }]}
-        onPress={() => router.push({ pathname: '/screens/ListScreen', params: { listName, items: JSON.stringify(parsedItems) } })}
+        onPress={() => router.push({ pathname: '/screens/ListsScreen' })}
       >
         <Icon name="check" size={24} color="#fff" />
       </TouchableOpacity>
