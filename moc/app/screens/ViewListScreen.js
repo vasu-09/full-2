@@ -1,6 +1,6 @@
 // ViewListScreen.js
-import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -14,8 +14,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialIcons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 
 import apiClient from '../services/apiClient';
 import { getStoredSession } from '../services/authStorage';
@@ -77,6 +77,8 @@ export default function ViewListScreen() {
   const [editingName, setEditingName] = useState('');
   const [savingItemId, setSavingItemId] = useState(null);
   const [deletingItemId, setDeletingItemId] = useState(null);
+   const [newTaskName, setNewTaskName] = useState('');
+  const [isAddingTask, setIsAddingTask] = useState(false);
 
   const fetchList = useCallback(async () => {
     if (!listId) {
@@ -133,6 +135,7 @@ export default function ViewListScreen() {
   const listTitle = listSummary?.title ?? fallbackTitle;
   const listItems = listSummary?.items ?? [];
   const isPremiumList = listSummary?.listType === 'PREMIUM';
+  const isBasicList = listSummary?.listType === 'BASIC';
 
   const startInlineEdit = useCallback(
     (item) => {
@@ -224,6 +227,103 @@ export default function ViewListScreen() {
     },
     [isPremiumList, listId, router, startInlineEdit],
   );
+
+  const handleAddPremiumItem = useCallback(() => {
+    if (!listId) {
+      Alert.alert('Add item', 'Missing list identifier.');
+      return;
+    }
+
+    router.push({
+      pathname: '/screens/EditItemScreen',
+      params: {
+        listId: String(listId),
+      },
+    });
+  }, [listId, router]);
+
+  const handleAddTask = useCallback(async () => {
+    const trimmedName = newTaskName.trim();
+    if (!trimmedName) {
+      Alert.alert('Add task', 'Please enter a task name.');
+      return;
+    }
+
+    if (!listId) {
+      setListSummary((prev) => {
+        if (!prev) {
+          return prev;
+        }
+
+        const temporaryId = Date.now();
+        const appendedItems = [
+          ...prev.items,
+          {
+            id: temporaryId,
+            itemName: trimmedName,
+            quantity: null,
+            priceText: null,
+            subQuantities: [],
+          },
+        ];
+
+        return {
+          ...prev,
+          items: appendedItems,
+        };
+      });
+      setNewTaskName('');
+      return;
+    }
+
+    try {
+      setIsAddingTask(true);
+      const session = await getStoredSession();
+      const userIdValue = session?.userId ? Number(session.userId) : null;
+      const headers = userIdValue
+        ? { 'X-User-Id': String(userIdValue) }
+        : undefined;
+
+      const { data } = await apiClient.post(
+        `/api/lists/${encodeURIComponent(listId)}/checklist/items`,
+        { itemName: trimmedName },
+        { headers },
+      );
+
+      setListSummary((prev) => {
+        if (!prev) {
+          return prev;
+        }
+
+        const normalizedItem = data
+          ? {
+              ...data,
+              itemName: data?.itemName ?? trimmedName,
+              quantity: data?.quantity ?? null,
+              priceText: data?.priceText ?? null,
+              subQuantities: parseSubQuantities(data?.subQuantitiesJson),
+            }
+          : {
+              id: Date.now(),
+              itemName: trimmedName,
+              quantity: null,
+              priceText: null,
+              subQuantities: [],
+            };
+
+        return {
+          ...prev,
+          items: [...prev.items, normalizedItem],
+        };
+      });
+      setNewTaskName('');
+    } catch (addError) {
+      console.error('Failed to add task', addError);
+      Alert.alert('Add task', 'Unable to add the task. Please try again.');
+    } finally {
+      setIsAddingTask(false);
+    }
+  }, [listId, newTaskName]);
 
    const performDelete = useCallback(
     async (itemId) => {
@@ -452,14 +552,46 @@ export default function ViewListScreen() {
               </Text>
             </View>
           ) : null
-        }
-        ListFooterComponent={
-          isLoading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator color="#1f6ea7" />
-            </View>
-          ) : null
-        }
+        }  ListFooterComponent={() => (
+          <View style={styles.footerContainer}>
+            {isLoading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator color="#1f6ea7" />
+              </View>
+            ) : null}
+            {!isLoading && isPremiumList ? (
+              <TouchableOpacity
+                style={styles.addButton}
+                onPress={handleAddPremiumItem}
+              >
+                <Text style={styles.addButtonText}>Add item</Text>
+              </TouchableOpacity>
+            ) : null}
+            {!isLoading && isBasicList ? (
+              <View style={styles.addTaskContainer}>
+                <TextInput
+                  style={styles.addTaskInput}
+                  placeholder="Add new task"
+                  placeholderTextColor="#777"
+                  value={newTaskName}
+                  onChangeText={setNewTaskName}
+                  editable={!isAddingTask}
+                />
+                <TouchableOpacity
+                  style={styles.addTaskButton}
+                  onPress={handleAddTask}
+                  disabled={isAddingTask}
+                >
+                  {isAddingTask ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={styles.addTaskButtonText}>Add task</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            ) : null}
+          </View>
+        )}
       />
     </SafeAreaView>
   );
@@ -492,8 +624,12 @@ const styles = StyleSheet.create({
   list: {
     paddingVertical: 8,
   },
-   loadingContainer: {
+  loadingContainer: {
     paddingVertical: 24,
+  },
+  footerContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 24,
   },
   itemContainer: {
     borderBottomWidth: 1,
@@ -556,5 +692,48 @@ const styles = StyleSheet.create({
   emptyText: {
     textAlign: 'center',
     color: '#666',
+  },
+   addButton: {
+    marginTop: 12,
+    backgroundColor: '#1f6ea7',
+    borderRadius: 8,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  addTaskContainer: {
+    marginTop: 12,
+    backgroundColor: '#f5f7fa',
+    borderRadius: 10,
+    padding: 12,
+  },
+  addTaskInput: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d0d7de',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: '#111',
+    marginBottom: 12,
+  },
+  addTaskButton: {
+    backgroundColor: '#1f6ea7',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addTaskButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+    textTransform: 'capitalize',
   },
 });

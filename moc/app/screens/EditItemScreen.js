@@ -45,6 +45,8 @@ export default function EditItemScreen() {
    const [isSaving, setIsSaving] = useState(false);
 
   const router = useRouter();
+  const isEditingExisting = parsed?.id != null;
+  const screenTitle = isEditingExisting ? 'Updating item' : 'Add item';
 
   const addSubQuantity = () => {
     setSubQuantities(prev => [...prev, { quantity: '', unit: 'kg', price: '' }]);
@@ -83,8 +85,8 @@ export default function EditItemScreen() {
       return;
     }
 
-    if (!listId || parsed?.id == null) {
-      Alert.alert('Update item', 'Missing identifiers to update this item.');
+    if (!listId) {
+      Alert.alert('Save item', 'Missing list identifier.');
       return;
     }
 
@@ -115,16 +117,24 @@ export default function EditItemScreen() {
         subQuantities: normalizedSubQuantities,
       };
 
-      await apiClient.put(
-        `/api/lists/${encodeURIComponent(listId)}/items/${encodeURIComponent(parsed.id)}`,
-        payload,
-        { headers },
-      );
+       if (isEditingExisting) {
+        await apiClient.put(
+          `/api/lists/${encodeURIComponent(listId)}/items/${encodeURIComponent(parsed.id)}`,
+          payload,
+          { headers },
+        );
+      } else {
+        await apiClient.post(
+          `/api/lists/${encodeURIComponent(listId)}/items`,
+          payload,
+          { headers },
+        );
+      }
 
       router.back();
     } catch (error) {
       console.error('Failed to update item', error);
-      Alert.alert('Update failed', 'Unable to update the item. Please try again.');
+      Alert.alert('Save failed', 'Unable to save the item. Please try again.');
     } finally {
       setIsSaving(false);
     }
@@ -138,7 +148,7 @@ export default function EditItemScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Icon name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Updating item</Text>
+         <Text style={styles.headerTitle}>{screenTitle}</Text>
       </View>
 
       <View style={styles.row}>
