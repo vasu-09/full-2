@@ -239,7 +239,7 @@ public class ToDoListService {
     }
 
     @Transactional
-    public ToDoItem addItemToChecklist(Long listId, Long userId, CreateChecklistItemRequest request) throws AccessDeniedException {
+    public ToDoItemRes addItemToChecklist(Long listId, Long userId, CreateChecklistItemRequest request) throws AccessDeniedException {
         ToDoList list = toDoListRepository.findById(listId)
                 .orElseThrow(() -> new RuntimeException("List not found"));
 
@@ -266,7 +266,16 @@ public class ToDoListService {
         list.setUpdatedAt(LocalDateTime.now());
         toDoListRepository.save(list);
 
-        return saved;
+        ToDoItemRes response = new ToDoItemRes();
+        response.setId(saved.getId());
+        response.setItemName(saved.getItemName());
+        response.setQuantity(saved.getQuantity());
+        response.setPriceText(saved.getPriceText());
+        response.setCreatedAt(saved.getCreatedAt());
+        response.setUpdatedAt(saved.getUpdatedAt());
+        response.setSubQuantitiesJson(saved.getSubQuantitiesJson());
+
+        return response;
     }
 
     public ToDoList updateList(Long listId, Long userId, UpdateListRequest request) throws AccessDeniedException {
@@ -515,7 +524,7 @@ public class ToDoListService {
     }
 
     @Transactional
-    public ToDoItem updateChecklistItem(Long listId, Long itemId, Long userId, UpdateChecklistItemRequest req)
+    public ToDoItemRes updateChecklistItem(Long listId, Long itemId, Long userId, UpdateChecklistItemRequest req)
             throws AccessDeniedException {
 
         // 1) verify list exists
@@ -544,7 +553,16 @@ public class ToDoListService {
 
         list.setUpdatedAt(LocalDateTime.now());
         toDoListRepository.save(list);
-        return toDoItemRepository.save(item);
+        ToDoItem saved = toDoItemRepository.save(item);
+        ToDoItemRes response = new ToDoItemRes();
+        response.setId(item.getId());
+        response.setItemName(item.getItemName());
+        response.setQuantity(item.getQuantity());
+        response.setPriceText(item.getPriceText());
+        response.setCreatedAt(item.getCreatedAt());
+        response.setUpdatedAt(item.getUpdatedAt());
+        response.setSubQuantitiesJson(item.getSubQuantitiesJson());
+        return response;
     }
 
     // ✅ CHECKLIST: Delete (no subscription check)

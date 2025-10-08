@@ -438,6 +438,7 @@ export default function ViewListScreen() {
     const itemId = item?.id ?? null;
     const isEditing = !isPremiumList && editingItemId === itemId;
     const isSaving = savingItemId === itemId;
+
     return (
    <View style={styles.itemContainer}>
         {/* Row 1: name + edit/delete */}
@@ -515,6 +516,29 @@ export default function ViewListScreen() {
       </View>
     );
   };
+  const listFooter = useMemo(() => {
+    if (isLoading) {
+      return (
+        <View style={styles.footerContainer}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator color="#1f6ea7" />
+          </View>
+        </View>
+      );
+    }
+
+    if (isPremiumList) {
+      return (
+        <View style={styles.footerContainer}>
+          <TouchableOpacity style={styles.addButton} onPress={handleAddPremiumItem}>
+            <Text style={styles.addButtonText}>Add item</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    return <View style={styles.footerContainer} />;
+  }, [handleAddPremiumItem, isLoading, isPremiumList]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -522,118 +546,116 @@ export default function ViewListScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => {
-           if (router.canGoBack()) router.back();
+        <TouchableOpacity
+          onPress={() => {
+            if (router.canGoBack()) router.back();
             else router.replace('/screens/MocScreen');
-          }} style={styles.iconBtn}>
+          }}
+           style={styles.iconBtn}>
           <Icon name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <TouchableOpacity
             style={styles.titleContainer}
-            onPress={() =>
-              router.push({
-                pathname: '/screens/ListInfoScreen',
-                params: {
-                  listName: listTitle,
-                  description: listSummary?.description ?? '',
-                  members: JSON.stringify(listSummary?.members ?? []),
-                },
-              })
-            }
-          >
-            <Text style={styles.headerTitle}>{listTitle}</Text>
-          </TouchableOpacity>
-        <TouchableOpacity onPress={() => {/* TODO: more menu */}} style={styles.iconBtn}>
+          onPress={() =>
+            router.push({
+              pathname: '/screens/ListInfoScreen',
+              params: {
+                listName: listTitle,
+                description: listSummary?.description ?? '',
+                members: JSON.stringify(listSummary?.members ?? []),
+              },
+            })
+          }
+        >
+          <Text style={styles.headerTitle}>{listTitle}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => {
+            /* TODO: more menu */
+          }}
+          style={styles.iconBtn}
+        >
           <Icon name="more-vert" size={24} color="#fff" />
         </TouchableOpacity>
       </View>
 
-      {/* List items */}
-      <FlatList
-         data={listItems}
-        keyExtractor={(item, idx) =>
-          item?.id != null ? String(item.id) : idx.toString()
-        }
-        renderItem={renderItem}
-        contentContainerStyle={styles.list}
-        refreshControl={
-          <RefreshControl refreshing={isLoading} onRefresh={fetchList} />
-        }
-        ListEmptyComponent={
-          !isLoading ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyText}>
-                {error ?? 'No items in this list yet.'}
-              </Text>
-            </View>
-          ) : null
-        }
-        ListFooterComponent={() => (
-          <View style={styles.footerContainer}>
-            {isLoading ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator color="#1f6ea7" />
+      <View style={styles.content}>
+        {/* List items */}
+        <FlatList
+          data={listItems}
+          keyExtractor={(item, idx) =>
+            item?.id != null ? String(item.id) : idx.toString()
+          }
+          renderItem={renderItem}
+          contentContainerStyle={styles.list}
+          refreshControl={
+            <RefreshControl refreshing={isLoading} onRefresh={fetchList} />
+          }
+          ListEmptyComponent={
+            !isLoading ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyText}>
+                  {error ?? 'No items in this list yet.'}
+                </Text>
               </View>
-            ) : null}
-            {!isLoading && isPremiumList ? (
-              <TouchableOpacity
-                style={styles.addButton}
-                onPress={handleAddPremiumItem}
-              >
-                <Text style={styles.addButtonText}>Add item</Text>
-              </TouchableOpacity>
-            ) : null}
-            {!isLoading && isBasicList ? (
-              <View style={styles.addTaskContainer}>
-                 {isTaskInputVisible ? (
-                  <>
-                    <TextInput
-                      style={styles.addTaskInput}
-                      placeholder="Describe the task"
-                      placeholderTextColor="#777"
-                      value={newTaskName}
-                      onChangeText={setNewTaskName}
-                      editable={!isAddingTask}
-                      multiline
-                      textAlignVertical="top"
-                      returnKeyType="done"
-                      blurOnSubmit
-                      onSubmitEditing={handleAddTask}
-                    />
-                    <View style={styles.taskActionsRow}>
-                      <TouchableOpacity
-                        style={[styles.addTaskButton, styles.addTaskButtonFullWidth]}
-                        onPress={handleAddTask}
-                        disabled={isAddingTask}
-                      >
-                        {isAddingTask ? (
-                          <ActivityIndicator size="small" color="#1f6ea7" />
-                        ) : (
-                          <Text style={styles.addTaskButtonText}>Save task</Text>
-                        )}
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.cancelTaskButton}
-                        onPress={handleCancelNewTask}
-                        disabled={isAddingTask}
-                      >
-                        <Text style={styles.cancelTaskButtonText}>Cancel</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </>
-                ) : (
-                  <TouchableOpacity
-                    style={styles.addTaskButton}
-                    onPress={handleBeginAddTask}
-                  >
-                    <Text style={styles.addTaskButtonText}>Add task</Text>
+           ) : null
+          }
+          ListFooterComponent={listFooter}
+          keyboardShouldPersistTaps="handled"
+          style={styles.listFlex}
+        />
+
+        {!isLoading && isBasicList ? (
+          <View style={styles.footerContainer}>
+            <View style={styles.addTaskContainer}>
+              {isTaskInputVisible ? (
+                <>
+                  <TextInput
+                    style={styles.addTaskInput}
+                    placeholder="Describe the task"
+                    placeholderTextColor="#777"
+                    value={newTaskName}
+                    onChangeText={setNewTaskName}
+                    editable={!isAddingTask}
+                    multiline
+                    textAlignVertical="top"
+                    returnKeyType="done"
+                    blurOnSubmit
+                    onSubmitEditing={handleAddTask}
+                  />
+                  <View style={styles.taskActionsRow}>
+                    <TouchableOpacity
+                      style={[styles.addTaskButton, styles.addTaskButtonFullWidth]}
+                      onPress={handleAddTask}
+                      disabled={isAddingTask}
+                    >
+                      {isAddingTask ? (
+                        <ActivityIndicator size="small" color="#1f6ea7" />
+                      ) : (
+                        <Text style={styles.addTaskButtonText}>Save task</Text>
+                      )}
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.cancelTaskButton}
+                      onPress={handleCancelNewTask}
+                      disabled={isAddingTask}
+                    >
+                      <Text style={styles.cancelTaskButtonText}>Cancel</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              ) : (
+                <TouchableOpacity
+                  style={styles.addTaskButton}
+                  onPress={handleBeginAddTask}
+                >
+                  <Text style={styles.addTaskButtonText}>Add task</Text>
                 </TouchableOpacity>
                  )}
-              </View>
-            ) : null}
+            </View>
           </View>
-        )}
-      />
+        ) : null}
+      </View>
     </SafeAreaView>
   );
 }

@@ -86,12 +86,12 @@ public class ToDoListController {
     }
 
     @PostMapping("/{listId}/checklist/items")
-    public ResponseEntity<ToDoItem> addChecklistItem(
+    public ResponseEntity<ToDoItemRes> addChecklistItem(
             @PathVariable Long listId,
             @RequestHeader("X-User-Id") String userId,
             @RequestBody CreateChecklistItemRequest request
     ) throws AccessDeniedException {
-        ToDoItem created = toDoListService.addItemToChecklist(listId, Long.valueOf(userId), request);
+        ToDoItemRes created = toDoListService.addItemToChecklist(listId, Long.valueOf(userId), request);
         return ResponseEntity.ok(created);
     }
 
@@ -152,13 +152,13 @@ public class ToDoListController {
     }
 
     @PutMapping("/{listId}/checklist/items/{itemId}")
-    public ResponseEntity<ToDoItem> updateChecklistItem(
+    public ResponseEntity<ToDoItemRes> updateChecklistItem(
             @PathVariable Long listId,
             @PathVariable Long itemId,
             @RequestHeader("X-User-Id") String userId,
             @RequestBody UpdateChecklistItemRequest request
     ) throws java.nio.file.AccessDeniedException {
-        ToDoItem updated = toDoListService.updateChecklistItem(listId, itemId, Long.valueOf(userId), request);
+        ToDoItemRes updated = toDoListService.updateChecklistItem(listId, itemId, Long.valueOf(userId), request);
         return ResponseEntity.ok(updated);
     }
 
