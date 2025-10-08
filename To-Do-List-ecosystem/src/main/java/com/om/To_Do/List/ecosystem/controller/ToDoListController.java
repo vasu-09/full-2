@@ -189,6 +189,4 @@ public class ToDoListController {
         return ResponseEntity.ok(toDoListService.syncOfflineUpdates(listId, request));
     }
 
-
-
 }

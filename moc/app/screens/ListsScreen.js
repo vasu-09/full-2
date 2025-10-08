@@ -26,6 +26,31 @@ export default function ListsScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [error, setError] = useState(null);
+    const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [pinnedIds, setPinnedIds] = useState(() => new Set());
+
+  const getListId = useCallback(list => {
+    if (!list) return null;
+    const rawId = list?.id ?? list?.listId ?? null;
+    return rawId != null ? String(rawId) : null;
+  }, []);
+
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+  }, []);
+
+  const toggleSelection = useCallback(listId => {
+    if (!listId) return;
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(listId)) {
+        next.delete(listId);
+      } else {
+        next.add(listId);
+      }
+      return next;
+    });
+  }, []);
 
   const fetchLists = useCallback(async () => {
     setIsLoading(true);
@@ -63,6 +88,138 @@ export default function ListsScreen() {
     fetchLists();
   }, [fetchLists]);
 
+   useEffect(() => {
+    setPinnedIds(prev => {
+      if (!prev.size) return prev;
+      const valid = new Set();
+      let changed = false;
+      prev.forEach(id => {
+        const exists = lists.some(list => getListId(list) === id);
+        if (exists) {
+          valid.add(id);
+        } else {
+          changed = true;
+        }
+      });
+      return changed ? valid : prev;
+    });
+
+    setSelectedIds(prev => {
+      if (!prev.size) return prev;
+      const valid = new Set();
+      let changed = false;
+      prev.forEach(id => {
+        const exists = lists.some(list => getListId(list) === id);
+        if (exists) {
+          valid.add(id);
+        } else {
+          changed = true;
+        }
+      });
+      return changed ? valid : prev;
+    });
+  }, [lists, getListId]);
+
+  const selectionCount = selectedIds.size;
+  const isSelectionMode = selectionCount > 0;
+  const selectedIdArray = useMemo(() => Array.from(selectedIds), [selectedIds]);
+  const pinnedIdArray = useMemo(() => Array.from(pinnedIds), [pinnedIds]);
+  const allSelectedPinned =
+    selectedIdArray.length > 0 && selectedIdArray.every(id => pinnedIds.has(id));
+  const flatListExtraData = useMemo(
+    () => ({ selected: selectedIdArray, pinned: pinnedIdArray, mode: isSelectionMode }),
+    [selectedIdArray, pinnedIdArray, isSelectionMode],
+  );
+
+  const sortedLists = useMemo(() => {
+    if (!pinnedIds.size) {
+      return lists;
+    }
+    const pinned = [];
+    const others = [];
+    lists.forEach(list => {
+      const id = getListId(list);
+      if (id && pinnedIds.has(id)) {
+        pinned.push(list);
+      } else {
+        others.push(list);
+      }
+    });
+    return [...pinned, ...others];
+  }, [lists, pinnedIds, getListId]);
+
+  const handleLongPress = useCallback(listId => {
+    if (!listId) return;
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.add(listId);
+      return next;
+    });
+  }, []);
+
+  const handlePinToggle = useCallback(() => {
+    const ids = Array.from(selectedIds);
+    if (!ids.length) return;
+    setPinnedIds(prev => {
+      const next = new Set(prev);
+      const shouldUnpin = ids.every(id => prev.has(id));
+      ids.forEach(id => {
+        if (shouldUnpin) {
+          next.delete(id);
+        } else {
+          next.add(id);
+        }
+      });
+      return next;
+    });
+    clearSelection();
+  }, [selectedIds, clearSelection]);
+
+  const handleDeleteSelected = useCallback(async () => {
+    const ids = Array.from(selectedIds);
+    if (!ids.length) return;
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const session = await getStoredSession();
+      const userIdValue = session?.userId ? Number(session.userId) : null;
+
+      if (!userIdValue) {
+        setError('Please sign in again to delete lists.');
+        return;
+      }
+
+      await Promise.all(
+        ids.map(id =>
+          apiClient.delete(`/api/lists/${id}`, {
+            headers: { 'X-User-Id': String(userIdValue) },
+          }),
+        ),
+      );
+
+      setLists(prev => prev.filter(list => !ids.includes(getListId(list))));
+      clearSelection();
+      setPinnedIds(prev => {
+        if (!prev.size) return prev;
+        const next = new Set(prev);
+        let changed = false;
+        ids.forEach(id => {
+          if (next.delete(id)) {
+            changed = true;
+          }
+        });
+        return changed ? next : prev;
+      });
+    } catch (err) {
+      console.error('Failed to delete lists', err);
+      setError('Unable to delete selected lists. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedIds, clearSelection, getListId]);
+
   const listCountLabel = useMemo(() => {
     if (!hasLoaded && isLoading) {
       return 'Loading…';
@@ -74,23 +231,61 @@ export default function ListsScreen() {
   
   const renderListItem = ({ item, index }) => {
     const bg = bgColors[index % bgColors.length];
-     const title = item?.title || item?.name || 'Untitled List';
-    const listId = item?.id != null ? String(item.id) : undefined;
+    const title = item?.title || item?.name || 'Untitled List';
+    const listId = getListId(item);
+    const isSelected = listId != null && selectedIds.has(listId);
+    const isPinned = listId != null && pinnedIds.has(listId);
+
+    const handlePress = () => {
+      if (isSelectionMode && listId) {
+        toggleSelection(listId);
+        return;
+      }
+
+      router.push({
+        pathname: '/screens/ViewListScreen',
+        params: {
+          listName: title,
+          listId,
+        },
+      });
+    };
+
+    const onLongPress = listId
+      ? () => {
+          if (isSelectionMode) {
+            toggleSelection(listId);
+          } else {
+            handleLongPress(listId);
+          }
+        }
+      : undefined;
+
     return (
         <TouchableOpacity
-        style={styles.listItem}
-        onPress={() => router.push({
-          pathname: '/screens/ViewListScreen',
-          params: {
-            listName: title,
-            listId,
-          },
-        })}
+        style={[styles.listItem, isSelected && styles.selectedListItem]}
+        onPress={handlePress}
+        onLongPress={onLongPress}
+        delayLongPress={250}
+        activeOpacity={0.8}
       >
-        <View style={[styles.iconCircle, { backgroundColor: bg }]}>
-          <Icon name="shopping-cart" size={24} color="#fff" />
+         <View
+          style={[
+            styles.iconCircle,
+            { backgroundColor: bg },
+            isSelected && styles.selectedIconCircle,
+          ]}
+        >
+          <Icon
+            name={isSelectionMode ? (isSelected ? 'check' : 'shopping-cart') : 'shopping-cart'}
+            size={24}
+            color={isSelected ? '#1f6ea7' : '#fff'}
+          />
         </View>
-        <Text style={styles.listName}>{title}</Text>
+         <Text style={[styles.listName, isSelected && styles.selectedListName]}>{title}</Text>
+        {isPinned ? (
+          <Icon name="push-pin" size={18} color="#1f6ea7" style={styles.pinBadge} />
+        ) : null}
       </TouchableOpacity>
     );
   };
@@ -99,26 +294,54 @@ export default function ListsScreen() {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.iconBtn}
-          onPress={() => {
-            router.replace('/screens/MocScreen');
-          }}
-        >
-          <Icon name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
-        <View style={styles.titleContainer}>
-          <Text style={styles.headerTitle}>Select List</Text>
-         <Text style={styles.headerSubtitle}>{listCountLabel}</Text>
-        </View>
-        <View style={styles.headerActions}>
-          <TouchableOpacity style={styles.iconBtn}>
-            <Icon name="search" size={24} color="#fff" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.iconBtn}>
-            <Icon name="more-vert" size={24} color="#fff" />
-          </TouchableOpacity>
-        </View>
+      {isSelectionMode ? (
+          <>
+            <TouchableOpacity style={styles.iconBtn} onPress={clearSelection}>
+              <Icon name="close" size={24} color="#fff" />
+            </TouchableOpacity>
+            <View style={styles.titleContainer}>
+              <Text style={styles.headerTitle}>{selectionCount} selected</Text>
+              <Text style={styles.headerSubtitle}>
+                {allSelectedPinned ? 'Pinned' : 'Select items'}
+              </Text>
+            </View>
+            <View style={styles.headerActions}>
+              <TouchableOpacity style={styles.iconBtn} onPress={handlePinToggle}>
+                <Icon
+                  name="push-pin"
+                  size={24}
+                  color={allSelectedPinned ? '#ffd54f' : '#fff'}
+                />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.iconBtn} onPress={handleDeleteSelected}>
+                <Icon name="delete" size={24} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          </>
+        ) : (
+          <>
+            <TouchableOpacity
+              style={styles.iconBtn}
+              onPress={() => {
+                router.replace('/screens/MocScreen');
+              }}
+            >
+              <Icon name="arrow-back" size={24} color="#fff" />
+            </TouchableOpacity>
+            <View style={styles.titleContainer}>
+              <Text style={styles.headerTitle}>Select List</Text>
+              <Text style={styles.headerSubtitle}>{listCountLabel}</Text>
+            </View>
+            <View style={styles.headerActions}>
+              <TouchableOpacity style={styles.iconBtn}>
+                <Icon name="search" size={24} color="#fff" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.iconBtn}>
+                <Icon name="more-vert" size={24} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
       </View>
 
       {/* New List */}
@@ -139,14 +362,15 @@ export default function ListsScreen() {
 
       {/* Existing Lists */}
       <FlatList
-        data={lists}
+        data={sortedLists}
         keyExtractor={(item, index) => {
-          const id = item?.id;
-          return id != null ? String(id) : `list-${index}`;
+          const id = getListId(item);
+          return id != null ? id : `list-${index}`;
         }}
         renderItem={renderListItem}
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
+         extraData={flatListExtraData}
          refreshControl={(
           <RefreshControl refreshing={isLoading} onRefresh={fetchLists} />
         )}
@@ -231,6 +455,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 12,
   },
   iconCircle: {
     width: 40,
@@ -243,6 +469,21 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     fontSize: 16,
     color: '#333',
+  },
+   selectedListItem: {
+    backgroundColor: '#e6f2ff',
+  },
+  selectedIconCircle: {
+    backgroundColor: '#fff',
+    borderWidth: 2,
+    borderColor: '#1f6ea7',
+  },
+  selectedListName: {
+    color: '#1f6ea7',
+    fontWeight: '600',
+  },
+  pinBadge: {
+    marginLeft: 'auto',
   },
   errorText: {
     marginHorizontal: 12,
