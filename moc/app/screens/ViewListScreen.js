@@ -77,8 +77,9 @@ export default function ViewListScreen() {
   const [editingName, setEditingName] = useState('');
   const [savingItemId, setSavingItemId] = useState(null);
   const [deletingItemId, setDeletingItemId] = useState(null);
-   const [newTaskName, setNewTaskName] = useState('');
+  const [newTaskName, setNewTaskName] = useState('');
   const [isAddingTask, setIsAddingTask] = useState(false);
+  const [isTaskInputVisible, setIsTaskInputVisible] = useState(false);
 
   const fetchList = useCallback(async () => {
     if (!listId) {
@@ -114,7 +115,7 @@ export default function ViewListScreen() {
         ...data,
         items: normalizedItems,
       });
-        setEditingItemId(null);
+      setEditingItemId(null);
       setEditingName('');
     } catch (err) {
       console.error('Failed to load list details', err);
@@ -273,6 +274,7 @@ export default function ViewListScreen() {
         };
       });
       setNewTaskName('');
+      setIsTaskInputVisible(false);
       return;
     }
 
@@ -317,6 +319,7 @@ export default function ViewListScreen() {
         };
       });
       setNewTaskName('');
+      setIsTaskInputVisible(false);
     } catch (addError) {
       console.error('Failed to add task', addError);
       Alert.alert('Add task', 'Unable to add the task. Please try again.');
@@ -325,7 +328,19 @@ export default function ViewListScreen() {
     }
   }, [listId, newTaskName]);
 
-   const performDelete = useCallback(
+    const handleBeginAddTask = useCallback(() => {
+    setIsTaskInputVisible(true);
+  }, []);
+
+  const handleCancelNewTask = useCallback(() => {
+    if (isAddingTask) {
+      return;
+    }
+    setIsTaskInputVisible(false);
+    setNewTaskName('');
+  }, [isAddingTask]);
+
+  const performDelete = useCallback(
     async (itemId) => {
       if (itemId == null) {
         return;
@@ -552,7 +567,8 @@ export default function ViewListScreen() {
               </Text>
             </View>
           ) : null
-        }  ListFooterComponent={() => (
+        }
+        ListFooterComponent={() => (
           <View style={styles.footerContainer}>
             {isLoading ? (
               <View style={styles.loadingContainer}>
@@ -569,25 +585,50 @@ export default function ViewListScreen() {
             ) : null}
             {!isLoading && isBasicList ? (
               <View style={styles.addTaskContainer}>
-                <TextInput
-                  style={styles.addTaskInput}
-                  placeholder="Add new task"
-                  placeholderTextColor="#777"
-                  value={newTaskName}
-                  onChangeText={setNewTaskName}
-                  editable={!isAddingTask}
-                />
-                <TouchableOpacity
-                  style={styles.addTaskButton}
-                  onPress={handleAddTask}
-                  disabled={isAddingTask}
-                >
-                  {isAddingTask ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
+                 {isTaskInputVisible ? (
+                  <>
+                    <TextInput
+                      style={styles.addTaskInput}
+                      placeholder="Describe the task"
+                      placeholderTextColor="#777"
+                      value={newTaskName}
+                      onChangeText={setNewTaskName}
+                      editable={!isAddingTask}
+                      multiline
+                      textAlignVertical="top"
+                      returnKeyType="done"
+                      blurOnSubmit
+                      onSubmitEditing={handleAddTask}
+                    />
+                    <View style={styles.taskActionsRow}>
+                      <TouchableOpacity
+                        style={[styles.addTaskButton, styles.addTaskButtonFullWidth]}
+                        onPress={handleAddTask}
+                        disabled={isAddingTask}
+                      >
+                        {isAddingTask ? (
+                          <ActivityIndicator size="small" color="#1f6ea7" />
+                        ) : (
+                          <Text style={styles.addTaskButtonText}>Save task</Text>
+                        )}
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.cancelTaskButton}
+                        onPress={handleCancelNewTask}
+                        disabled={isAddingTask}
+                      >
+                        <Text style={styles.cancelTaskButtonText}>Cancel</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.addTaskButton}
+                    onPress={handleBeginAddTask}
+                  >
                     <Text style={styles.addTaskButtonText}>Add task</Text>
-                  )}
                 </TouchableOpacity>
+                 )}
               </View>
             ) : null}
           </View>
@@ -610,10 +651,10 @@ const styles = StyleSheet.create({
   iconBtn: { padding: 8 },
 
   titleContainer: {
-  flex: 1,
-  justifyContent: 'center',
-   alignSelf: 'stretch',
-},
+    flex: 1,
+    justifyContent: 'center',
+    alignSelf: 'stretch',
+  },
   headerTitle: {
     color: '#fff',
     fontSize: 18,
@@ -697,6 +738,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
     backgroundColor: '#fff',
     borderRadius: 8,
+    borderWidth: 1,
     borderColor: '#1f6ea7',
     paddingVertical: 14,
     alignItems: 'center',
@@ -722,20 +764,38 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 15,
     color: '#111',
-    marginBottom: 12,
+     minHeight: 60,
+  },
+  taskActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
   },
   addTaskButton: {
     backgroundColor: '#fff',
     borderRadius: 8,
+    borderWidth: 1,
     borderColor: '#1f6ea7',
     paddingVertical: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  addTaskButtonFullWidth: {
+    flex: 1,
+  },
   addTaskButtonText: {
     color: '#1f6ea7',
     fontSize: 15,
     fontWeight: '600',
-    textTransform: 'capitalize',
+  },
+  cancelTaskButton: {
+    marginLeft: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  cancelTaskButtonText: {
+    color: '#1f6ea7',
+    fontSize: 15,
+    fontWeight: '500',
   },
 });
