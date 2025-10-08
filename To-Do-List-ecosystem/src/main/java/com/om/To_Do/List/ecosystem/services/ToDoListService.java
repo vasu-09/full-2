@@ -198,6 +198,77 @@ public class ToDoListService {
         listRecipientRepository.delete(recipient);
     }
 
+    @Transactional
+    public ToDoItemRes addItemToPremiumList(Long listId, Long userId, CreateItemRequest request) throws AccessDeniedException {
+        ToDoList list = toDoListRepository.findById(listId)
+                .orElseThrow(() -> new RuntimeException("List not found"));
+
+        if (!list.getCreatedByUserId().equals(userId)) {
+            throw new AccessDeniedException("Only the list creator can update this list.");
+        }
+
+        if (list.getListType() != ListType.PREMIUM) {
+            throw new RuntimeException("This endpoint is only available for premium lists");
+        }
+
+        if (request.getItemName() == null || request.getItemName().isBlank()) {
+            throw new IllegalArgumentException("Item name must be provided");
+        }
+
+        ToDoItem item = new ToDoItem();
+        item.setItemName(request.getItemName());
+        item.setQuantity(request.getQuantity());
+        item.setPriceText(request.getPriceText());
+        item.setSubQuantitiesJson(serializeSubQuantities(request.getSubQuantities()));
+        item.setList(list);
+
+        ToDoItem saved = toDoItemRepository.save(item);
+        list.setUpdatedAt(LocalDateTime.now());
+        toDoListRepository.save(list);
+
+        ToDoItemRes response = new ToDoItemRes();
+        response.setId(saved.getId());
+        response.setItemName(saved.getItemName());
+        response.setQuantity(saved.getQuantity());
+        response.setPriceText(saved.getPriceText());
+        response.setCreatedAt(saved.getCreatedAt());
+        response.setUpdatedAt(saved.getUpdatedAt());
+        response.setSubQuantitiesJson(saved.getSubQuantitiesJson());
+
+        return response;
+    }
+
+    @Transactional
+    public ToDoItem addItemToChecklist(Long listId, Long userId, CreateChecklistItemRequest request) throws AccessDeniedException {
+        ToDoList list = toDoListRepository.findById(listId)
+                .orElseThrow(() -> new RuntimeException("List not found"));
+
+        if (!list.getCreatedByUserId().equals(userId)) {
+            throw new AccessDeniedException("Only the list creator can update this list.");
+        }
+
+        if (list.getListType() != ListType.BASIC) {
+            throw new RuntimeException("This endpoint is only available for basic checklists");
+        }
+
+        if (request.getItemName() == null || request.getItemName().isBlank()) {
+            throw new IllegalArgumentException("Item name must be provided");
+        }
+
+        ToDoItem item = new ToDoItem();
+        item.setItemName(request.getItemName());
+        item.setQuantity(null);
+        item.setPriceText(null);
+        item.setSubQuantitiesJson(null);
+        item.setList(list);
+
+        ToDoItem saved = toDoItemRepository.save(item);
+        list.setUpdatedAt(LocalDateTime.now());
+        toDoListRepository.save(list);
+
+        return saved;
+    }
+
     public ToDoList updateList(Long listId, Long userId, UpdateListRequest request) throws AccessDeniedException {
         ToDoList list = toDoListRepository.findById(listId)
                 .orElseThrow(() -> new RuntimeException("List not found"));

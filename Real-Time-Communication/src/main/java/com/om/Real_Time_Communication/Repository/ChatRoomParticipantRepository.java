@@ -58,6 +58,6 @@ public interface ChatRoomParticipantRepository extends JpaRepository<ChatRoomPar
                        @Param("userId") Long userId,
                        @Param("messageId") String messageId);
 
-    @Query("select p.chatRoom.id from ChatRoomParticipant p where p.userId = :userId")
+    @Query("select p.chatRoom.id from ChatRoomParticipant p where p.userId = :userId and (p.hidden = false or p.hidden is null)")
     List<Long> findChatRoomIdsByUserId(@Param("userId") Long userId);
 }

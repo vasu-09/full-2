@@ -1,12 +1,13 @@
 package com.om.Real_Time_Communication;
 
 import com.om.Real_Time_Communication.Repository.ChatMessageRepository;
+import com.om.Real_Time_Communication.Repository.ChatRoomParticipantRepository;
+import com.om.Real_Time_Communication.Repository.ChatRoomRepository;
 import com.om.Real_Time_Communication.Repository.MessageRepository;
 import com.om.Real_Time_Communication.dto.ChatSendDto;
 import com.om.Real_Time_Communication.dto.MessageDto;
 import com.om.Real_Time_Communication.models.ChatMessage;
-import com.om.Real_Time_Communication.models.Message;
-import com.om.Real_Time_Communication.models.MessageType;
+import com.om.Real_Time_Communication.models.*;
 import com.om.Real_Time_Communication.security.SessionRegistry;
 import com.om.Real_Time_Communication.service.*;
 import com.om.Real_Time_Communication.service.MessageService.DirectRoomPolicy;
@@ -38,6 +39,8 @@ class MessageServiceTest {
 
     // Dependencies for saveInbound
     @Mock ChatMessageRepository chatMessageRepository;
+    @Mock ChatRoomParticipantRepository chatRoomParticipantRepository;
+    @Mock ChatRoomRepository chatRoomRepository;
     @Mock ChatRoomService aclService;
     @Mock DirectRoomPolicy directPolicy;
     @Mock RoomMembershipService membership;
@@ -123,6 +126,42 @@ class MessageServiceTest {
         verify(messageRepository, never()).save(any());
         verify(messagingTemplate, never()).convertAndSendToUser(anyString(), anyString(), any());
         verify(eventPublisher, never()).publishOfflineMessage(anyString(), any());
+    }
+
+    @Test
+    void deleteConversationForUser_marksMessagesAndHidesRoom() {
+        Message m1 = new Message();
+        m1.setSenderId("1");
+        m1.setReceiverId("2");
+        Message m2 = new Message();
+        m2.setSenderId("2");
+        m2.setReceiverId("1");
+        when(messageRepository.findConversationBetween("1", "2")).thenReturn(List.of(m1, m2));
+
+        ChatRoom room = new ChatRoom();
+        room.setType(ChatRoomType.DIRECT);
+        ChatRoomParticipant participant = new ChatRoomParticipant();
+        participant.setHidden(false);
+
+        when(chatRoomRepository.findDirectRoom(1L, 2L, ChatRoomType.DIRECT)).thenReturn(Optional.of(room));
+        when(chatRoomParticipantRepository.findByUserIdAndChatRoom(1L, room)).thenReturn(Optional.of(participant));
+
+        service.deleteConversationForUser("1", "2");
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<Message>> captor = ArgumentCaptor.forClass(List.class);
+        verify(messageRepository).saveAll(captor.capture());
+        List<Message> savedMessages = captor.getValue();
+        assertEquals(2, savedMessages.size());
+        assertTrue(savedMessages.stream().allMatch(m -> m.getDeletedByUserIds().contains("1")));
+        assertTrue(savedMessages.stream().allMatch(m -> m.isDeletedBySender() || m.isDeletedByReceiver()));
+        assertTrue(m1.isDeletedBySender());
+        assertTrue(m2.isDeletedByReceiver());
+
+        assertTrue(participant.isHidden());
+        assertNotNull(participant.getHiddenAt());
+        verify(chatRoomParticipantRepository).save(participant);
+        verify(membership).evictUserRooms(1L);
     }
 
     @Test

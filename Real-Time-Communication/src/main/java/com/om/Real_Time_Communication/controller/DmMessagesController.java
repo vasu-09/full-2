@@ -24,5 +24,11 @@ public class DmMessagesController {
         List<MessageDto> conversation = messageService.getConversation(currentUserId, otherUserId);
         return ResponseEntity.ok(conversation);
     }
+    @DeleteMapping("/private/{otherUserId}")
+    public ResponseEntity<Void> deleteConversation(@PathVariable String otherUserId, Principal principal) {
+        String currentUserId = principal.getName();
+        messageService.deleteConversationForUser(currentUserId, otherUserId);
+        return ResponseEntity.noContent().build();
+    }
 }
 

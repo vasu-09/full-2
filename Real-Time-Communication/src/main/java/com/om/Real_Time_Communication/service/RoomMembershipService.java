@@ -64,5 +64,11 @@ public class RoomMembershipService {
         }
         return list;
     }
+
+    public void evictUserRooms(Long userId) {
+        if (redis != null) {
+            redis.delete(kUserRooms(userId));
+        }
+    }
 }
 

@@ -75,6 +75,25 @@ public class ToDoListController {
     public ResponseEntity<List<ToDoListTitleDTO>> getListsByUser(@RequestHeader("X-User-Id") String userId) {
         return ResponseEntity.ok(toDoListService.getListsByCreator(Long.valueOf(userId)));
     }
+    @PostMapping("/{listId}/items")
+    public ResponseEntity<ToDoItemRes> addItem(
+            @PathVariable Long listId,
+            @RequestHeader("X-User-Id") String userId,
+            @RequestBody CreateItemRequest request
+    ) throws AccessDeniedException {
+        ToDoItemRes created = toDoListService.addItemToPremiumList(listId, Long.valueOf(userId), request);
+        return ResponseEntity.ok(created);
+    }
+
+    @PostMapping("/{listId}/checklist/items")
+    public ResponseEntity<ToDoItem> addChecklistItem(
+            @PathVariable Long listId,
+            @RequestHeader("X-User-Id") String userId,
+            @RequestBody CreateChecklistItemRequest request
+    ) throws AccessDeniedException {
+        ToDoItem created = toDoListService.addItemToChecklist(listId, Long.valueOf(userId), request);
+        return ResponseEntity.ok(created);
+    }
 
     @GetMapping("/{listId}/creator/{phoneNumber}")
     public ResponseEntity<ToDoListSummaryDTO> getListByIdAndCreator(

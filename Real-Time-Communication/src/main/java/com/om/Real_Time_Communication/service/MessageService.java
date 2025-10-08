@@ -213,6 +213,8 @@ public class MessageService {
 
         // Save to DB
         Message saved = messageRepository.save(entity);
+        unhideDirectRoomForUser(senderId, dto.getReceiverId());
+        unhideDirectRoomForUser(dto.getReceiverId(), senderId);
 
         eventPublisher.publish(
                 new EventMessage(
@@ -413,6 +415,91 @@ public class MessageService {
         msg.setDeletedForEveryone(true);
         messageRepository.save(msg);
     }
+
+    @Transactional
+    public void deleteConversationForUser(String currentUserId, String otherUserId) {
+        List<Message> messages = messageRepository.findConversationBetween(currentUserId, otherUserId);
+        boolean updated = false;
+
+        for (Message message : messages) {
+            if (message.isDeletedForEveryone()) {
+                continue;
+            }
+
+            if (currentUserId.equals(message.getSenderId()) && !message.isDeletedBySender()) {
+                message.setDeletedBySender(true);
+                updated = true;
+            }
+
+            if (currentUserId.equals(message.getReceiverId()) && !message.isDeletedByReceiver()) {
+                message.setDeletedByReceiver(true);
+                updated = true;
+            }
+
+            if (message.getDeletedByUserIds().add(currentUserId)) {
+                updated = true;
+            }
+        }
+
+        if (updated) {
+            messageRepository.saveAll(messages);
+        }
+
+        hideDirectRoomForUser(currentUserId, otherUserId);
+    }
+
+    private void hideDirectRoomForUser(String currentUserId, String otherUserId) {
+        Optional<Long> maybeUserId = parseUserId(currentUserId);
+        Optional<Long> maybePeerId = parseUserId(otherUserId);
+
+        if (maybeUserId.isEmpty() || maybePeerId.isEmpty()) {
+            return;
+        }
+
+        chatRoomRepository.findDirectRoom(maybeUserId.get(), maybePeerId.get(), ChatRoomType.DIRECT)
+                .flatMap(room -> chatRoomParticipantRepository.findByUserIdAndChatRoom(maybeUserId.get(), room))
+                .ifPresent(participant -> {
+                    if (!participant.isHidden()) {
+                        participant.setHidden(true);
+                        participant.setHiddenAt(LocalDateTime.now());
+                        chatRoomParticipantRepository.save(participant);
+                        if (membership != null) {
+                            membership.evictUserRooms(maybeUserId.get());
+                        }
+                    }
+                });
+    }
+
+    private void unhideDirectRoomForUser(String currentUserId, String otherUserId) {
+        Optional<Long> maybeUserId = parseUserId(currentUserId);
+        Optional<Long> maybePeerId = parseUserId(otherUserId);
+
+        if (maybeUserId.isEmpty() || maybePeerId.isEmpty()) {
+            return;
+        }
+
+        chatRoomRepository.findDirectRoom(maybeUserId.get(), maybePeerId.get(), ChatRoomType.DIRECT)
+                .flatMap(room -> chatRoomParticipantRepository.findByUserIdAndChatRoom(maybeUserId.get(), room))
+                .ifPresent(participant -> {
+                    if (participant.isHidden()) {
+                        participant.setHidden(false);
+                        participant.setHiddenAt(null);
+                        chatRoomParticipantRepository.save(participant);
+                        if (membership != null) {
+                            membership.evictUserRooms(maybeUserId.get());
+                        }
+                    }
+                });
+    }
+
+    private Optional<Long> parseUserId(String rawId) {
+        try {
+            return Optional.of(Long.valueOf(rawId));
+        } catch (NumberFormatException ex) {
+            return Optional.empty();
+        }
+    }
+
 
     public List<MessageDto> getGroupMessageHistory(String chatRoomId, String currentUserId) {
         List<Message> messages = messageRepository.findByReceiverIdAndIsGroupMessageTrue(chatRoomId);
