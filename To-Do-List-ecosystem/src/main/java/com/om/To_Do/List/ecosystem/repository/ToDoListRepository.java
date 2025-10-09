@@ -13,7 +13,7 @@ import java.util.Optional;
 public interface ToDoListRepository extends JpaRepository<ToDoList, Long> {
 
 
-    List<ToDoList> findByCreatedByUserId(Long userId);
+    List<ToDoList> findByCreatedByUserIdOrderByPinnedDescUpdatedAtDesc(Long userId);
 
     Optional<ToDoList> findByIdAndCreatedByUserId(Long listId, Long userId);
 

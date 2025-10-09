@@ -87,6 +87,7 @@ public class ToDoListService {
         list.setTitle(request.getTitle());
         list.setCreatedAt(LocalDateTime.now());
         list.setListType(ListType.PREMIUM);
+        list.setPinned(false);
         toDoListRepository.save(list);
 
         List<ToDoItem> items = request.getItems().stream().map(dto -> {
@@ -111,6 +112,7 @@ public class ToDoListService {
         list.setTitle(request.getTitle());
         list.setCreatedAt(LocalDateTime.now());
         list.setListType(ListType.BASIC);
+        list.setPinned(false);
         toDoListRepository.save(list);
 
         List<ToDoItem> items = request.getItems().stream().map(dto -> {
@@ -319,7 +321,7 @@ public class ToDoListService {
     }
 
     public List<ToDoListTitleDTO> getListsByCreator(Long userId) {
-        List<ToDoList> lists = toDoListRepository.findByCreatedByUserId(userId);
+        List<ToDoList> lists = toDoListRepository.findByCreatedByUserIdOrderByPinnedDescUpdatedAtDesc(userId);
 
         log.info("ToDoList: {}", lists);
 
@@ -327,10 +329,24 @@ public class ToDoListService {
             ToDoListTitleDTO dto = new ToDoListTitleDTO();
             dto.setId(list.getId());
             dto.setTitle(list.getTitle());
+            dto.setPinned(list.isPinned());
             return dto;
         }).toList();
     }
 
+    public void updatePinStatus(Long listId, Long userId, boolean pinned) throws AccessDeniedException {
+        ToDoList list = toDoListRepository.findById(listId)
+                .orElseThrow(() -> new RuntimeException("List not found"));
+
+        if (!list.getCreatedByUserId().equals(userId)) {
+            throw new AccessDeniedException("Only the list creator can update this list.");
+        }
+
+        list.setPinned(pinned);
+        list.setUpdatedAt(LocalDateTime.now());
+        toDoListRepository.save(list);
+    }
+    
     public ToDoListSummaryDTO getListByIdAndCreator(Long listId, String phoneNumber) {
         Long userId = userServiceClient.getUseridByPhoneNumber(phoneNumber).getBody();
         ToDoList list = toDoListRepository.findByIdAndCreatedByUserId(listId, userId)

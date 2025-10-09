@@ -75,6 +75,16 @@ public class ToDoListController {
     public ResponseEntity<List<ToDoListTitleDTO>> getListsByUser(@RequestHeader("X-User-Id") String userId) {
         return ResponseEntity.ok(toDoListService.getListsByCreator(Long.valueOf(userId)));
     }
+    @PutMapping("/{listId}/pin")
+    public ResponseEntity<Void> updatePinStatus(
+            @PathVariable Long listId,
+            @RequestHeader("X-User-Id") String userId,
+            @RequestBody PinListRequest request
+    ) throws AccessDeniedException {
+        toDoListService.updatePinStatus(listId, Long.valueOf(userId), request.isPinned());
+        return ResponseEntity.ok().build();
+    }
+
     @PostMapping("/{listId}/items")
     public ResponseEntity<ToDoItemRes> addItem(
             @PathVariable Long listId,

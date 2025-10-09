@@ -39,11 +39,15 @@ public class ToDoList {
     @OneToMany(mappedBy = "list", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ListRecipient> recipients;
 
+    @Column(nullable = false)
+    private boolean pinned = false;
+
+
     public ToDoList() {
     }
 
     public ToDoList(Long id, Long createdByUserId, String title, LocalDateTime createdAt, LocalDateTime updatedAt,
-                    ListType listType, List<ToDoItem> items, List<ListRecipient> recipients) {
+                    ListType listType, List<ToDoItem> items, List<ListRecipient> recipients, boolean pinned) {
         this.id = id;
         this.createdByUserId = createdByUserId;
         this.title = title;
@@ -52,6 +56,7 @@ public class ToDoList {
         this.listType = listType;
         this.items = items;
         this.recipients = recipients;
+        this.pinned = pinned;
     }
 
 
@@ -117,6 +122,14 @@ public class ToDoList {
 
     public void setRecipients(List<ListRecipient> recipients) {
         this.recipients = recipients;
+    }
+
+    public boolean isPinned() {
+        return pinned;
+    }
+
+    public void setPinned(boolean pinned) {
+        this.pinned = pinned;
     }
 }
 
