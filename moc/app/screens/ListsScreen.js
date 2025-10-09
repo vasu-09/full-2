@@ -1,6 +1,7 @@
 // ListsScreen.js
 import { useRouter } from 'expo-router';
 import {
+  Alert,
   FlatList,
   RefreshControl,
   StyleSheet,
@@ -175,50 +176,82 @@ export default function ListsScreen() {
     clearSelection();
   }, [selectedIds, clearSelection]);
 
-  const handleDeleteSelected = useCallback(async () => {
+ const deleteListsByIds = useCallback(
+    async ids => {
+      if (!ids.length) return;
+
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const session = await getStoredSession();
+        const userIdValue = session?.userId ? Number(session.userId) : null;
+
+        if (!userIdValue) {
+          setError('Please sign in again to delete lists.');
+          return;
+        }
+
+      await Promise.all(
+          ids.map(id =>
+            apiClient.delete(`/api/lists/${id}`, {
+              headers: { 'X-User-Id': String(userIdValue) },
+            }),
+          ),
+        );
+
+        const idSet = new Set(ids);
+        setLists(prev =>
+          prev.filter(list => {
+            const listId = getListId(list);
+            return !(listId && idSet.has(listId));
+          }),
+      );
+        clearSelection();
+        setPinnedIds(prev => {
+          if (!prev.size) return prev;
+          const next = new Set(prev);
+          let changed = false;
+          idSet.forEach(id => {
+            if (next.delete(id)) {
+              changed = true;
+            }
+          });
+          return changed ? next : prev;
+        });
+         } catch (err) {
+        console.error('Failed to delete lists', err);
+        setError('Unable to delete selected lists. Please try again.');
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [clearSelection, getListId],
+  );
+
+  const handleDeleteSelected = useCallback(() => {
     const ids = Array.from(selectedIds);
     if (!ids.length) return;
 
-    setIsLoading(true);
-    setError(null);
+    const count = ids.length;
+    const title = count === 1 ? 'Delete this list?' : `Delete ${count} lists?`;
 
-    try {
-      const session = await getStoredSession();
-      const userIdValue = session?.userId ? Number(session.userId) : null;
-
-      if (!userIdValue) {
-        setError('Please sign in again to delete lists.');
-        return;
-      }
-
-      await Promise.all(
-        ids.map(id =>
-          apiClient.delete(`/api/lists/${id}`, {
-            headers: { 'X-User-Id': String(userIdValue) },
-          }),
-        ),
-      );
-
-      setLists(prev => prev.filter(list => !ids.includes(getListId(list))));
-      clearSelection();
-      setPinnedIds(prev => {
-        if (!prev.size) return prev;
-        const next = new Set(prev);
-        let changed = false;
-        ids.forEach(id => {
-          if (next.delete(id)) {
-            changed = true;
-          }
-        });
-        return changed ? next : prev;
-      });
-    } catch (err) {
-      console.error('Failed to delete lists', err);
-      setError('Unable to delete selected lists. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [selectedIds, clearSelection, getListId]);
+    Alert.alert(
+      title,
+      "The selected items won't be viewable once deleted.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            deleteListsByIds(ids);
+          },
+        },
+      ],
+      { cancelable: true },
+    );
+  }, [selectedIds, deleteListsByIds]);
 
   const listCountLabel = useMemo(() => {
     if (!hasLoaded && isLoading) {
