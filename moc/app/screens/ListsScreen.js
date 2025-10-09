@@ -72,9 +72,18 @@ export default function ListsScreen() {
       });
 
       if (Array.isArray(data)) {
-        setLists(data);
+        setLists(data);const nextPinned = new Set();
+        data.forEach(list => {
+          const id = getListId(list);
+          const isPinnedFromApi = Boolean(list?.pinned ?? list?.isPinned);
+          if (id && isPinnedFromApi) {
+            nextPinned.add(id);
+          }
+        });
+        setPinnedIds(nextPinned);
       } else {
         setLists([]);
+        setPinnedIds(new Set());
       }
     } catch (err) {
       console.error('Failed to load lists', err);
@@ -83,7 +92,7 @@ export default function ListsScreen() {
       setIsLoading(false);
       setHasLoaded(true);
     }
-  }, []);
+   }, [getListId]);
 
   useEffect(() => {
     fetchLists();
@@ -196,6 +205,15 @@ export default function ListsScreen() {
         });
         return next;
       });
+        setLists(prev =>
+        prev.map(list => {
+          const listId = getListId(list);
+          if (listId && ids.includes(listId)) {
+            return { ...list, pinned: !shouldUnpin };
+          }
+          return list;
+        }),
+      );
       clearSelection();
     } catch (err) {
       console.error('Failed to update pinned lists', err);

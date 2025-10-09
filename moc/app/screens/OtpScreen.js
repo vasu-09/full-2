@@ -52,10 +52,11 @@ const OtpScreen = () => {
         appVersion: route?.params?.appVersion ?? metadata.appVersion,
         fcmToken: route?.params?.fcmToken ?? metadata.fcmToken,
       });
-      const { userId, sessionId, accessToken, refreshToken, issuedAt } = response.data ?? {};
+     const { userId, username, sessionId, accessToken, refreshToken, issuedAt } = response.data ?? {};
 
       await saveSession({
         userId,
+        username: username ?? phoneNumber,
         sessionId,
         accessToken,
         refreshToken,
