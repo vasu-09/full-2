@@ -158,23 +158,52 @@ export default function ListsScreen() {
     });
   }, []);
 
-  const handlePinToggle = useCallback(() => {
+  const handlePinToggle = useCallback(async () => {
     const ids = Array.from(selectedIds);
     if (!ids.length) return;
-    setPinnedIds(prev => {
-      const next = new Set(prev);
-      const shouldUnpin = ids.every(id => prev.has(id));
-      ids.forEach(id => {
-        if (shouldUnpin) {
-          next.delete(id);
-        } else {
-          next.add(id);
-        }
+    
+    const shouldUnpin = ids.every(id => pinnedIds.has(id));
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const session = await getStoredSession();
+      const userIdValue = session?.userId ? Number(session.userId) : null;
+
+      if (!userIdValue) {
+        setError('Please sign in again to update pinned lists.');
+        return;
+      }
+
+      await Promise.all(
+        ids.map(id =>
+          apiClient.put(
+            `/api/lists/${id}/pin`,
+            { pinned: !shouldUnpin },
+            { headers: { 'X-User-Id': String(userIdValue) } },
+          ),
+        ),
+      );
+
+      setPinnedIds(prev => {
+        const next = new Set(prev);
+        ids.forEach(id => {
+          if (shouldUnpin) {
+            next.delete(id);
+          } else {
+            next.add(id);
+          }
+        });
+        return next;
       });
-      return next;
-    });
-    clearSelection();
-  }, [selectedIds, clearSelection]);
+      clearSelection();
+    } catch (err) {
+      console.error('Failed to update pinned lists', err);
+      setError('Unable to update pinned status. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedIds, pinnedIds, clearSelection]);
 
  const deleteListsByIds = useCallback(
     async ids => {
