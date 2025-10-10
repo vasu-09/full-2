@@ -68,9 +68,18 @@ const OtpScreen = () => {
         return;
       }
       setMessage('OTP verified. Logged in successfully.');
-       navigation.reset({
+       const displayName = username ?? phoneNumber ?? '';
+      navigation.reset({
         index: 0,
-        routes: [{ name: 'screens/MocScreen' }],
+         routes: [
+          {
+            name: 'screens/CompleteProfileScreen',
+            params: {
+              phoneNumber,
+              initialName: displayName,
+            },
+          },
+        ],
       });
     } catch (err) {
        console.error('OTP verification failed:', err.message);

@@ -1,33 +1,38 @@
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import {
-  Alert,
-  Image,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+
+import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
 export default function AccountSettings() {
   const router = useRouter();
-  const { updatedUri } = useLocalSearchParams();
+  const { updatedUri, updatedName, updatedEmail } = useLocalSearchParams();
 
   const defaultPhoto = 'https://randomuser.me/api/portraits/men/2.jpg';
   const [photoUri, setPhotoUri] = useState(defaultPhoto);
   const [name, setName] = useState('Srinivas Gurazala');
+   const [email, setEmail] = useState('');
+
+  const getParamValue = (param) => (Array.isArray(param) ? param[0] : param);
 
   useEffect(() => {
-    if (updatedUri) setPhotoUri(updatedUri);
+    const nextUri = getParamValue(updatedUri);
+    if (typeof nextUri === 'string' && nextUri.length) setPhotoUri(nextUri);
   }, [updatedUri]);
 
-  const handleLogout = () => {
-    Alert.alert('Logout', 'Are you sure you want to logout?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Logout', onPress: () => router.replace('/auth/LoginScreen') },
-    ]);
+   useEffect(() => {
+    const nextName = getParamValue(updatedName);
+    if (typeof nextName === 'string') setName(nextName);
+  }, [updatedName]);
+
+  useEffect(() => {
+    const nextEmail = getParamValue(updatedEmail);
+    if (typeof nextEmail === 'string') setEmail(nextEmail);
+  }, [updatedEmail]);
+
+  const openPhotoPicker = () => {
+    router.push({ pathname: '/screens/ProfilePhotoScreen', params: { uri: photoUri } });
   };
 
   return (
@@ -40,36 +45,50 @@ export default function AccountSettings() {
       </View>
 
       <View style={styles.profileSection}>
-        <TouchableOpacity onPress={() =>
-          router.push({ pathname: '/screens/ProfilePhotoScreen', params: { uri: photoUri } })
-        }>
+           <TouchableOpacity onPress={openPhotoPicker}>
           <Image source={{ uri: photoUri }} style={styles.avatar} />
         </TouchableOpacity>
 
-        <TouchableOpacity>
+           <TouchableOpacity onPress={openPhotoPicker}>
           <Text style={styles.changePhoto}>Change Photo</Text>
         </TouchableOpacity>
       </View>
 
-     <TouchableOpacity onPress={() => router.push({ pathname: '/screens/EditNameScreen', params: { currentName: name } })}>
-  <View style={styles.fieldContainer}>
-    <Text style={styles.label}>Display Name</Text>
-    <View style={styles.editRow}>
-      <Text style={styles.input}>{name}</Text>
-      <Icon name="edit" size={20} color="#1f6ea7" />
-    </View>
-  </View>
-</TouchableOpacity>
+      <TouchableOpacity
+        onPress={() =>
+          router.push({ pathname: '/screens/EditNameScreen', params: { currentName: name } })
+        }
+      >
+        <View style={styles.fieldContainer}>
+          <Text style={styles.label}>Display Name</Text>
+          <View style={styles.editRow}>
+            <Text style={styles.input}>{name}</Text>
+            <Icon name="edit" size={20} color="#1f6ea7" />
+          </View>
+        </View>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        onPress={() =>
+          router.push({ pathname: '/screens/EditEmailScreen', params: { currentEmail: email } })
+        }
+      >
+        <View style={styles.fieldContainer}>
+          <Text style={styles.label}>Email</Text>
+          <View style={styles.editRow}>
+            <Text style={[styles.input, !email && styles.placeholderText]}>
+              {email || 'Add an email address'}
+            </Text>
+            <Icon name="edit" size={20} color="#1f6ea7" />
+          </View>
+        </View>
+      </TouchableOpacity>
 
       <View style={styles.fieldContainer}>
         <Text style={styles.label}>Phone Number</Text>
         <Text style={styles.staticText}>+91 9876543210</Text>
       </View>
 
-      <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-        <Icon name="logout" size={20} color="#fff" />
-        <Text style={styles.logoutText}>Logout</Text>
-      </TouchableOpacity>
     </SafeAreaView>
   );
 }
@@ -107,16 +126,6 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     color: '#333',
   },
+   placeholderText: { color: '#999' },
   staticText: { fontSize: 16, color: '#333', paddingVertical: 6 },
-  logoutBtn: {
-    marginTop: 30,
-    marginHorizontal: 16,
-    backgroundColor: '#e53935',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 12,
-    borderRadius: 8,
-  },
-  logoutText: { color: '#fff', fontSize: 16, marginLeft: 8 },
 });

@@ -18,7 +18,7 @@ export default function EditNameScreen() {
 
   const handleSave = () => {
     router.replace({
-      pathname: '/screens/settings/AccountSettings',
+      pathname: '/screens/AccountSettings',
       params: { updatedName: name },
     });
   };

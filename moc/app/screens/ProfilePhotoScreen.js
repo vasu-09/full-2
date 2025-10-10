@@ -16,8 +16,9 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 export default function ProfilePhotoScreen() {
   const router = useRouter();
   const { uri } = useLocalSearchParams();
+  const initialUri = Array.isArray(uri) ? uri[0] : uri;
   const [showOptions, setShowOptions] = useState(false);
-  const [photoUri, setPhotoUri] = useState(uri);
+  const [photoUri, setPhotoUri] = useState(initialUri);
   const insets = useSafeAreaInsets();
 
   const openGallery = async () => {
@@ -31,6 +32,7 @@ export default function ProfilePhotoScreen() {
 
     if (!result.canceled && result.assets.length > 0) {
       const selectedUri = result.assets[0].uri;
+      setPhotoUri(selectedUri);
       router.replace({
         pathname: '/screens/AccountSettings',
         params: { updatedUri: selectedUri },
