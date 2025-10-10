@@ -156,6 +156,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.util.List;
@@ -276,17 +278,43 @@ public class UserService {
 
 
     public UserProfileDto getUserProfileById(Long aLong) {
-        User user = userRepo.findById(aLong).get();
-        if(user!=null){
-            UserProfileDto userprofile = new UserProfileDto();
-            userprofile.setId(String.valueOf(user.getId()));
-            userprofile.setAvatarUrl(user.getAvatarUrl());
-            userprofile.setEmail(user.getEmail());
-            userprofile.setDisplayName(user.getUserName());
-            return  userprofile;
+        return userRepo.findById(aLong).map(this::toUserProfileDto).orElse(null);
+    }
+
+    @Transactional
+    public UserProfileDto updateDisplayName(Long userId, String displayName) {
+        if (!StringUtils.hasText(displayName)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Display name must not be blank");
         }
 
-        return null;
+        User user = userRepo.findById(userId).orElseThrow();
+        user.setUserName(displayName.trim());
+        user.setUpdatedAt(Instant.now());
+        userRepo.save(user);
+        return toUserProfileDto(user);
     }
+
+    @Transactional
+    public UserProfileDto updateEmail(Long userId, String email) {
+        if (!StringUtils.hasText(email)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email must not be blank");
+        }
+
+        User user = userRepo.findById(userId).orElseThrow();
+        user.setEmail(email.trim());
+        user.setUpdatedAt(Instant.now());
+        userRepo.save(user);
+        return toUserProfileDto(user);
+    }
+
+    private UserProfileDto toUserProfileDto(User user) {
+        UserProfileDto userprofile = new UserProfileDto();
+        userprofile.setId(String.valueOf(user.getId()));
+        userprofile.setAvatarUrl(user.getAvatarUrl());
+        userprofile.setEmail(user.getEmail());
+        userprofile.setDisplayName(user.getUserName());
+        return userprofile;
+    }
+
 }
 
