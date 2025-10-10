@@ -20,7 +20,6 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import apiClient from '../services/apiClient';
 import { getStoredSession } from '../services/authStorage';
 
-const CREATOR_PHONE_NUMBER = '919876543210';
 
 const parseSubQuantities = (value) => {
   if (!value) {
@@ -94,13 +93,24 @@ export default function ViewListScreen() {
     try {
       const session = await getStoredSession();
       const userIdValue = session?.userId ? Number(session.userId) : null;
+      const usernameValue = session?.username
+        ? String(session.username).trim()
+        : null;
+
+      if (!usernameValue) {
+        setError('Missing account information. Please sign in again.');
+        setListSummary(null);
+        return;
+      }
 
       const headers = userIdValue
         ? { 'X-User-Id': String(userIdValue) }
         : undefined;
 
       const { data } = await apiClient.get(
-        `/api/lists/${encodeURIComponent(listId)}/creator/${CREATOR_PHONE_NUMBER}`,
+       `/api/lists/${encodeURIComponent(listId)}/creator/${encodeURIComponent(
+          usernameValue,
+        )}`,
         { headers },
       );
 
