@@ -38,6 +38,37 @@ const parseSubQuantities = (value) => {
     return [];
   }
 };
+
+const normalizePhoneForApi = (value) => {
+  if (!value) {
+    return null;
+  }
+
+  const trimmed = String(value).trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const digitsOnly = trimmed.replace(/\D/g, '');
+  if (!digitsOnly) {
+    return trimmed;
+  }
+
+  if (digitsOnly.length === 11 && digitsOnly.startsWith('0')) {
+    return `91${digitsOnly.slice(1)}`;
+  }
+
+  if (digitsOnly.length === 10) {
+    return `91${digitsOnly}`;
+  }
+
+  if (digitsOnly.length === 12 && digitsOnly.startsWith('91')) {
+    return digitsOnly;
+  }
+
+  return digitsOnly;
+};
+
 const formatPriceText = (priceText) => {
   if (priceText == null) {
     return '';
@@ -103,14 +134,21 @@ export default function ViewListScreen() {
         return;
       }
 
+      const normalizedPhone = normalizePhoneForApi(usernameValue);
+      if (!normalizedPhone) {
+        setError('Missing account phone number. Please sign in again.');
+        setListSummary(null);
+        return;
+      }
+
       const headers = userIdValue
         ? { 'X-User-Id': String(userIdValue) }
         : undefined;
 
       const { data } = await apiClient.get(
-       `/api/lists/${encodeURIComponent(listId)}/creator/${encodeURIComponent(
-          usernameValue,
-        )}`,
+        `/api/lists/${encodeURIComponent(listId)}/creator/${encodeURIComponent(
+          normalizedPhone,
+           )}`,
         { headers },
       );
 
