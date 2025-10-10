@@ -85,11 +85,23 @@ public class UserController {
         return ResponseEntity.noContent().build();
     }
 
+    @GetMapping("/me/display-name")
+    public ResponseEntity<DisplayNameResponse> getDisplayName(Principal principal) {
+        Long userId = Long.valueOf(principal.getName());
+        return ResponseEntity.ok(new DisplayNameResponse(userService.getDisplayName(userId)));
+    }
+
     @PutMapping("/me/display-name")
     public ResponseEntity<UserProfileDto> updateDisplayName(Principal principal,
                                                             @RequestBody UpdateDisplayNameRequest request) {
         Long userId = Long.valueOf(principal.getName());
         return ResponseEntity.ok(userService.updateDisplayName(userId, request.getDisplayName()));
+    }
+
+    @GetMapping("/me/email")
+    public ResponseEntity<EmailResponse> getEmail(Principal principal) {
+        Long userId = Long.valueOf(principal.getName());
+        return ResponseEntity.ok(new EmailResponse(userService.getEmail(userId)));
     }
 
     @PutMapping("/me/email")
@@ -170,9 +182,10 @@ public class UserController {
     }
 
     @GetMapping("/{id}")
-    public UserProfileDto findById(@PathVariable("id") String id){
-        return userService.getUserProfileById(Long.valueOf(id));
+    public ResponseEntity<UserProfileDto> getUserProfile(@PathVariable Long id) {
+        return ResponseEntity.ok(userService.getUserProfileById(id));
     }
+
 }
 
 

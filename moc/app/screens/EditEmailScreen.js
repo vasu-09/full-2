@@ -1,6 +1,8 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -12,24 +14,80 @@ import {
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import apiClient from '../services/apiClient';
+
+const emailRegex = /^\S+@\S+\.\S+$/;
+
 export default function EditEmailScreen() {
   const router = useRouter();
   const { currentEmail } = useLocalSearchParams();
-  const [email, setEmail] = useState(typeof currentEmail === 'string' ? currentEmail : '');
+ const [email, setEmail] = useState('');
   const [error, setError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const handleSave = () => {
+  const initialEmailParam = useMemo(() => {
+    if (typeof currentEmail === 'string') {
+      return currentEmail;
+    }
+    if (Array.isArray(currentEmail) && currentEmail.length) {
+      return currentEmail[0];
+    }
+    return '';
+  }, [currentEmail]);
+
+
+
+ useEffect(() => {
+    let isMounted = true;
+    const loadEmail = async () => {
+      try {
+        const { data } = await apiClient.get('/user/me/email');
+        const nextEmail =
+          typeof data?.email === 'string' && data.email.trim().length ? data.email : '';
+        if (isMounted) {
+          setEmail(initialEmailParam || nextEmail);
+        }
+      } catch (err) {
+        console.error('Failed to load email address', err);
+        if (isMounted) {
+          setEmail(initialEmailParam);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    loadEmail();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [initialEmailParam]);
+
+  const handleSave = async () => {
     const trimmedEmail = email.trim();
 
-    if (trimmedEmail && !/^\S+@\S+\.\S+$/.test(trimmedEmail)) {
+    if (trimmedEmail && !emailRegex.test(trimmedEmail)) {
       setError('Please enter a valid email address or leave the field blank.');
       return;
     }
 
-    router.replace({
-      pathname: '/screens/AccountSettings',
-      params: { updatedEmail: trimmedEmail },
-    });
+     try {
+      setIsSaving(true);
+      await apiClient.put('/user/me/email', { email: trimmedEmail || null });
+      router.replace({
+        pathname: '/screens/AccountSettings',
+        params: { updatedEmail: trimmedEmail },
+      });
+    } catch (err) {
+      console.error('Failed to update email', err);
+      Alert.alert('Unable to save changes', 'Please try again in a moment.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -39,7 +97,7 @@ export default function EditEmailScreen() {
         style={styles.flex}
       >
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()}>
+       <TouchableOpacity onPress={() => router.back()} disabled={isSaving}>
             <Icon name="arrow-back" size={24} color="#000" />
           </TouchableOpacity>
           <Text style={styles.title}>Email</Text>
@@ -58,16 +116,23 @@ export default function EditEmailScreen() {
             autoCapitalize="none"
             autoCorrect={false}
             style={styles.input}
+            editable={!isSaving}
           />
           {!!error && <Text style={styles.error}>{error}</Text>}
           <Text style={styles.subText}>
-            Add an email address so we can reach you with important updates. Leave blank if you
-            prefer not to share one.
+           Add an email address so we can reach you with important updates. Leave blank if you prefer
+            not to share one.
           </Text>
         </View>
 
-        <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
-          <Text style={styles.saveText}>Save</Text>
+         {isLoading ? <ActivityIndicator style={styles.loader} color="#1f6ea7" /> : null}
+
+        <TouchableOpacity
+          style={[styles.saveBtn, isSaving && styles.disabledBtn]}
+          onPress={handleSave}
+          disabled={isSaving}
+        >
+          <Text style={styles.saveText}>{isSaving ? 'Saving…' : 'Save'}</Text>
         </TouchableOpacity>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -92,6 +157,7 @@ const styles = StyleSheet.create({
   },
   subText: { fontSize: 13, color: '#555', marginTop: 16 },
   error: { color: '#c53030', marginTop: 8 },
+  loader: { marginTop: 12 },
   saveBtn: {
     backgroundColor: '#1f6ea7',
     padding: 14,
@@ -103,5 +169,6 @@ const styles = StyleSheet.create({
     left: 16,
     right: 16,
   },
+  disabledBtn: { opacity: 0.7 },
   saveText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 });

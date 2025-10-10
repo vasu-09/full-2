@@ -1,7 +1,9 @@
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -14,6 +16,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
+import apiClient from '../services/apiClient';
+
+const MAX_NAME_LENGTH = 25;
+
 export default function CompleteProfileScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -21,10 +27,46 @@ export default function CompleteProfileScreen() {
   const rawInitialName = Array.isArray(params.initialName) ? params.initialName[0] : params.initialName;
   const displayPhone = typeof rawPhone === 'string' && rawPhone.trim() ? rawPhone : '';
   const [photoUri, setPhotoUri] = useState(null);
-  const [name, setName] = useState(
-    typeof rawInitialName === 'string' && rawInitialName.trim() ? rawInitialName : ''
-  );
+   const [name, setName] = useState('');
   const [error, setError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const initialRouteName = useMemo(() => {
+    if (typeof rawInitialName === 'string' && rawInitialName.trim()) {
+      return rawInitialName.trim();
+    }
+    return '';
+  }, [rawInitialName]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadName = async () => {
+      try {
+        const { data } = await apiClient.get('/user/me/display-name');
+        const fetchedName = typeof data?.displayName === 'string' ? data.displayName : '';
+        if (isMounted) {
+          const nextName = initialRouteName || fetchedName;
+          setName(nextName);
+        }
+      } catch (err) {
+        console.error('Failed to load display name', err);
+        if (isMounted) {
+          setName(initialRouteName);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    loadName();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [initialRouteName]);
 
   const handlePickPhoto = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -39,7 +81,7 @@ export default function CompleteProfileScreen() {
     }
   };
 
-  const handleContinue = () => {
+ const handleContinue = async () => {
     const trimmedName = name.trim();
 
     if (!trimmedName) {
@@ -47,7 +89,16 @@ export default function CompleteProfileScreen() {
       return;
     }
 
-    router.replace('/screens/MocScreen');
+     try {
+      setIsSaving(true);
+      await apiClient.put('/user/me/display-name', { displayName: trimmedName });
+      router.replace('/screens/MocScreen');
+    } catch (err) {
+      console.error('Failed to update display name', err);
+      Alert.alert('Unable to continue', 'Please try again in a moment.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -65,7 +116,7 @@ export default function CompleteProfileScreen() {
             <Text style={styles.phoneLabel}>Signed in with {displayPhone}</Text>
           ) : null}
 
-          <TouchableOpacity onPress={handlePickPhoto} style={styles.avatarWrapper}>
+           <TouchableOpacity onPress={handlePickPhoto} style={styles.avatarWrapper} disabled={isSaving}>
             {photoUri ? (
               <Image source={{ uri: photoUri }} style={styles.avatar} />
             ) : (
@@ -77,7 +128,7 @@ export default function CompleteProfileScreen() {
               <Icon name="photo-camera" size={20} color="#fff" />
             </View>
           </TouchableOpacity>
-          <TouchableOpacity onPress={handlePickPhoto}>
+          <TouchableOpacity onPress={handlePickPhoto} disabled={isSaving}>
             <Text style={styles.changePhoto}>Add profile photo</Text>
           </TouchableOpacity>
 
@@ -90,14 +141,20 @@ export default function CompleteProfileScreen() {
               }}
               placeholder="Enter your name"
               style={styles.input}
-              maxLength={25}
+              maxLength={MAX_NAME_LENGTH}
+              editable={!isSaving}
             />
           </View>
           {!!error && <Text style={styles.error}>{error}</Text>}
+          {isLoading ? <ActivityIndicator style={styles.loader} color="#1f6ea7" /> : null}
         </View>
 
-        <TouchableOpacity style={styles.continueBtn} onPress={handleContinue}>
-          <Text style={styles.continueText}>Continue</Text>
+         <TouchableOpacity
+          style={[styles.continueBtn, isSaving && styles.disabledBtn]}
+          onPress={handleContinue}
+          disabled={isSaving}
+        >
+          <Text style={styles.continueText}>{isSaving ? 'Saving…' : 'Continue'}</Text>
         </TouchableOpacity>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -152,6 +209,7 @@ const styles = StyleSheet.create({
   },
   input: { fontSize: 18, paddingVertical: 8, textAlign: 'center', color: '#000' },
   error: { color: '#c53030', marginTop: 12 },
+  loader: { marginTop: 16 },
   continueBtn: {
     backgroundColor: '#1f6ea7',
     paddingVertical: 16,
@@ -159,5 +217,6 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     alignItems: 'center',
   },
+  disabledBtn: { opacity: 0.7 },
   continueText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 });

@@ -294,14 +294,24 @@ public class UserService {
         return toUserProfileDto(user);
     }
 
+    @Transactional(readOnly = true)
+    public String getDisplayName(Long userId) {
+        return userRepo.findById(userId).map(User::getUserName).orElse(null);
+    }
+
+    @Transactional(readOnly = true)
+    public String getEmail(Long userId) {
+        return userRepo.findById(userId).map(User::getEmail).orElse(null);
+    }
+
     @Transactional
     public UserProfileDto updateEmail(Long userId, String email) {
-        if (!StringUtils.hasText(email)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email must not be blank");
-        }
-
         User user = userRepo.findById(userId).orElseThrow();
-        user.setEmail(email.trim());
+        if (!StringUtils.hasText(email)) {
+            user.setEmail(null);
+        } else {
+            user.setEmail(email.trim());
+        }
         user.setUpdatedAt(Instant.now());
         userRepo.save(user);
         return toUserProfileDto(user);
