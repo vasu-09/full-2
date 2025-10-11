@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
+
 const ACTIONS = [
   { icon: 'volume-off', label: 'mute' },
   { icon: 'videocam', label: 'video' },

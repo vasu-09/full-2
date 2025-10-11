@@ -7,7 +7,6 @@ import {
   Platform,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -15,6 +14,7 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import apiClient from '../services/apiClient';
+import EmojiTextInput from '../../components/EmojiTextInput';
 
 const emailRegex = /^\S+@\S+\.\S+$/;
 
@@ -105,7 +105,7 @@ export default function EditEmailScreen() {
 
         <View style={styles.inputWrapper}>
           <Text style={styles.label}>Email address</Text>
-          <TextInput
+          <EmojiTextInput
             value={email}
             onChangeText={(value) => {
               setEmail(value);
@@ -115,8 +115,9 @@ export default function EditEmailScreen() {
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
-            style={styles.input}
             editable={!isSaving}
+            containerStyle={styles.emailInputContainer}
+            inputStyle={styles.input}
           />
           {!!error && <Text style={styles.error}>{error}</Text>}
           <Text style={styles.subText}>
@@ -146,14 +147,18 @@ const styles = StyleSheet.create({
   title: { fontSize: 18, fontWeight: '600' },
   inputWrapper: { paddingHorizontal: 16, marginTop: 24 },
   label: { fontSize: 14, marginBottom: 8, color: '#444' },
-  input: {
+ emailInputContainer: {
     borderWidth: 2,
     borderColor: '#1f6ea7',
     borderRadius: 10,
     paddingHorizontal: 12,
+    backgroundColor: '#fff',
+  },
+  input: {
     paddingVertical: 10,
     fontSize: 16,
     color: '#000',
+    backgroundColor: 'transparent',
   },
   subText: { fontSize: 13, color: '#555', marginTop: 16 },
   error: { color: '#c53030', marginTop: 8 },

@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Keyboard, Platform, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import apiClient, { apiBaseURL } from '../services/apiClient';
+import EmojiTextInput from '../../components/EmojiTextInput';
 
 const LoginScreen = () => {
   const router = useRouter();
@@ -97,14 +98,16 @@ const LoginScreen = () => {
           editable={false}
           placeholderTextColor="#888"
         />
-        <TextInput
-          style={styles.input}
-          keyboardType="phone-pad"
+         <EmojiTextInput
           value={phone}
           onChangeText={handlePhoneChange}
           placeholder="e.g. 9876543210"
           placeholderTextColor="#888"
+          keyboardType="phone-pad"
           maxLength={10}
+          containerStyle={styles.phoneInputContainer}
+          inputStyle={styles.input}
+          disabledEmojiPicker
         />
       </View>
       <TouchableOpacity
@@ -169,6 +172,7 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 16,
     color: '#000',
+    backgroundColor: 'transparent',
   },
   button: {
     backgroundColor: '#1f6ea7',
@@ -176,6 +180,12 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
     elevation: 2,
+  },
+  phoneInputContainer: {
+    flex: 1,
+    borderWidth: 0,
+    backgroundColor: 'transparent',
+    paddingLeft: 0,
   },
   buttonDisabled: {
     opacity: 0.7,

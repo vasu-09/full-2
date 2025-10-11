@@ -6,13 +6,12 @@ import {
   FlatList,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-
+import EmojiTextInput from '../../components/EmojiTextInput';
 
 
 const INITIAL_ITEMS = [
@@ -127,21 +126,24 @@ export default function NewListScreen() {
           <Icon name="add" size={20} color="#1f6ea7" />
         </TouchableOpacity>
 
-        <TextInput
-          style={[styles.inputLine, styles.nameInput]}
-          placeholder={item.placeholder}
-          placeholderTextColor="#888"
+         <EmojiTextInput
           value={item.name}
           onChangeText={t => updateItemField(index, 'name', t)}
+          placeholder={item.placeholder}
+          placeholderTextColor="#888"
+          containerStyle={[styles.inputLineContainer, styles.nameInputContainer]}
+          inputStyle={[styles.inputLineText, styles.nameInputText]}
         />
 
-        <TextInput
-          style={[styles.inputLine, styles.smallInput]}
+         <EmojiTextInput
+          value={item.quantity}
+          onChangeText={t => updateItemField(index, 'quantity', t)}
           placeholder="quantity"
           placeholderTextColor="#888"
           keyboardType="numeric"
-          value={item.quantity}
-          onChangeText={t => updateItemField(index, 'quantity', t)}
+          containerStyle={[styles.inputLineContainer, styles.smallInputContainer]}
+          inputStyle={[styles.inputLineText, styles.smallInputText]}
+          disabledEmojiPicker
         />
 
         <TouchableOpacity onPress={() => toggleUnit(index)} style={styles.unitBtn}>
@@ -150,13 +152,15 @@ export default function NewListScreen() {
         </TouchableOpacity>
 
         <Icon name="currency-rupee" size={16} color="#000" style={styles.priceIcon} />
-        <TextInput
-          style={[styles.inputLine, styles.smallInput]}
+        <EmojiTextInput
+          value={item.price}
+          onChangeText={t => updateItemField(index, 'price', t)}
           placeholder="price"
           placeholderTextColor="#888"
           keyboardType="numeric"
-          value={item.price}
-          onChangeText={t => updateItemField(index, 'price', t)}
+          containerStyle={[styles.inputLineContainer, styles.smallInputContainer]}
+          inputStyle={[styles.inputLineText, styles.smallInputText]}
+          disabledEmojiPicker
         />
       </View>
 
@@ -169,13 +173,15 @@ export default function NewListScreen() {
             <Icon name="remove-circle-outline" size={20} color="#d00" />
           </TouchableOpacity>
 
-          <TextInput
-            style={[styles.inputLine, styles.smallInput]}
+          <EmojiTextInput
+            value={sub.quantity}
+            onChangeText={t => updateSubField(index, subIdx, 'quantity', t)}
             placeholder="quantity"
             placeholderTextColor="#888"
             keyboardType="numeric"
-            value={sub.quantity}
-            onChangeText={t => updateSubField(index, subIdx, 'quantity', t)}
+            containerStyle={[styles.inputLineContainer, styles.smallInputContainer]}
+            inputStyle={[styles.inputLineText, styles.smallInputText]}
+            disabledEmojiPicker
           />
 
           <TouchableOpacity
@@ -187,13 +193,15 @@ export default function NewListScreen() {
           </TouchableOpacity>
 
           <Icon name="currency-rupee" size={16} color="#000" style={styles.priceIcon} />
-          <TextInput
-            style={[styles.inputLine, styles.smallInput]}
+          <EmojiTextInput
+            value={sub.price}
+            onChangeText={t => updateSubField(index, subIdx, 'price', t)}
             placeholder="price"
             placeholderTextColor="#888"
             keyboardType="numeric"
-            value={sub.price}
-            onChangeText={t => updateSubField(index, subIdx, 'price', t)}
+            containerStyle={[styles.inputLineContainer, styles.smallInputContainer]}
+            inputStyle={[styles.inputLineText, styles.smallInputText]}
+            disabledEmojiPicker
           />
         </View>
       ))}
@@ -203,12 +211,13 @@ export default function NewListScreen() {
   const renderTask = ({ item, index }) => (
     <View style={styles.taskRow}>
       <Text style={styles.taskNumber}>{index + 1}.  </Text>
-      <TextInput
-        style={[styles.inputLine, styles.taskInput]}
-        placeholder=" Add new task"
-        placeholderTextColor="#888"
+      <EmojiTextInput
         value={item.text}
         onChangeText={t => updateTaskField(index, t)}
+        placeholder=" Add new task"
+        placeholderTextColor="#888"
+        containerStyle={[styles.inputLineContainer, styles.taskInputContainer]}
+        inputStyle={[styles.inputLineText, styles.taskInputText]}
       />
     </View>
   );
@@ -274,12 +283,13 @@ export default function NewListScreen() {
         <TouchableOpacity style={styles.imagePlaceholder}>
           <Icon name="add-photo-alternate" size={24} color="#888" />
         </TouchableOpacity>
-        <TextInput
-          style={styles.listNameInput}
-          placeholder="Name of the List"
-          placeholderTextColor="#888"
+       <EmojiTextInput
           value={listName}
           onChangeText={setListName}
+          placeholder="Name of the List"
+          placeholderTextColor="#888"
+          containerStyle={styles.listNameInputContainer}
+          inputStyle={styles.listNameInputText}
         />
       </View>
       <View style={styles.divider} />
@@ -350,14 +360,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
-  listNameInput: {
+  listNameInputContainer: {
     flex: 1,
     height: 48,
     borderWidth: 1,
     borderColor: '#ccc',
     borderRadius: 4,
-    paddingHorizontal: 12,
+    paddingLeft: 12,
+    paddingRight: 12,
+    backgroundColor: '#fff',
+  },
+  listNameInputText: {
     fontSize: 16,
+    backgroundColor: 'transparent',
   },
   divider: { height: 1, backgroundColor: '#ccc', marginHorizontal: 12 },
 
@@ -370,7 +385,8 @@ const styles = StyleSheet.create({
     borderColor: '#eee',
   },
   taskIcon: { marginRight: 12 },
-  taskInput: { flex: 1 },
+  taskInputContainer: { flex: 1 },
+  taskInputText: { fontSize: 14, backgroundColor: 'transparent' },
 
   listContainer: { paddingBottom: 100 },
   row: {
@@ -384,14 +400,23 @@ const styles = StyleSheet.create({
   subRow: { paddingLeft: 36, backgroundColor: '#fafafa' },
 
   plusBtn: { width: 24, alignItems: 'center' },
-  inputLine: {
-    fontSize: 14,
-    padding: 0,
+  inputLineContainer: {
+    borderWidth: 0,
     borderBottomWidth: 1,
     borderColor: '#ccc',
+    borderRadius: 0,
+    paddingLeft: 0,
+    backgroundColor: 'transparent',
   },
-  nameInput: { flex: 2, marginRight: 12 },
-  smallInput: { flex: 1, marginRight: 8, textAlign: 'center' },
+  inputLineText: {
+    fontSize: 14,
+    paddingVertical: 0,
+    backgroundColor: 'transparent',
+  },
+  nameInputContainer: { flex: 2, marginRight: 12 },
+  nameInputText: {},
+  smallInputContainer: { flex: 1, marginRight: 8 },
+  smallInputText: { textAlign: 'center' },
   unitBtn: { flexDirection: 'row', alignItems: 'center', marginRight: 8 },
   unitText: { fontSize: 14, color: '#000', marginRight: 4 },
   priceIcon: { marginRight: 4 },

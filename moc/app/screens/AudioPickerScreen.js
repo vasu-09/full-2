@@ -7,12 +7,12 @@ import {
     FlatList,
     StyleSheet,
     Text,
-    TextInput,
     TouchableOpacity,
     View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import EmojiTextInput from '../../components/EmojiTextInput';
 
 export default function AudioPickerScreen() {
   const insets = useSafeAreaInsets();
@@ -137,14 +137,15 @@ export default function AudioPickerScreen() {
           >
             <Icon name="arrow-back" size={24} color="#1f6ea7" />
           </TouchableOpacity>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search audio..."
-            placeholderTextColor="#999"
+          <EmojiTextInput
             value={searchQuery}
             onChangeText={setSearchQuery}
+            placeholder="Search audio..."
+            placeholderTextColor="#999"
             autoFocus
-            underlineColorAndroid="transparent"
+            containerStyle={styles.searchInputContainer}
+            inputStyle={styles.searchInput}
+            onTogglePicker={() => {}}
           />
         </View>
       ) : (
@@ -230,11 +231,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   searchBackBtn: { padding: 8 },
-  searchInput: {
+  searchInputContainer: {
     flex: 1,
     marginLeft: 8,
+    borderWidth: 0,
+    backgroundColor: 'transparent',
+    paddingLeft: 0,
+  },
+  searchInput: {
     fontSize: 16,
     color: '#333',
+    backgroundColor: 'transparent',
   },
 
   // ── List Items ─────────────────────────────────────────────────

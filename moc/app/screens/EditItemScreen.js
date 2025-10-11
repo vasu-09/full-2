@@ -6,7 +6,6 @@ import {
   StatusBar,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -15,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import apiClient from '../services/apiClient';
 import { getStoredSession } from '../services/authStorage';
+import EmojiTextInput from '../../components/EmojiTextInput';
 
 const nextUnit = unit => {
   const units = ['kg', 'gm', 'ps'];
@@ -155,33 +155,38 @@ export default function EditItemScreen() {
         <TouchableOpacity onPress={addSubQuantity} style={styles.plusBtn}>
           <Icon name="add" size={20} color="#1f6ea7" />
         </TouchableOpacity>
-        <TextInput
-          style={[styles.inputLine, styles.nameInput]}
-          placeholder="Item name"
-          placeholderTextColor="#888"
+         <EmojiTextInput
           value={name}
           onChangeText={setName}
+          placeholder="Item name"
+          placeholderTextColor="#888"
+          containerStyle={[styles.inputLineContainer, styles.nameInput]}
+          inputStyle={[styles.inputLineText, styles.nameInputText]}
         />
-        <TextInput
-          style={[styles.inputLine, styles.smallInput]}
+        <EmojiTextInput
+          value={quantity}
+          onChangeText={setQuantity}
           placeholder="quantity"
           placeholderTextColor="#888"
           keyboardType="numeric"
-          value={quantity}
-          onChangeText={setQuantity}
+          containerStyle={[styles.inputLineContainer, styles.smallInput]}
+          inputStyle={[styles.inputLineText, styles.smallInputText]}
+          disabledEmojiPicker
         />
         <TouchableOpacity onPress={toggleUnit} style={styles.unitBtn}>
           <Text style={styles.unitText}>{unit}</Text>
           <Icon name="arrow-drop-down" size={20} color="#888" />
         </TouchableOpacity>
         <Icon name="currency-rupee" size={16} color="#000" style={styles.priceIcon} />
-        <TextInput
-          style={[styles.inputLine, styles.smallInput]}
+        <EmojiTextInput
+          value={price}
+          onChangeText={setPrice}
           placeholder="price"
           placeholderTextColor="#888"
           keyboardType="numeric"
-          value={price}
-          onChangeText={setPrice}
+          containerStyle={[styles.inputLineContainer, styles.smallInput]}
+          inputStyle={[styles.inputLineText, styles.smallInputText]}
+          disabledEmojiPicker
         />
       </View>
 
@@ -190,11 +195,7 @@ export default function EditItemScreen() {
           <TouchableOpacity onPress={() => removeSubQuantity(idx)} style={styles.plusBtn}>
             <Icon name="remove-circle-outline" size={20} color="#d00" />
           </TouchableOpacity>
-          <TextInput
-            style={[styles.inputLine, styles.smallInput]}
-            placeholder="quantity"
-            placeholderTextColor="#888"
-            keyboardType="numeric"
+          <EmojiTextInput
             value={sub.quantity}
             onChangeText={t => {
               setSubQuantities(prev => {
@@ -203,17 +204,19 @@ export default function EditItemScreen() {
                 return arr;
               });
             }}
+            placeholder="quantity"
+            placeholderTextColor="#888"
+            keyboardType="numeric"
+            containerStyle={[styles.inputLineContainer, styles.smallInput]}
+            inputStyle={[styles.inputLineText, styles.smallInputText]}
+            disabledEmojiPicker
           />
           <TouchableOpacity onPress={() => toggleSubUnit(idx)} style={styles.unitBtn}>
             <Text style={styles.unitText}>{sub.unit}</Text>
             <Icon name="arrow-drop-down" size={20} color="#888" />
           </TouchableOpacity>
           <Icon name="currency-rupee" size={16} color="#000" style={styles.priceIcon} />
-          <TextInput
-            style={[styles.inputLine, styles.smallInput]}
-            placeholder="price"
-            placeholderTextColor="#888"
-            keyboardType="numeric"
+          <EmojiTextInput
             value={sub.price}
             onChangeText={t => {
               setSubQuantities(prev => {
@@ -222,6 +225,12 @@ export default function EditItemScreen() {
                 return arr;
               });
             }}
+            placeholder="price"
+            placeholderTextColor="#888"
+            keyboardType="numeric"
+            containerStyle={[styles.inputLineContainer, styles.smallInput]}
+            inputStyle={[styles.inputLineText, styles.smallInputText]}
+            disabledEmojiPicker
           />
         </View>
       ))}
@@ -258,14 +267,19 @@ const styles = StyleSheet.create({
   },
   subRow: { paddingLeft: 36, backgroundColor: '#fafafa' },
   plusBtn: { width: 24, alignItems: 'center' },
-  inputLine: {
-    fontSize: 14,
-    padding: 0,
+  inputLineContainer: {
+    borderWidth: 0,
     borderBottomWidth: 1,
     borderColor: '#ccc',
+    borderRadius: 0,
+    paddingLeft: 0,
+    backgroundColor: 'transparent',
   },
+  inputLineText: { fontSize: 14, paddingVertical: 0, backgroundColor: 'transparent' },
   nameInput: { flex: 2, marginRight: 12 },
-  smallInput: { flex: 1, marginRight: 8, textAlign: 'center' },
+  nameInputText: {},
+  smallInput: { flex: 1, marginRight: 8 },
+  smallInputText: { textAlign: 'center' },
   unitBtn: { flexDirection: 'row', alignItems: 'center', marginRight: 8 },
   unitText: { fontSize: 14, color: '#000', marginRight: 4 },
   priceIcon: { marginRight: 4 },

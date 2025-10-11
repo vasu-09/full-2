@@ -1,10 +1,11 @@
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useRef, useState } from 'react';
-import { StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { getDeviceMetadata } from '../services/deviceMetadata';
 
 import apiClient, { apiBaseURL } from '../services/apiClient';
 import { saveSession } from '../services/authStorage';
+import EmojiTextInput from '../../components/EmojiTextInput';
 
 const OtpScreen = () => {
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
@@ -107,14 +108,16 @@ const OtpScreen = () => {
 
       <View style={styles.otpContainer}>
         {otp.map((digit, index) => (
-          <TextInput
+          <EmojiTextInput
             key={index}
             ref={(ref) => (inputs.current[index] = ref)}
-            style={styles.otpInput}
-            keyboardType="number-pad"
-            maxLength={1}
             value={digit}
             onChangeText={(text) => handleChange(text, index)}
+            keyboardType="number-pad"
+            maxLength={1}
+            containerStyle={styles.otpInputContainer}
+            inputStyle={styles.otpInput}
+            disabledEmojiPicker
           />
         ))}
       </View>
@@ -170,6 +173,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-evenly',
     marginBottom: 32,
+  },
+  otpInputContainer: {
+    width: 48,
+    borderWidth: 0,
+    paddingLeft: 0,
+    backgroundColor: 'transparent',
   },
   otpInput: {
     width: 48,

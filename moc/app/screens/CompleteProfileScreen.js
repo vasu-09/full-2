@@ -9,14 +9,15 @@ import {
   Platform,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import EmojiTextInput from '../../components/EmojiTextInput';
 
 import apiClient from '../services/apiClient';
+import { getStoredSession } from '../services/authStorage';
 
 const MAX_NAME_LENGTH = 25;
 
@@ -32,27 +33,31 @@ export default function CompleteProfileScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  const initialRouteName = useMemo(() => {
-    if (typeof rawInitialName === 'string' && rawInitialName.trim()) {
-      return rawInitialName.trim();
-    }
-    return '';
-  }, [rawInitialName]);
+
 
   useEffect(() => {
     let isMounted = true;
     const loadName = async () => {
       try {
-        const { data } = await apiClient.get('/user/me/display-name');
-        const fetchedName = typeof data?.displayName === 'string' ? data.displayName : '';
-        if (isMounted) {
-          const nextName = initialRouteName || fetchedName;
-          setName(nextName);
+       const session = await getStoredSession();
+        if (!isMounted) {
+          return;
         }
+
+        const rawUserId = session?.userId;
+        const userId = typeof rawUserId === 'string' ? rawUserId.trim() : rawUserId;
+        if (!userId) {
+          setName('');
+          return;
+        }
+
+        const { data } = await apiClient.get(`/user/${userId}`);
+        const fetchedName = typeof data?.displayName === 'string' ? data.displayName.trim() : '';
+        setName(fetchedName);
       } catch (err) {
         console.error('Failed to load display name', err);
         if (isMounted) {
-          setName(initialRouteName);
+          setName('');
         }
       } finally {
         if (isMounted) {
@@ -66,7 +71,7 @@ export default function CompleteProfileScreen() {
     return () => {
       isMounted = false;
     };
-  }, [initialRouteName]);
+  }, []);
 
   const handlePickPhoto = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -133,16 +138,17 @@ export default function CompleteProfileScreen() {
           </TouchableOpacity>
 
           <View style={styles.inputWrapper}>
-            <TextInput
+            <EmojiTextInput
               value={name}
               onChangeText={(value) => {
                 setName(value);
                 if (error) setError('');
               }}
               placeholder="Enter your name"
-              style={styles.input}
               maxLength={MAX_NAME_LENGTH}
               editable={!isSaving}
+              containerStyle={styles.profileInputContainer}
+              inputStyle={styles.input}
             />
           </View>
           {!!error && <Text style={styles.error}>{error}</Text>}
@@ -210,6 +216,11 @@ const styles = StyleSheet.create({
   input: { fontSize: 18, paddingVertical: 8, textAlign: 'center', color: '#000' },
   error: { color: '#c53030', marginTop: 12 },
   loader: { marginTop: 16 },
+  profileInputContainer: {
+    borderWidth: 0,
+    paddingLeft: 0,
+    backgroundColor: 'transparent',
+  },
   continueBtn: {
     backgroundColor: '#1f6ea7',
     paddingVertical: 16,
