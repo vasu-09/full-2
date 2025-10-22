@@ -1,5 +1,7 @@
 // ListsScreen.js
+import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   FlatList,
@@ -9,13 +11,18 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialIcons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 
 import apiClient from '../services/apiClient';
 import { getStoredSession } from '../services/authStorage';
-
+import {
+  deleteListsFromDb,
+  getListsFromDb,
+  initializeDatabase,
+  replaceListsInDb,
+  updateListPinnedInDb,
+} from '../services/database';
 
 const HEADER_HEIGHT = 56;
 
@@ -27,8 +34,15 @@ export default function ListsScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [error, setError] = useState(null);
-    const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [pinnedIds, setPinnedIds] = useState(() => new Set());
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const getListId = useCallback(list => {
     if (!list) return null;
@@ -53,17 +67,54 @@ export default function ListsScreen() {
     });
   }, []);
 
+   const applyLists = useCallback(
+    sourceLists => {
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      setLists(sourceLists);
+      const nextPinned = new Set();
+      sourceLists.forEach(list => {
+        const id = getListId(list);
+        const isPinnedFromSource = Boolean(list?.pinned ?? list?.isPinned);
+        if (id && isPinnedFromSource) {
+          nextPinned.add(id);
+        }
+      });
+      setPinnedIds(nextPinned);
+    },
+    [getListId],
+  );
+
+  const loadListsFromDatabase = useCallback(async () => {
+    try {
+      await initializeDatabase();
+      const storedLists = await getListsFromDb();
+      if (Array.isArray(storedLists)) {
+        applyLists(storedLists);
+      }
+    } catch (dbError) {
+      console.error('Failed to load lists from database', dbError);
+    }
+  }, [applyLists]);
+
+
   const fetchLists = useCallback(async () => {
     setIsLoading(true);
     setError(null);
 
     try {
+      await initializeDatabase();
       const session = await getStoredSession();
       const userIdValue = session?.userId ? Number(session.userId) : null;
 
       if (!userIdValue) {
-        setLists([]);
-        setError('Please sign in again to load your lists.');
+        if (isMountedRef.current) {
+          setLists([]);
+          setPinnedIds(new Set());
+          setError('Please sign in again to load your lists.');
+        }
         return;
       }
 
@@ -71,32 +122,59 @@ export default function ListsScreen() {
         headers: { 'X-User-Id': String(userIdValue) },
       });
 
-      if (Array.isArray(data)) {
-        setLists(data);const nextPinned = new Set();
-        data.forEach(list => {
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      const receivedLists = Array.isArray(data) ? data : [];
+      applyLists(receivedLists);
+
+      const listsForStorage = receivedLists
+        .map(list => {
           const id = getListId(list);
-          const isPinnedFromApi = Boolean(list?.pinned ?? list?.isPinned);
-          if (id && isPinnedFromApi) {
-            nextPinned.add(id);
+          if (!id) {
+            return null;
           }
-        });
-        setPinnedIds(nextPinned);
-      } else {
-        setLists([]);
-        setPinnedIds(new Set());
+        return {
+            id,
+            title: list?.title ?? list?.name ?? 'Untitled List',
+            listType: list?.listType ?? null,
+            pinned: Boolean(list?.pinned ?? list?.isPinned),
+            createdAt: list?.createdAt ?? null,
+            updatedAt: list?.updatedAt ?? null,
+            createdByUserId:
+              list?.createdByUserId != null ? String(list.createdByUserId) : null,
+          };
+        })
+        .filter(Boolean);
+
+      try {
+        await replaceListsInDb(listsForStorage);
+      } catch (persistError) {
+        console.error('Failed to persist lists locally', persistError);
       }
     } catch (err) {
       console.error('Failed to load lists', err);
-      setError('Unable to load lists. Pull to refresh.');
+       if (isMountedRef.current) {
+        setError('Unable to load lists. Pull to refresh.');
+      }
     } finally {
-      setIsLoading(false);
-      setHasLoaded(true);
+      if (isMountedRef.current) {
+        setIsLoading(false);
+        setHasLoaded(true);
+      }
     }
-   }, [getListId]);
+  }, [applyLists, getListId]);
 
   useEffect(() => {
-    fetchLists();
-  }, [fetchLists]);
+     loadListsFromDatabase();
+  }, [loadListsFromDatabase]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchLists();
+    }, [fetchLists]),
+  );
 
    useEffect(() => {
     setPinnedIds(prev => {
@@ -205,7 +283,7 @@ export default function ListsScreen() {
         });
         return next;
       });
-        setLists(prev =>
+      setLists(prev =>
         prev.map(list => {
           const listId = getListId(list);
           if (listId && ids.includes(listId)) {
@@ -214,6 +292,12 @@ export default function ListsScreen() {
           return list;
         }),
       );
+
+      try {
+        await updateListPinnedInDb(ids, !shouldUnpin);
+      } catch (dbError) {
+        console.error('Failed to update pinned state locally', dbError);
+      }
       clearSelection();
     } catch (err) {
       console.error('Failed to update pinned lists', err);
@@ -221,7 +305,7 @@ export default function ListsScreen() {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedIds, pinnedIds, clearSelection]);
+  }, [selectedIds, pinnedIds, clearSelection, getListId]);
 
  const deleteListsByIds = useCallback(
     async ids => {
@@ -239,7 +323,7 @@ export default function ListsScreen() {
           return;
         }
 
-      await Promise.all(
+        await Promise.all(
           ids.map(id =>
             apiClient.delete(`/api/lists/${id}`, {
               headers: { 'X-User-Id': String(userIdValue) },
@@ -266,6 +350,12 @@ export default function ListsScreen() {
           });
           return changed ? next : prev;
         });
+
+        try {
+          await deleteListsFromDb(ids);
+        } catch (dbError) {
+          console.error('Failed to delete lists locally', dbError);
+        }
          } catch (err) {
         console.error('Failed to delete lists', err);
         setError('Unable to delete selected lists. Please try again.');

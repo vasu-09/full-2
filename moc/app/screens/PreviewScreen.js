@@ -14,7 +14,7 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 
 import apiClient from '../services/apiClient';
 import { getStoredSession } from '../services/authStorage';
-
+import { initializeDatabase, saveListSummaryToDb } from '../services/database';
 
 export default function PreviewScreen() {
   const { listName, items, listType = 'Normal List' } = useLocalSearchParams();
@@ -70,6 +70,23 @@ export default function PreviewScreen() {
       itemName: item.name,
     }));
 
+  const buildItemsForStorage = () => {
+    if (isPremiumList) {
+      return buildPremiumItemsPayload().map(item => ({
+        itemName: item.itemName,
+        quantity: item.quantity ?? null,
+        priceText: item.priceText ?? null,
+        subQuantities: Array.isArray(item.subQuantities) ? item.subQuantities : [],
+      }));
+    }
+
+    return buildChecklistItemsPayload().map(item => ({
+      itemName: item.itemName,
+      quantity: null,
+      priceText: null,
+      subQuantities: [],
+    }));
+  };
   const handleSave = async () => {
     if (isSaving) {
       return;
@@ -108,6 +125,30 @@ export default function PreviewScreen() {
       const { data } = await apiClient.post(endpoint, payload);
       const createdListId = data?.id ?? data?.listId ?? null;
       const resolvedTitle = data?.title ?? listName;
+
+       if (createdListId != null) {
+        try {
+          await initializeDatabase();
+          await saveListSummaryToDb({
+            id: String(createdListId),
+            title: resolvedTitle || 'Untitled List',
+            listType: isPremiumList ? 'PREMIUM' : 'BASIC',
+            pinned: Boolean(data?.pinned ?? data?.isPinned ?? false),
+            createdAt: data?.createdAt ?? null,
+            updatedAt: data?.updatedAt ?? null,
+            createdByUserId:
+              data?.createdByUserId != null
+                ? String(data.createdByUserId)
+                : userIdValue != null
+                  ? String(userIdValue)
+                  : null,
+            items: buildItemsForStorage(),
+          });
+        } catch (dbError) {
+          console.error('Failed to cache created list locally', dbError);
+        }
+      }
+
 
       router.push({
         pathname: '/screens/LinkListScreen',

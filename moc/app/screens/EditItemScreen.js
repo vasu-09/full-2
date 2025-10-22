@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -15,6 +15,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import apiClient from '../services/apiClient';
 import { getStoredSession } from '../services/authStorage';
+import {
+  getListSummaryFromDb,
+  initializeDatabase,
+  saveListSummaryToDb,
+} from '../services/database';
 
 const nextUnit = unit => {
   const units = ['kg', 'gm', 'ps'];
@@ -25,6 +30,20 @@ const nextUnit = unit => {
 const parseQuantity = q => {
   const match = q?.match(/(\d+)([a-zA-Z]+)/);
   return match ? { quantity: match[1], unit: match[2] } : { quantity: q || '', unit: 'kg' };
+};
+
+const parseSubQuantitiesJson = value => {
+  if (!value) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    console.warn('Unable to parse premium item sub quantities', error);
+    return [];
+  }
 };
 
 export default function EditItemScreen() {
@@ -64,6 +83,51 @@ export default function EditItemScreen() {
       return arr;
     });
   };
+
+  const persistItemToDatabase = useCallback(
+    async (dbItem) => {
+      if (!listId) {
+        return;
+      }
+
+      try {
+        await initializeDatabase();
+        const summary = await getListSummaryFromDb(String(listId));
+        if (!summary) {
+          return;
+        }
+
+        const normalizedItem = {
+          ...dbItem,
+          id: dbItem?.id != null ? String(dbItem.id) : String(Date.now()),
+        };
+
+        const existingItems = Array.isArray(summary.items) ? summary.items : [];
+        let nextItems;
+
+        if (isEditingExisting && normalizedItem.id) {
+          nextItems = existingItems.map(item =>
+            item?.id === normalizedItem.id ? { ...item, ...normalizedItem } : item,
+          );
+        } else {
+          const deduped = normalizedItem.id
+            ? existingItems.filter(item => item?.id !== normalizedItem.id)
+            : existingItems;
+          nextItems = [...deduped, normalizedItem];
+        }
+
+        await saveListSummaryToDb({
+          ...summary,
+          id: String(listId),
+          items: nextItems,
+        });
+      } catch (dbError) {
+        console.error('Failed to update local list cache', dbError);
+      }
+    },
+    [isEditingExisting, listId],
+  );
+
 
     const buildQuantityText = (value, valueUnit) => {
     const qty = value?.trim();
@@ -117,19 +181,36 @@ export default function EditItemScreen() {
         subQuantities: normalizedSubQuantities,
       };
 
-       if (isEditingExisting) {
-        await apiClient.put(
-          `/api/lists/${encodeURIComponent(listId)}/items/${encodeURIComponent(parsed.id)}`,
-          payload,
-          { headers },
-        );
-      } else {
-        await apiClient.post(
-          `/api/lists/${encodeURIComponent(listId)}/items`,
-          payload,
-          { headers },
-        );
-      }
+      const response = isEditingExisting
+        ? await apiClient.put(
+            `/api/lists/${encodeURIComponent(listId)}/items/${encodeURIComponent(parsed.id)}`,
+            payload,
+            { headers },
+          )
+        : await apiClient.post(
+            `/api/lists/${encodeURIComponent(listId)}/items`,
+            payload,
+            { headers },
+          );
+
+      const responseData = response?.data ?? null;
+      const resolvedId = responseData?.id ?? parsed?.id ?? Date.now();
+      const apiSubQuantities = Array.isArray(responseData?.subQuantities)
+        ? responseData.subQuantities
+        : parseSubQuantitiesJson(responseData?.subQuantitiesJson);
+      const resolvedSubQuantities = (apiSubQuantities && apiSubQuantities.length)
+        ? apiSubQuantities
+        : normalizedSubQuantities;
+
+      await persistItemToDatabase({
+        id: String(resolvedId),
+        itemName: responseData?.itemName ?? trimmedName,
+        quantity: responseData?.quantity ?? payload.quantity ?? null,
+        priceText: responseData?.priceText ?? payload.priceText ?? null,
+        subQuantities: resolvedSubQuantities ?? [],
+        createdAt: responseData?.createdAt ?? parsed?.createdAt ?? null,
+        updatedAt: responseData?.updatedAt ?? null,
+      });
 
       router.back();
     } catch (error) {
