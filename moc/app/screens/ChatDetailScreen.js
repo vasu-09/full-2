@@ -12,12 +12,12 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import EmojiTextInput from '../../components/EmojiTextInput';
 
 const BAR_HEIGHT = 56;
 const MESSAGE_BAR_HEIGHT = 48;
@@ -817,20 +817,14 @@ export default function ChatDetailScreen() {
                 <Icon name="attach-file" size={24} color="#888" />
               </TouchableOpacity>
 
-               <EmojiTextInput
-                value={input}
-                onChangeText={setInput}
-                placeholder="Message"
-                placeholderTextColor="#888"
-                containerStyle={styles.composerEmojiInput}
-                inputStyle={styles.composerEmojiText}
-                onFocus={hideOverlay}
-                onTogglePicker={(visible) => {
-                  if (visible) {
-                    hideOverlay();
-                  }
-                }}
-              /> 
+               <TextInput
+                 style={styles.textInput}
+                  placeholder="Message"
+                  placeholderTextColor="#888"
+                  value={input}
+                  onChangeText={setInput}
+                  onFocus={hideOverlay}
+               />  
 
             <TouchableOpacity
                 style={styles.iconButton}
@@ -1086,18 +1080,7 @@ const styles = StyleSheet.create({
   },
 
   iconButton: { padding: 6, marginHorizontal: 2 },
-  composerEmojiInput: {
-    flex: 1,
-    marginHorizontal: 6,
-    borderWidth: 0,
-    backgroundColor: 'transparent',
-    paddingLeft: 0,
-  },
-  composerEmojiText: {
-    fontSize: 16,
-    paddingVertical: 0,
-    backgroundColor: 'transparent',
-  },
+    textInput: { flex: 1, fontSize: 16, marginHorizontal: 6, paddingVertical: 0 },
   micButton: {
     marginLeft: MARGIN,
     backgroundColor: '#1f6ea7',

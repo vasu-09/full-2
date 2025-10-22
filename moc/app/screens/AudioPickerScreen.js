@@ -4,15 +4,16 @@ import * as MediaLibrary from 'expo-media-library';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-    FlatList,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  FlatList,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import EmojiTextInput from '../../components/EmojiTextInput';
+
 
 export default function AudioPickerScreen() {
   const insets = useSafeAreaInsets();
@@ -137,15 +138,14 @@ export default function AudioPickerScreen() {
           >
             <Icon name="arrow-back" size={24} color="#1f6ea7" />
           </TouchableOpacity>
-          <EmojiTextInput
-            value={searchQuery}
-            onChangeText={setSearchQuery}
+            <TextInput
+            style={styles.searchInput}
             placeholder="Search audio..."
             placeholderTextColor="#999"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
             autoFocus
-            containerStyle={styles.searchInputContainer}
-            inputStyle={styles.searchInput}
-            onTogglePicker={() => {}}
+            underlineColorAndroid="transparent"
           />
         </View>
       ) : (
@@ -231,17 +231,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   searchBackBtn: { padding: 8 },
-  searchInputContainer: {
+  searchInput: {
     flex: 1,
     marginLeft: 8,
-    borderWidth: 0,
-    backgroundColor: 'transparent',
-    paddingLeft: 0,
-  },
-  searchInput: {
     fontSize: 16,
-    color: '#333',
-    backgroundColor: 'transparent',
+    color: '#333', 
   },
 
   // ── List Items ─────────────────────────────────────────────────

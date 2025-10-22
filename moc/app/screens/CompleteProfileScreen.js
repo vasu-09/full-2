@@ -1,6 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -9,12 +9,12 @@ import {
   Platform,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import EmojiTextInput from '../../components/EmojiTextInput';
 
 import apiClient from '../services/apiClient';
 import { getStoredSession } from '../services/authStorage';
@@ -138,17 +138,16 @@ export default function CompleteProfileScreen() {
           </TouchableOpacity>
 
           <View style={styles.inputWrapper}>
-            <EmojiTextInput
+            <TextInput
               value={name}
               onChangeText={(value) => {
                 setName(value);
                 if (error) setError('');
               }}
+              style={styles.input}
               placeholder="Enter your name"
               maxLength={MAX_NAME_LENGTH}
               editable={!isSaving}
-              containerStyle={styles.profileInputContainer}
-              inputStyle={styles.input}
             />
           </View>
           {!!error && <Text style={styles.error}>{error}</Text>}
@@ -216,11 +215,6 @@ const styles = StyleSheet.create({
   input: { fontSize: 18, paddingVertical: 8, textAlign: 'center', color: '#000' },
   error: { color: '#c53030', marginTop: 12 },
   loader: { marginTop: 16 },
-  profileInputContainer: {
-    borderWidth: 0,
-    paddingLeft: 0,
-    backgroundColor: 'transparent',
-  },
   continueBtn: {
     backgroundColor: '#1f6ea7',
     paddingVertical: 16,

@@ -10,12 +10,12 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import EmojiTextInput from '../../components/EmojiTextInput';
 
 import apiClient from '../services/apiClient';
 import { getStoredSession } from '../services/authStorage';
@@ -492,11 +492,10 @@ export default function ViewListScreen() {
         {/* Row 1: name + edit/delete */}
         <View style={styles.row1}>
           {isEditing ? (
-            <EmojiTextInput
+            <TextInput
               value={editingName}
               onChangeText={setEditingName}
-              containerStyle={styles.inlineInputContainer}
-              inputStyle={styles.inlineInputText}
+              style={styles.inlineInput}
               autoFocus
               editable={!isSaving}
             />
@@ -659,19 +658,18 @@ export default function ViewListScreen() {
             <View style={styles.addTaskContainer}>
               {isTaskInputVisible ? (
                 <>
-                  <EmojiTextInput
-                    value={newTaskName}
-                    onChangeText={setNewTaskName}
+                  <TextInput
+                    style={styles.addTaskInput}
                     placeholder="Describe the task"
                     placeholderTextColor="#777"
+                    value={newTaskName}
+                    onChangeText={setNewTaskName}
                     editable={!isAddingTask}
                     multiline
                     textAlignVertical="top"
                     returnKeyType="done"
                     blurOnSubmit
                     onSubmitEditing={handleAddTask}
-                    containerStyle={styles.addTaskInputContainer}
-                    inputStyle={styles.addTaskInputText}
                   />
                   <View style={styles.taskActionsRow}>
                     <TouchableOpacity
@@ -761,23 +759,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#111',
   },
-  inlineInputContainer: {
+  inlineInput: {
     flex: 1,
-    marginRight: 8,
-    borderWidth: 0,
-    borderBottomWidth: 1,
-    borderColor: '#1f6ea7',
-    borderRadius: 0,
-    paddingLeft: 0,
-    backgroundColor: 'transparent',
-  },
-  inlineInputText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#111',
+    borderBottomWidth: 1,
+    borderColor: '#1f6ea7',
     paddingVertical: 0,
-    backgroundColor: 'transparent',
-
+    marginRight: 8,
   },
   icons: {
     flexDirection: 'row',
@@ -835,17 +825,16 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 12,
   },
-  addTaskInputContainer: {
+  addTaskInput: {
     backgroundColor: '#fff',
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#d0d7de',
-     },
-  addTaskInputText: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     fontSize: 15,
     color: '#111',
     minHeight: 60,
-    textAlignVertical: 'top',
   },
   taskActionsRow: {
     flexDirection: 'row',

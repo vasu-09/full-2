@@ -5,14 +5,14 @@ import {
   Alert,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialIcons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 
 import apiClient from '../services/apiClient';
-import EmojiTextInput from '../../components/EmojiTextInput';
 
 const MAX_NAME_LENGTH = 25;
 
@@ -100,17 +100,19 @@ export default function EditNameScreen() {
 
       <View style={styles.inputWrapper}>
         <Text style={styles.label}>Your name</Text>
-        <EmojiTextInput
-          value={name}
-          onChangeText={(value) => {
-            setName(value);
-            if (error) setError('');
-          }}
-          maxLength={MAX_NAME_LENGTH}
-          containerStyle={styles.inputRow}
-          inputStyle={styles.input}
-          editable={!isSaving}
-        />
+        <View style={styles.inputRow}>
+          <TextInput
+            value={name}
+           onChangeText={(value) => {
+              setName(value);
+              if (error) setError('');
+            }}
+            maxLength={MAX_NAME_LENGTH}
+            style={styles.input}
+            editable={!isSaving}
+          />
+          <Icon name="emoji-emotions" size={22} color="#888" />
+        </View>
         <Text style={styles.charCount}>{name.length}/{MAX_NAME_LENGTH}</Text>
         {!!error && <Text style={styles.error}>{error}</Text>}
         <Text style={styles.subText}>
@@ -146,7 +148,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 12,
   },
-  input: { flex: 1, fontSize: 16, paddingVertical: 10, backgroundColor: 'transparent'  },
+  input: { flex: 1, fontSize: 16, paddingVertical: 10 },
   charCount: { textAlign: 'right', color: '#888', marginTop: 4 },
   error: { color: '#c53030', marginTop: 8 },
   subText: { fontSize: 13, color: '#555', marginTop: 16 },

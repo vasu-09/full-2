@@ -3,18 +3,18 @@ import * as Contacts from 'expo-contacts';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-    FlatList,
-    Image,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  FlatList,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import {SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { syncContacts } from '../services/contactService';
-import EmojiTextInput from '../../components/EmojiTextInput';
 
 
 export default function ContactPickerScreen() {
@@ -98,15 +98,14 @@ export default function ContactPickerScreen() {
     >
       <Icon name="arrow-back" size={24} color="#1f6ea7" />
     </TouchableOpacity>
-    <EmojiTextInput
-      value={searchQuery}
-      onChangeText={setSearchQuery}
+    <TextInput
+      style={styles.searchHeaderInput}
       placeholder="Search contacts"
       placeholderTextColor="#999"
+      value={searchQuery}
+      onChangeText={setSearchQuery}
       autoFocus
-      containerStyle={styles.searchHeaderInputContainer}
-      inputStyle={styles.searchHeaderInput}
-      onTogglePicker={() => {}}
+      underlineColorAndroid="transparent"
     />
   </View>
       ) : (
@@ -333,17 +332,11 @@ searchHeader: {
   },
 
   // full‑width, flat input
-  searchHeaderInputContainer: {
+  searchHeaderInput: {
     flex: 1,
     marginLeft: 8,
-    borderWidth: 0,
-    backgroundColor: 'transparent',
-    paddingLeft: 0,
-  },
-  searchHeaderInput: {
     fontSize: 18,
     color: '#333',
     paddingVertical: 8,
-    backgroundColor: 'transparent',
   },
 });

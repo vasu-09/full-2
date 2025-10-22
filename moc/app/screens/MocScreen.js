@@ -1,10 +1,9 @@
 import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Dimensions, Image, Pressable, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Dimensions, Image, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import EmojiTextInput from '../../components/EmojiTextInput';
 
 const windowHeight = Dimensions.get('window').height;
 
@@ -144,15 +143,13 @@ const CallsScreen = () => (
           <TouchableOpacity onPress={() => { setSearchActive(false); setSearchQuery(''); hideMenu(); }}>
             <Icon name="arrow-back" size={22} color="#1f6ea7" />
           </TouchableOpacity>
-          <EmojiTextInput
-            value={searchQuery}
-            onChangeText={setSearchQuery}
+          <TextInput
+            style={styles.searchInput}
             placeholder="Search contacts"
             placeholderTextColor="#999"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
             autoFocus
-            containerStyle={styles.searchInputContainer}
-            inputStyle={styles.searchInput}
-            onTogglePicker={() => {}}
           />
         </>
         ) : (
@@ -283,17 +280,11 @@ const styles = StyleSheet.create({
   appName: { fontSize: 22, fontWeight: 'bold', color: '#fff' },
   iconGroup: { flexDirection: 'row' },
   icon: { marginLeft: 16 },
-  searchInputContainer: {
+  searchInput: {
     flex: 1,
     marginLeft: 12,
-    borderWidth: 0,
-    backgroundColor: 'transparent',
-    paddingLeft: 0,
-  },
-  searchInput: {
     fontSize: 16,
     color: '#000',
-    backgroundColor: 'transparent',
   },
 
   // Chats wrapper
