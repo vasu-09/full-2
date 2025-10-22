@@ -1,7 +1,7 @@
 // ViewListScreen.js
 import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -19,6 +19,11 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 
 import apiClient from '../services/apiClient';
 import { getStoredSession } from '../services/authStorage';
+import {
+  getListSummaryFromDb,
+  initializeDatabase,
+  saveListSummaryToDb,
+} from '../services/database';
 
 
 const parseSubQuantities = (value) => {
@@ -110,7 +115,41 @@ export default function ViewListScreen() {
   const [newTaskName, setNewTaskName] = useState('');
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [isTaskInputVisible, setIsTaskInputVisible] = useState(false);
+  const isMountedRef = useRef(true);
 
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const persistListSnapshot = useCallback(
+    async (items) => {
+      if (!listId || !listSummary) {
+        return;
+      }
+
+      try {
+        await initializeDatabase();
+        await saveListSummaryToDb({
+          id: String(listId),
+          title: listSummary?.title ?? fallbackTitle,
+          listType: listSummary?.listType ?? null,
+          pinned: listSummary?.pinned ?? null,
+          createdAt: listSummary?.createdAt ?? null,
+          updatedAt: listSummary?.updatedAt ?? null,
+          createdByUserId:
+            listSummary?.createdByUserId != null
+              ? String(listSummary.createdByUserId)
+              : null,
+          items,
+        });
+      } catch (dbError) {
+        console.error('Failed to persist list locally', dbError);
+      }
+    },
+    [fallbackTitle, listId, listSummary],
+  );
   const fetchList = useCallback(async () => {
     if (!listId) {
       setError('Missing list identifier.');
@@ -122,6 +161,21 @@ export default function ViewListScreen() {
     setError(null);
 
     try {
+      await initializeDatabase();
+      let cachedSummary = null;
+      try {
+        cachedSummary = await getListSummaryFromDb(String(listId));
+        if (cachedSummary && isMountedRef.current) {
+          setListSummary(prev => {
+            if (prev && prev.updatedAt === cachedSummary.updatedAt) {
+              return prev;
+            }
+            return cachedSummary;
+          });
+        }
+      } catch (dbError) {
+        console.error('Failed to load cached list', dbError);
+      }
       const session = await getStoredSession();
       const userIdValue = session?.userId ? Number(session.userId) : null;
       const usernameValue = session?.username
@@ -159,20 +213,49 @@ export default function ViewListScreen() {
           }))
         : [];
 
-      setListSummary({
+       if (!isMountedRef.current) {
+        return;
+      }
+
+
+
+      const summaryPayload = {
         ...data,
         items: normalizedItems,
-      });
+       };
+      setListSummary(summaryPayload);
       setEditingItemId(null);
       setEditingName('');
+      
+       try {
+        await saveListSummaryToDb({
+          id: String(listId),
+          title: summaryPayload?.title ?? fallbackTitle,
+          listType: summaryPayload?.listType ?? null,
+          pinned: cachedSummary?.pinned ?? null,
+          createdAt: summaryPayload?.createdAt ?? cachedSummary?.createdAt ?? null,
+          updatedAt: summaryPayload?.updatedAt ?? null,
+          createdByUserId:
+            summaryPayload?.createdByUserId != null
+              ? String(summaryPayload.createdByUserId)
+              : cachedSummary?.createdByUserId ?? null,
+          items: normalizedItems,
+        });
+      } catch (dbSaveError) {
+        console.error('Failed to cache list data locally', dbSaveError);
+      }
     } catch (err) {
       console.error('Failed to load list details', err);
-      setError('Unable to load list items. Pull to refresh.');
-      setListSummary(null);
+      if (isMountedRef.current) {
+        setError('Unable to load list items. Pull to refresh.');
+        setListSummary(prev => (prev ? prev : null));
+      }
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
     }
-  }, [listId]);
+  }, [fallbackTitle, listId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -240,15 +323,19 @@ export default function ViewListScreen() {
           { headers },
         );
 
+        let updatedItems;
         setListSummary((prev) => {
           if (!prev) {
             return prev;
           }
-          const updatedItems = prev.items.map((existing) =>
+          updatedItems = prev.items.map((existing) =>
             existing?.id === itemId ? { ...existing, itemName: trimmedName } : existing,
           );
           return { ...prev, items: updatedItems };
         });
+        if (updatedItems) {
+          await persistListSnapshot(updatedItems);
+        }
         cancelInlineEdit();
       } catch (inlineError) {
         console.error('Failed to update checklist item', inlineError);
@@ -257,7 +344,7 @@ export default function ViewListScreen() {
         setSavingItemId(null);
       }
     },
-    [cancelInlineEdit, editingName, listId],
+    [cancelInlineEdit, editingName, listId, persistListSnapshot],
   );
 
   const handleEditPress = useCallback(
@@ -340,32 +427,38 @@ export default function ViewListScreen() {
         { headers },
       );
 
+       let nextItems;
+      const normalizedItem = data
+        ? {
+            ...data,
+            itemName: data?.itemName ?? trimmedName,
+            quantity: data?.quantity ?? null,
+            priceText: data?.priceText ?? null,
+            subQuantities: parseSubQuantities(data?.subQuantitiesJson),
+          }
+        : {
+            id: Date.now(),
+            itemName: trimmedName,
+            quantity: null,
+            priceText: null,
+            subQuantities: [],
+          };
+
       setListSummary((prev) => {
         if (!prev) {
           return prev;
         }
 
-        const normalizedItem = data
-          ? {
-              ...data,
-              itemName: data?.itemName ?? trimmedName,
-              quantity: data?.quantity ?? null,
-              priceText: data?.priceText ?? null,
-              subQuantities: parseSubQuantities(data?.subQuantitiesJson),
-            }
-          : {
-              id: Date.now(),
-              itemName: trimmedName,
-              quantity: null,
-              priceText: null,
-              subQuantities: [],
-            };
+       nextItems = [...prev.items, normalizedItem];
 
         return {
           ...prev,
-          items: [...prev.items, normalizedItem],
+           items: nextItems,
         };
       });
+      if (nextItems) {
+        await persistListSnapshot(nextItems);
+      }
       setNewTaskName('');
       setIsTaskInputVisible(false);
     } catch (addError) {
@@ -374,7 +467,7 @@ export default function ViewListScreen() {
     } finally {
       setIsAddingTask(false);
     }
-  }, [listId, newTaskName]);
+  }, [listId, newTaskName, persistListSnapshot]);
 
     const handleBeginAddTask = useCallback(() => {
     setIsTaskInputVisible(true);
@@ -425,16 +518,20 @@ export default function ViewListScreen() {
 
         await apiClient.delete(endpoint, { headers });
 
+        let filteredItems;
         setListSummary((prev) => {
           if (!prev) {
             return prev;
           }
 
-          const filteredItems = prev.items.filter(
+          filteredItems = prev.items.filter(
             (existing) => existing?.id !== itemId,
           );
           return { ...prev, items: filteredItems };
         });
+         if (filteredItems) {
+          await persistListSnapshot(filteredItems);
+        }
       } catch (deleteError) {
         console.error('Failed to delete item', deleteError);
         Alert.alert('Delete failed', 'Unable to delete the item. Please try again.');
@@ -442,7 +539,7 @@ export default function ViewListScreen() {
         setDeletingItemId(null);
       }
     },
-    [isPremiumList, listId],
+    [isPremiumList, listId, persistListSnapshot],
   );
 
   const handleDeletePress = useCallback(
