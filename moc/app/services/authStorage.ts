@@ -204,6 +204,10 @@ export const getAccessToken = async () => getItem(ACCESS_TOKEN_KEY);
 
 export const getRefreshToken = async () => getItem(REFRESH_TOKEN_KEY);
 
+export const getStoredUserId = async () => getItem(USER_ID_KEY);
+
+export const getStoredUsername = async () => getItem(USERNAME_KEY);
+
 export const clearSession = async () => {
   await Promise.all([
     storage.removeItem(ACCESS_TOKEN_KEY),

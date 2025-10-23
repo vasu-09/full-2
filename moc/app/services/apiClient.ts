@@ -97,6 +97,27 @@ const getBaseURL = () => {
 
 export const apiBaseURL = getBaseURL();
 
+export const buildWsUrl = (baseUrl: string = apiBaseURL) => {
+  try {
+    const parsed = new URL(baseUrl);
+    const protocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
+    parsed.protocol = protocol;
+    parsed.pathname = parsed.pathname.replace(/\/$/, '') + '/ws';
+    parsed.search = '';
+    parsed.hash = '';
+    return parsed.toString();
+  } catch {
+    const normalized = baseUrl.replace(/\/$/, '');
+    if (normalized.startsWith('https://')) {
+      return `${normalized.replace(/^https:\/\//, 'wss://')}/ws`;
+    }
+    if (normalized.startsWith('http://')) {
+      return `${normalized.replace(/^http:\/\//, 'ws://')}/ws`;
+    }
+    return `ws://${normalized}/ws`;
+  }
+};
+
 const apiClient = axios.create({
   baseURL: apiBaseURL,
   timeout: 10000,
