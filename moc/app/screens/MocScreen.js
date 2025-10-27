@@ -120,7 +120,7 @@ const MocScreen = () => {
             <View style={styles.centerContent}>
               <Text style={styles.title}>Start chatting</Text>
               <Text style={styles.subtitle}>
-                Chat with your contacts or invite a friend to MoC.
+                Chat with your contacts or invite a friend to MOC.
               </Text>
 
               <View style={styles.inviteSection}>
@@ -190,7 +190,7 @@ const CallsScreen = () => (
         </>
         ) : (
           <>
-            <Text style={styles.appName}>MoC</Text>
+            <Text style={styles.appName}>MOC</Text>
             <View style={styles.iconGroup}>
               <TouchableOpacity
                 onPress={() => {
@@ -315,7 +315,8 @@ const styles = StyleSheet.create({
   },
   avatarRow: { flexDirection: 'row', marginBottom: 16 },
   avatarRowContent: {
-    justifyContent: 'center',
+    paddingTop: 150,
+    justifyContent: 'flex-start',
     paddingHorizontal: 24,
   },
   avatarContainer: { alignItems: 'center', marginHorizontal: 10 },

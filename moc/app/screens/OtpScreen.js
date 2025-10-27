@@ -3,7 +3,7 @@ import { useRef, useState } from 'react';
 import { StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { getDeviceMetadata } from '../services/deviceMetadata';
 
-import apiClient, { apiBaseURL } from '../services/apiClient';
+import apiClient from '../services/apiClient';
 import { saveSession } from '../services/authStorage';
 
 const OtpScreen = () => {
@@ -92,8 +92,7 @@ const OtpScreen = () => {
   return (
     <View style={styles.container}>
       <StatusBar backgroundColor="#1f6ea7" barStyle="light-content" />
-      <Text style={styles.logo}>MoC</Text>
-      <Text style={styles.baseUrl}>API: {apiBaseURL}</Text>
+      <Text style={styles.logo}>MOC</Text>
       {phoneNumber ? (
         <Text style={styles.phoneLabel}>Sending code to {phoneNumber}</Text>
       ) : (
@@ -135,20 +134,21 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
     padding: 24,
-    justifyContent: 'center',
+    paddingTop: 150,
+    justifyContent: 'flex-start',
   },
   logo: {
     fontSize: 40,
     fontWeight: 'bold',
     color: '#1f6ea7',
     alignSelf: 'center',
-    marginBottom: 40,
+    marginBottom: 80,
   },
   baseUrl: {
     fontSize: 12,
     color: '#555',
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: 24,
   },
   phoneLabel: {
     textAlign: 'center',
