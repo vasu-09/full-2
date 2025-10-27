@@ -1,9 +1,10 @@
 import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Dimensions, Image, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { useChatRegistry } from '../context/ChatContext';
 
 const windowHeight = Dimensions.get('window').height;
 
@@ -27,7 +28,7 @@ const MocScreen = () => {
   const Tab = createMaterialTopTabNavigator();
   const hideMenu = () => setMenuVisible(false);
   const topBarHeight = 50 + insets.top;
-  const [selectedUser, setSelectedUser] = useState(null); // stores clicked user details
+  const { rooms } = useChatRegistry();
 
   const router = useRouter();
 
@@ -48,77 +49,112 @@ const MocScreen = () => {
         return router.push('/screens/SettingsScreen');
     }
   };
-  const ChatsScreen = () => {
-  // <— replace this with real chat data when you have it
-  const chatList = [
-    { id: 1, name: 'Weekend', lastMessage: 'Sofia: Sticker', time: '9:49', avatar: 'https://randomuser.me/api/portraits/women/1.jpg' },
-    { id: 2, name: 'João Pereira', lastMessage: 'typing…',       time: '9:45', avatar: 'https://randomuser.me/api/portraits/men/2.jpg' },
-    { id: 3, name: 'Isabelle van Rijn', lastMessage: 'Best breakfast ever', time: '9:37', avatar: 'https://randomuser.me/api/portraits/women/3.jpg' },
-    { id: 4, name: 'Family', lastMessage: 'Mom: She is so cute 😍', time: '9:09', avatar: 'https://randomuser.me/api/portraits/women/4.jpg' },
-  ];
+  const formatLastTime = useCallback((iso) => {
+    if (!iso) return '';
+    try {
+      const date = new Date(iso);
+      if (Number.isNaN(date.getTime())) return '';
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return '';
+    }
+  }, []);
 
-  const router = useRouter();
-
-  
-
+  const filteredRooms = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return rooms;
+    }
+    const q = searchQuery.trim().toLowerCase();
+    return rooms.filter(room => room.title?.toLowerCase().includes(q));
+  }, [rooms, searchQuery]);
+ 
+ const ChatsScreen = () => {
+    const router = useRouter();
+    const hasChats = filteredRooms.length > 0;
+    
   return (
-    <View style={styles.chatsWrapper}>
-      <ScrollView contentContainerStyle={chatList.length ? styles.chatListContainer : { flexGrow: 1 }}>
-        {chatList.length ? (
-          // render chat items
-          chatList.map(chat => (
-            <View key={chat.id} style={styles.chatItem}>
-              <TouchableOpacity onPress={() => setSelectedUser(chat)}>
-  <Image source={{ uri: chat.avatar }} style={styles.chatAvatar} />
-</TouchableOpacity>
-<TouchableOpacity style={styles.chatItem} onPress={() => router.push('/screens/ChatDetailScreen')}>
-              <View style={styles.chatText}>
-                <Text style={styles.chatName}>{chat.name}</Text>
-                <Text style={styles.chatLastMessage} numberOfLines={1}>
-                  {chat.lastMessage}
-                </Text>
-              </View>
-              <Text style={styles.chatTime}>{chat.time}</Text>
-            </TouchableOpacity>
-            </View>
-          ))
-        ) : (
-          // empty state
-          <View style={styles.centerContent}>
-            <Text style={styles.title}>Start chatting</Text>
-            <Text style={styles.subtitle}>
-              Chat with your contacts or invite a friend to MoC.
-            </Text>
+      <View style={styles.chatsWrapper}>
+        <ScrollView contentContainerStyle={hasChats ? styles.chatListContainer : { flexGrow: 1 }}>
+          {hasChats ? (
+            filteredRooms.map(room => {
+              const lastMessage = room.lastMessage?.text ?? 'No messages yet';
+              const time = formatLastTime(room.lastMessage?.at);
+              return (
+                <TouchableOpacity
+                  key={room.roomKey}
+                  style={styles.chatItem}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/screens/ChatDetailScreen',
+                      params: {
+                        roomId: String(room.id),
+                        roomKey: room.roomKey,
+                        title: room.title,
+                        peerId: room.peerId != null ? String(room.peerId) : undefined,
+                      },
+                    })
+                  }
+                >
+                  <Image
+                    source={{ uri: room.avatar ?? 'https://ui-avatars.com/api/?name=' + encodeURIComponent(room.title) }}
+                    style={styles.chatAvatar}
+                  />
+                  <View style={styles.chatText}>
+                    <Text style={styles.chatName}>{room.title}</Text>
+                    <Text style={styles.chatLastMessage} numberOfLines={1}>
+                      {lastMessage}
+                    </Text>
+                  </View>
+                  <View style={styles.chatMeta}>
+                    <Text style={styles.chatTime}>{time}</Text>
+                    {room.unreadCount > 0 && (
+                      <View style={styles.unreadBadge}>
+                        <Text style={styles.unreadText}>{room.unreadCount}</Text>
+                      </View>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              );
+            })
+          ) : (
+            <View style={styles.centerContent}>
+              <Text style={styles.title}>Start chatting</Text>
+              <Text style={styles.subtitle}>
+                Chat with your contacts or invite a friend to MoC.
+              </Text>
 
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.avatarRow}
-            >
-              {dummyContacts.map((c, i) => (
-                <View style={styles.avatarContainer} key={i}>
-                  <Image source={{ uri: c.img }} style={styles.avatar} />
-                  <Text style={styles.avatarName} numberOfLines={1}>
-                    {c.name}
-                  </Text>
-                </View>
-              ))}
+              <View style={styles.inviteSection}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.avatarRow}
+                contentContainerStyle={styles.avatarRowContent}
+              >
+                {dummyContacts.map((c, i) => (
+                  <View style={styles.avatarContainer} key={i}>
+                    <Image source={{ uri: c.img }} style={styles.avatar} />
+                    <Text style={styles.avatarName} numberOfLines={1}>
+                      {c.name}
+                    </Text>
+                  </View>
+                ))}
+              </ScrollView>
+
+              <TouchableOpacity style={styles.inviteButton}>
+                <Text style={styles.inviteText}>Invite a friend</Text>
+              </TouchableOpacity>
+            </View>
+            </View>
+            )}
             </ScrollView>
 
-            <TouchableOpacity style={styles.inviteButton}>
-              <Text style={styles.inviteText}>Invite a friend</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </ScrollView>
-
-      <TouchableOpacity style={styles.fab}  onPress={() => router.push('/screens/ListsScreen')}>
-        <Icon name="playlist-add" size={20} color="#fff" />
-        <Text style={styles.fabText}>create list</Text>
-      </TouchableOpacity>
-    </View>
-  );
-};
+     <TouchableOpacity style={styles.fab} onPress={() => router.push('/screens/ListsScreen')}>
+          <Icon name="playlist-add" size={20} color="#fff" />
+          <Text style={styles.fabText}>create list</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
 
 // Calls Screen
 const CallsScreen = () => (
@@ -179,37 +215,7 @@ const CallsScreen = () => (
   const menuTop = topBarHeight;
 
 
-  const ProfileModal = () => {
-  if (!selectedUser) return null;
-
-  return (
-    <View style={styles.modalOverlay}>
-      {/* Pressable background to close modal */}
-      <Pressable style={StyleSheet.absoluteFill} onPress={() => setSelectedUser(null)} />
-
-      {/* Modal content */}
-      <View style={styles.modalContainer}>
-        <TouchableOpacity style={styles.touchableImage}  activeOpacity={0.8} onPress={() =>
-          router.push({ pathname: '/screens/ViewProfilePhoto', params: { uri: selectedUser.avatar } })
-        }>
-        <Image
-          source={{ uri: selectedUser.avatar }}
-          style={styles.modalFullImage}
-          resizeMode="cover"
-        />
-        </TouchableOpacity>
-
-        <View style={styles.modalActions}>
-          <TouchableOpacity style={styles.modalIcon}><Icon name="message" size={24} color="#1f6ea7" /></TouchableOpacity>
-          <TouchableOpacity style={styles.modalIcon}><Icon name="call" size={24} color="#1f6ea7" /></TouchableOpacity>
-          <TouchableOpacity style={styles.modalIcon}><Icon name="videocam" size={24} color="#1f6ea7" /></TouchableOpacity>
-          <TouchableOpacity style={styles.modalIcon}><Icon name="info" size={24} color="#1f6ea7" /></TouchableOpacity>
-        </View>
-      </View>
-    </View>
-  );
-};
-
+  
  
   return (
   <View style={{ flex: 1 }}>
@@ -258,7 +264,6 @@ const CallsScreen = () => (
           <Tab.Screen name="Calls" component={CallsScreen} />
         </Tab.Navigator>
       )}
-      <ProfileModal />
     </View>
   );};
 
@@ -303,7 +308,16 @@ const styles = StyleSheet.create({
   title: { fontSize: 20, fontWeight: 'bold', marginBottom: 8, textAlign: 'center' },
   subtitle: { textAlign: 'center', fontSize: 14, color: '#666', marginBottom: 24 },
 
-  avatarRow: { flexDirection: 'row', marginBottom: 24 },
+  inviteSection: {
+    alignItems: 'center',
+    width: '100%',
+    marginBottom: 24,
+  },
+  avatarRow: { flexDirection: 'row', marginBottom: 16 },
+  avatarRowContent: {
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
   avatarContainer: { alignItems: 'center', marginHorizontal: 10 },
   avatar: { width: 64, height: 64, borderRadius: 32, marginBottom: 4 },
   avatarName: { fontSize: 12, maxWidth: 70, textAlign: 'center' },
@@ -314,6 +328,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingVertical: 8,
     paddingHorizontal: 24,
+    alignSelf: 'center',
   },
   inviteText: { color: '#1f6ea7', fontWeight: '600', fontSize: 14 },
 
@@ -333,6 +348,22 @@ const styles = StyleSheet.create({
   chatLastMessage: { color: '#555', marginTop: 2, fontSize: 13 },
   chatTime: { fontSize: 12, color: '#777' },
 
+   chatMeta: {
+    alignItems: 'flex-end',
+    marginLeft: 12,
+  },
+  unreadBadge: {
+    backgroundColor: '#1f6ea7',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginTop: 6,
+  },
+  unreadText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
   // Floating action button
   fab: {
     position: 'absolute',
@@ -378,43 +409,4 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333',
   },
-
- modalOverlay: {
-  ...StyleSheet.absoluteFillObject,
-  backgroundColor: 'rgba(0,0,0,0.6)',
-  alignItems: 'center',
-  justifyContent: 'center',
-  zIndex: 2000,
-},
-
-modalContainer: {
-  backgroundColor: '#fff',
-  width: 300,
-  borderRadius: 12,
-  height: 300,
-  overflow: 'hidden',
-  elevation: 10,
-},
-
-touchableImage: {
-    width: '100%',
-    height: '80%',        // same as modalFullImage’s height
-  },
-  modalFullImage: {
-    flex: 1,              // fill its parent
-    width: undefined,     // allow flex to drive sizing
-    height: undefined,
-  },
-
-modalActions: {
-  flexDirection: 'row',
-  justifyContent: 'space-around',
-  paddingVertical: 10,
-  paddingHorizontal: 10,
-  backgroundColor: '#fff',
-},
-
-modalIcon: {
-  padding: 10,
-},
 });

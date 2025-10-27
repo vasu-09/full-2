@@ -1,9 +1,10 @@
 // ChatDetailScreen.js
 import { Audio } from 'expo-audio';
 import * as DocumentPicker from 'expo-document-picker';
-import { useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   Image,
@@ -18,18 +19,13 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { useChatSession } from '../hooks/useChatSession';
 
 const BAR_HEIGHT = 56;
 const MESSAGE_BAR_HEIGHT = 48;
 const MARGIN = 8;
 const MIC_SIZE = 48;
 
-const dummyMessages = [
-  { id: '1', text: 'Hey, how are you?', time: '9:00 AM', sender: 'other' },
-  { id: '2', text: "I'm good, thanks! You?", time: '9:01 AM', sender: 'me' },
-  { id: '3', text: 'Doing great — are we still on for today?', time: '9:02 AM', sender: 'other' },
-  { id: '4', text: 'Absolutely! See you at 3 PM.', time: '9:03 AM', sender: 'me' },
-];
 
 const userLists = [
   { id: '1', name: 'Grocery List of Kirana' },
@@ -121,13 +117,40 @@ const DUMMY_LIST = {
 
 export default function ChatDetailScreen() {
   const insets = useSafeAreaInsets();
-  const [messages, setMessages] = useState(dummyMessages);
   const [input, setInput] = useState('');
   const [showListPicker, setShowListPicker] = useState(false);
   const [selectedListId, setSelectedListId] = useState(null);
   const flatListRef = useRef();
   const [attachMenuVisible, setAttachMenuVisible] = useState(false);
   const router = useRouter();
+  const params = useLocalSearchParams();
+  const roomId = params?.roomId ? Number(params.roomId) : null;
+  const roomKey = params?.roomKey ? String(params.roomKey) : null;
+  const chatTitle = params?.title ? String(params.title) : 'Chat';
+  const peerId = params?.peerId ? Number(params.peerId) : null;
+
+  const {
+    messages: sessionMessages,
+    sendTextMessage,
+    notifyTyping,
+    markLatestRead,
+    typingUsers,
+    isLoading: isHistoryLoading,
+    error: historyError,
+  } = useChatSession({ roomId, roomKey, peerId, title: chatTitle });
+
+  const [localMessages, setLocalMessages] = useState([]);
+  const messages = useMemo(
+    () => [...sessionMessages, ...localMessages],
+    [sessionMessages, localMessages],
+  );
+  const subtitleText = typingUsers.length
+    ? 'typing…'
+    : 'Messages are end-to-end encrypted';
+  const avatarUri = params?.image
+    ? String(params.image)
+    : `https://ui-avatars.com/api/?name=${encodeURIComponent(chatTitle)}`;
+  const isRoomReady = Boolean(roomId && roomKey);
 
   const recordingRef = useRef(null);
   const previewSoundRef = useRef(null);
@@ -138,35 +161,34 @@ export default function ChatDetailScreen() {
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
   const [playingMessageId, setPlayingMessageId] = useState(null);
   
-
   const pickAndSendFile = async () => {
   try {
-    const res = await DocumentPicker.getDocumentAsync({
-      type: '*/*',
-      copyToCacheDirectory: true,
-    });
-    if (res.type === 'cancel') return;
+      const res = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        copyToCacheDirectory: true,
+      });
+      if (res.type === 'cancel') return;
 
-    const file = {
-      id: Date.now().toString(),
-      text: `📄 ${res.name}`,
-      uri: res.uri,
-      name: res.name,
-      mimeType: res.mimeType,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      sender: 'me',
-      isFile: true,
-    };
+      const file = {
+        id: Date.now().toString(),
+        text: `📄 ${res.name}`,
+        uri: res.uri,
+        name: res.name,
+        mimeType: res.mimeType,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        sender: 'me',
+        isFile: true,
+        pending: true,
+      };
 
-    setMessages(prev => [...prev, file]);
-  } catch (err) {
-    console.warn('File picker error:', err);
-  }
-};
+      setLocalMessages(prev => [...prev, file]);
+    } catch (err) {
+      console.warn('File picker error:', err);
+    }
+  };
   const openCamera = () => {
     setAttachMenuVisible(false);
     router.push('/screens/CameraScreen');
-    
   };
 
   const hideOverlay = () => {
@@ -188,19 +210,36 @@ export default function ChatDetailScreen() {
     flatListRef.current?.scrollToEnd({ animated: true });
   }, [messages]);
 
-  const sendMessage = () => {
+  useEffect(() => {
+    notifyTyping(Boolean(input.trim()));
+    return () => {
+      notifyTyping(false);
+    };
+  }, [input, notifyTyping]);
+
+  useEffect(() => {
+    if (!messages.length) {
+      return;
+    }
+    const last = messages[messages.length - 1];
+    if (last?.sender === 'other') {
+      markLatestRead();
+    }
+  }, [messages, markLatestRead]);
+
+  useEffect(() => {
+    setLocalMessages([]);
+  }, [roomId, roomKey]);
+
+  const sendCurrentMessage = async () => {
     const txt = input.trim();
     if (!txt) return;
-    setMessages(prev => [
-      ...prev,
-      {
-        id: Date.now().toString(),
-        text: txt,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        sender: 'me',
-      },
-    ]);
-    setInput('');
+     try {
+      await sendTextMessage(txt);
+      setInput('');
+    } catch (err) {
+      console.warn('Send message error:', err);
+    }
   };
 
   function parseQty(qtyStr) {
@@ -430,7 +469,7 @@ export default function ChatDetailScreen() {
     if (!recordedUri) return;
     const duration = recordingDuration;
     const uri = recordedUri;
-    setMessages(prev => [
+    setLocalMessages(prev => [
       ...prev,
       {
         id: Date.now().toString(),
@@ -438,6 +477,7 @@ export default function ChatDetailScreen() {
         duration,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         sender: 'me',
+        pending: true,
       },
     ]);
     await clearRecording();
@@ -477,7 +517,7 @@ export default function ChatDetailScreen() {
 
   const handlePrimaryAction = async () => {
     if (input.trim()) {
-      sendMessage();
+      sendCurrentMessage();
       return;
     }
 
@@ -547,108 +587,146 @@ export default function ChatDetailScreen() {
       <StatusBar backgroundColor="#1f6ea7" barStyle="light-content" />
 
       {/* Header */}
-      <View
-        style={[
-          styles.header,
-          { paddingTop: topInset, minHeight: BAR_HEIGHT + topInset },
-        ]}
-      >
-        <TouchableOpacity         onPress={() => {
-           if (router.canGoBack()) router.back();
-            else router.replace('/screens/MocScreen');
-          }}
-          style={styles.iconBtn}
-        >
-          <Icon name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
-        <Image source={{ uri: 'https://randomuser.me/api/portraits/men/2.jpg' }} style={styles.avatar} />
-         <TouchableOpacity
-          style={styles.titleContainer}
-          onPress={() => {
-            const media = messages.filter(m => m.image).map(m => m.image);
-            router.push({
-              pathname: '/screens/ContactProfileScreen',
-              params: {
-                name: 'João Pereira',
-                image: 'https://randomuser.me/api/portraits/men/2.jpg',
-                phone: '+91987654321',
-                media: JSON.stringify(media),
-              },
-            });
-          }}
-        >
-          <Text style={styles.headerTitle}>João Pereira</Text>
-            <Text style={styles.headerSubtitle}>last seen today at 9:07 AM</Text>
-        </TouchableOpacity>
-        <View style={styles.headerActions}>
-         <TouchableOpacity
-            style={styles.iconBtn}
-            onPress={() =>
-              router.push({
-                pathname: '/screens/VideoCallScreen',
-                params: {
-                  name: 'João Pereira',
-                  image: 'https://randomuser.me/api/portraits/men/2.jpg',
-                },
-              })
-            }
+       {isRoomReady ? (
+        <>
+          {/* Header */}
+          <View
+            style={[
+              styles.header,
+              { paddingTop: topInset, minHeight: BAR_HEIGHT + topInset },
+            ]}
           >
-            <Icon name="videocam" size={24} color="#fff" />
-          </TouchableOpacity>
              <TouchableOpacity
-            style={styles.iconBtn}
-            onPress={() =>
-              router.push({
-                pathname: '/screens/CallScreen',
-                params: {
-                  name: 'João Pereira',
-                  image: 'https://randomuser.me/api/portraits/men/2.jpg',
-                },
-              })
-            }
-          >
-            <Icon name="call" size={24} color="#fff" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.iconBtn}>
-            <Icon name="more-vert" size={24} color="#fff" />
-          </TouchableOpacity>
-        </View>
-      </View>
+              onPress={() => {
+                if (router.canGoBack()) router.back();
+                else router.replace('/screens/MocScreen');
+              }}
+              style={styles.iconBtn}
+            >
+              <Icon name="arrow-back" size={24} color="#fff" />
+            </TouchableOpacity>
+            <Image source={{ uri: avatarUri }} style={styles.avatar} />
+            <TouchableOpacity
+              style={styles.titleContainer}
+              onPress={() => {
+                const media = messages.filter(m => m.image).map(m => m.image);
+                router.push({
+                  pathname: '/screens/ContactProfileScreen',
+                  params: {
+                    name: chatTitle,
+                    image: avatarUri,
+                    phone: params?.phone ? String(params.phone) : '',
+                    media: JSON.stringify(media),
+                  },
+                });
+              }}
+            >
+              <Text style={styles.headerTitle}>{chatTitle}</Text>
+              <Text style={styles.headerSubtitle}>{subtitleText}</Text>
+            </TouchableOpacity>
+            <View style={styles.headerActions}>
+              <TouchableOpacity
+                style={styles.iconBtn}
+                onPress={() =>
+                  router.push({
+                    pathname: '/screens/VideoCallScreen',
+                    params: {
+                      name: chatTitle,
+                      image: avatarUri,
+                    },
+                  })
+                }
+              >
+                <Icon name="videocam" size={24} color="#fff" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.iconBtn}
+                onPress={() =>
+                  router.push({
+                    pathname: '/screens/CallScreen',
+                    params: {
+                      name: chatTitle,
+                      image: avatarUri,
+                    },
+                  })
+                }
+              >
+                <Icon name="call" size={24} color="#fff" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.iconBtn}>
+                <Icon name="more-vert" size={24} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          </View>
 
       {/* Chat messages */}
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        keyExtractor={i => i.id}
-        contentContainerStyle={{
-          padding: 12,
-          paddingBottom: BAR_HEIGHT + MESSAGE_BAR_HEIGHT + bottomOffset + 12 + insets.top,
-        }}
-        renderItem={({ item }) => (
-          <View style={[styles.bubble, item.sender === 'me' ? styles.myBubble : styles.theirBubble]}>
-            {item.audio ? (
-              <View style={styles.audioMessageRow}>
-                <TouchableOpacity
-                  style={styles.audioPlayButton}
-                  onPress={() => toggleMessagePlayback(item)}
+          {historyError ? (
+            <View style={styles.historyErrorBanner}>
+              <Text style={styles.historyErrorText}>{historyError}</Text>
+            </View>
+          ) : null}
+          <FlatList
+            ref={flatListRef}
+            data={messages}
+            keyExtractor={i => i.id}
+            contentContainerStyle={{
+              padding: 12,
+              paddingBottom:
+                BAR_HEIGHT + MESSAGE_BAR_HEIGHT + bottomOffset + 12 + insets.top,
+            }}
+            ListEmptyComponent={
+              isHistoryLoading ? (
+                <View style={styles.historyLoading}>
+                  <ActivityIndicator color="#1f6ea7" />
+                </View>
+              ) : null
+            }
+            renderItem={({ item }) => {
+              const statusText = item.pending
+                ? 'Sending…'
+                : item.failed
+                  ? 'Failed'
+                  : item.time;
+              return (
+                <View
+                  style={[
+                    styles.bubble,
+                    item.sender === 'me' ? styles.myBubble : styles.theirBubble,
+                    item.failed ? styles.failedBubble : null,
+                  ]}
                 >
-                  <Icon
-                    name={playingMessageId === item.id ? 'pause' : 'play-arrow'}
-                    size={28}
-                    color="#1f6ea7"
-                  />
-                </TouchableOpacity>
-                <Text style={styles.audioDurationText}>{formatDuration(item.duration)}</Text>
-              </View>
-            ) : (
-              <Text style={styles.messageText}>{item.text}</Text>
-            )}
-            <Text style={[styles.messageTime, item.sender === 'me' ? styles.myTime : styles.theirTime]}>
-              {item.time}
-            </Text>
-          </View>
-        )}
-      />
+                  {item.audio ? (
+                    <View style={styles.audioMessageRow}>
+                      <TouchableOpacity
+                        style={styles.audioPlayButton}
+                        onPress={() => toggleMessagePlayback(item)}
+                        disabled={item.pending || item.failed}
+                      >
+                        <Icon
+                          name={playingMessageId === item.id ? 'pause' : 'play-arrow'}
+                          size={28}
+                          color="#1f6ea7"
+                        />
+                      </TouchableOpacity>
+                      <Text style={styles.audioDurationText}>{formatDuration(item.duration)}</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.messageText}>{item.text}</Text>
+                  )}
+                  <Text
+                    style={[
+                      styles.messageTime,
+                      item.sender === 'me' ? styles.myTime : styles.theirTime,
+                      item.pending ? styles.pendingTime : null,
+                      item.failed ? styles.failedTime : null,
+                    ]}
+                  >
+                    {statusText}
+                  </Text>
+                </View>
+              );
+            }}
+          />
 
       {/* Attach grid */}
       {attachMenuVisible && (
@@ -790,7 +868,13 @@ export default function ChatDetailScreen() {
                   disabled={isRecording}
                 >
                   <Icon
-                    name={isRecording ? 'fiber-manual-record' : isPreviewPlaying ? 'pause' : 'play-arrow'}
+                    name={
+                      isRecording
+                        ? 'fiber-manual-record'
+                        : isPreviewPlaying
+                          ? 'pause'
+                          : 'play-arrow'
+                    }
                     size={20}
                     color={isRecording ? '#d32f2f' : '#1f6ea7'}
                   />
@@ -817,16 +901,16 @@ export default function ChatDetailScreen() {
                 <Icon name="attach-file" size={24} color="#888" />
               </TouchableOpacity>
 
-               <TextInput
-                 style={styles.textInput}
-                  placeholder="Message"
-                  placeholderTextColor="#888"
-                  value={input}
-                  onChangeText={setInput}
-                  onFocus={hideOverlay}
-               />  
+              <TextInput
+                style={styles.textInput}
+                placeholder="Message"
+                placeholderTextColor="#888"
+                value={input}
+                onChangeText={setInput}
+                onFocus={hideOverlay}
+              />  
 
-            <TouchableOpacity
+             <TouchableOpacity
                 style={styles.iconButton}
                 onPress={() => {
                   setShowListPicker(v => !v);
@@ -864,12 +948,84 @@ export default function ChatDetailScreen() {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+       </>
+      ) : (
+        <View style={styles.missingRoomWrapper}>
+          <Icon
+            name="chat-bubble-outline"
+            size={48}
+            color="#1f6ea7"
+            style={{ marginBottom: 16 }}
+          />
+          <Text style={styles.missingRoomTitle}>Chat is syncing…</Text>
+          <Text style={styles.missingRoomSubtitle}>
+            We&apos;re setting up this conversation. Please return to your chats and try again in a moment.
+          </Text>
+          <TouchableOpacity
+            style={styles.missingRoomButton}
+            onPress={() => {
+              if (router.canGoBack()) router.back();
+              else router.replace('/screens/MocScreen');
+            }}
+          >
+            <Text style={styles.missingRoomButtonText}>Back to chats</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#eef5fa' },
+
+  missingRoomWrapper: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  missingRoomTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1f6ea7',
+    marginBottom: 8,
+  },
+  missingRoomSubtitle: {
+    fontSize: 14,
+    color: '#555',
+    textAlign: 'center',
+  },
+  missingRoomButton: {
+    marginTop: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 24,
+    backgroundColor: '#1f6ea7',
+  },
+  missingRoomButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 15,
+  },
+
+  historyErrorBanner: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    backgroundColor: '#fdecea',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  historyErrorText: {
+    color: '#b3261e',
+    textAlign: 'center',
+    fontSize: 13,
+  },
+  historyLoading: {
+    paddingVertical: 24,
+    alignItems: 'center',
+  },
 
   header: {
     minHeight: BAR_HEIGHT,
@@ -889,7 +1045,7 @@ const styles = StyleSheet.create({
   titleContainer: {
     flex: 1,
     justifyContent: 'center',
-    lignItems: 'flex-start',
+    alignItems: 'flex-start',
   },
   headerTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   headerActions: { flexDirection: 'row' },
@@ -922,6 +1078,17 @@ const styles = StyleSheet.create({
   },
   myTime: { color: '#555' },
   theirTime: { color: '#777' },
+  pendingTime: {
+    color: '#1f6ea7',
+    fontStyle: 'italic',
+  },
+  failedTime: {
+    color: '#b3261e',
+  },
+  failedBubble: {
+    borderWidth: 1,
+    borderColor: '#b3261e',
+  },
 
   listPickerContainer: {
     position: 'absolute',

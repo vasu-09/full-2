@@ -9,6 +9,12 @@ import { Platform } from 'react-native';
 import { buildWsUrl } from './apiClient';
 import { getAccessToken } from './authStorage';
 
+type RNWebSocketConstructor = new (
+  url: string,
+  protocols?: string | string[],
+  options?: { headers?: Record<string, string> },
+) => WebSocket;
+
 type FrameHandler = (frame: StompFrame) => void;
 
 export type StompFrame = {
@@ -62,11 +68,17 @@ class SimpleStompClient {
 
       try {
         // RN WebSocket constructor accepts headers as third argument (not web).
-        const socket = new WebSocket(
-          this.token ? `${this.url}?access_token=${encodeURIComponent(this.token)}` : this.url,
-          [],
-          Platform.OS === 'web' ? undefined : { headers },
-        );
+        const wsUrl = this.token
+          ? `${this.url}?access_token=${encodeURIComponent(this.token)}`
+          : this.url;
+        const socket: WebSocket =
+          Platform.OS === 'web'
+            ? new WebSocket(wsUrl)
+            : new (WebSocket as unknown as RNWebSocketConstructor)(
+                wsUrl,
+                undefined,
+                { headers },
+              );
         this.ws = socket;
 
         socket.onopen = () => {
@@ -241,35 +253,43 @@ class SimpleStompClient {
 
 class StompManager {
   private client: SimpleStompClient | null = null;
-  private connecting = false;
+  private initPromise: Promise<SimpleStompClient> | null = null;
   private reconnectDelay = 5000;
   private subscriptions = new Map<string, SubscriptionEntry>();
   private desired = false;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private idCounter = 0;
 
-  private async initClient() {
-    if (this.connecting) {
-      return this.client;
+  private async initClient(): Promise<SimpleStompClient> {
+    if (this.initPromise) {
+      return this.initPromise;
     }
-    this.connecting = true;
-    const token = await getAccessToken();
-    const url = buildWsUrl();
-    const client = new SimpleStompClient(url, token ?? undefined);
-    client.onDisconnect = () => {
-      this.connecting = false;
-      this.client = null;
-      if (this.desired) {
-        this.scheduleReconnect();
-      }
-    };
-    client.onConnectCallback = () => {
-      this.resubscribe(client);
-    };
-    await client.connect();
-    this.client = client;
-    this.connecting = false;
-    return client;
+
+    this.initPromise = (async () => {
+      const token = await getAccessToken();
+      const url = buildWsUrl();
+      const client = new SimpleStompClient(url, token ?? undefined);
+      client.onDisconnect = () => {
+        this.client = null;
+        this.initPromise = null;
+        if (this.desired) {
+          this.scheduleReconnect();
+        }
+      };
+      client.onConnectCallback = () => {
+        this.resubscribe(client);
+      };
+      await client.connect();
+      this.client = client;
+      return client;
+    })();
+
+    try {
+      const readyClient = await this.initPromise;
+      return readyClient;
+    } finally {
+      this.initPromise = null;
+    }
   }
 
   private scheduleReconnect() {
@@ -296,7 +316,7 @@ class StompManager {
     });
   }
 
-  async ensureConnected() {
+  async ensureConnected(): Promise<SimpleStompClient> {
     this.desired = true;
     if (this.client && this.client.isConnected()) {
       return this.client;
@@ -304,7 +324,7 @@ class StompManager {
     return this.initClient();
   }
 
-  async disconnect() {
+  async disconnect(): Promise<void> {
     this.desired = false;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
@@ -314,6 +334,7 @@ class StompManager {
       this.client.disconnect();
       this.client = null;
     }
+    this.initPromise = null;
   }
 
   async publish(destination: string, payload: unknown, headers: Record<string, unknown> = {}) {

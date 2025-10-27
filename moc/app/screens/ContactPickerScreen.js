@@ -1,8 +1,9 @@
 // screens/ContactPickerScreen.js
 import * as Contacts from 'expo-contacts';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
   Image,
   ScrollView,
@@ -14,12 +15,15 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import { syncContacts } from '../services/contactService';
+import { useChatRegistry } from '../context/ChatContext';
+import { normalizePhoneNumber, syncContacts } from '../services/contactService';
+import { createDirectRoom } from '../services/roomsService';
 
 
 export default function ContactPickerScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { upsertRoom } = useChatRegistry();
 
   const [contacts, setContacts] = useState([]);
   const [selected, setSelected] = useState([]);
@@ -28,6 +32,32 @@ export default function ContactPickerScreen() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncError, setSyncError] = useState('');
   const [matchedContacts, setMatchedContacts] = useState([]);
+  const [createError, setCreateError] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
+
+  const matchesByPhone = useMemo(() => {
+    const map = new Map();
+    matchedContacts.forEach(match => {
+      if (match?.phone) {
+        map.set(match.phone, match);
+      }
+    });
+    return map;
+  }, [matchedContacts]);
+
+  const getMatchForContact = useCallback(
+    contact => {
+      const numbers = contact?.phoneNumbers ?? [];
+      for (const phone of numbers) {
+        const normalized = phone?.number ? normalizePhoneNumber(phone.number) : null;
+        if (normalized && matchesByPhone.has(normalized)) {
+          return matchesByPhone.get(normalized);
+        }
+      }
+      return null;
+    },
+    [matchesByPhone],
+  );
 
   useEffect(() => {
     (async () => {
@@ -52,18 +82,53 @@ export default function ContactPickerScreen() {
     })();
   }, []);
 
-  const toggleSelect = contact =>
-    setSelected(curr =>
-      curr.some(c => c.id === contact.id)
-        ? curr.filter(c => c.id !== contact.id)
-        : [...curr, contact]
-    );
+  const toggleSelect = contact => {
+    setCreateError('');
+    const match = getMatchForContact(contact);
+    if (!match) {
+      setCreateError('Selected contact has not joined MoC yet.');
+      return;
+    }
+    setSelected(curr => (curr.some(c => c.id === contact.id) ? [] : [contact]));
+  };
 
-  const handleSend = () => {
-    router.replace({
-      pathname: '/screens/ChatDetailScreen',
-      params: { contacts: JSON.stringify(selected) },
-    });
+  const handleSend = async () => {
+    if (!selected.length) {
+      return;
+    }
+    const contact = selected[0];
+    const match = getMatchForContact(contact);
+    if (!match) {
+      setCreateError('Please choose a contact who already uses MoC.');
+      return;
+    }
+
+    try {
+      setCreateError('');
+      setIsCreating(true);
+      const room = await createDirectRoom(match.userId);
+      upsertRoom({
+        id: room.id,
+        roomKey: room.roomId,
+        title: contact?.name ?? match.phone,
+        avatar: contact?.imageAvailable ? contact?.image?.uri ?? null : null,
+        peerId: match.userId,
+      });
+      router.replace({
+        pathname: '/screens/ChatDetailScreen',
+        params: {
+          roomId: String(room.id),
+          roomKey: room.roomId,
+          title: contact?.name ?? match.phone,
+          peerId: String(match.userId),
+        },
+      });
+    } catch (err) {
+      console.error('Failed to start conversation', err);
+      setCreateError('Unable to start a conversation right now. Please try again.');
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   const filteredContacts = contacts.filter(c =>
@@ -72,6 +137,8 @@ export default function ContactPickerScreen() {
 
   const renderItem = ({ item }) => {
     const isSel = selected.some(c => c.id === item.id);
+    const match = getMatchForContact(item);
+    const statusLabel = match ? 'On MoC' : 'Invite';
     return (
       <TouchableOpacity onPress={() => toggleSelect(item)} style={styles.item}>
         {item.imageAvailable ? (
@@ -81,7 +148,12 @@ export default function ContactPickerScreen() {
             <Icon name="person" size={24} color="#888" />
           </View>
         )}
-        <Text style={styles.name}>{item.name}</Text>
+        <View style={styles.itemTextWrapper}>
+          <Text style={styles.name}>{item.name}</Text>
+          <Text style={[styles.statusLabel, match ? styles.statusAvailable : styles.statusUnavailable]}>
+            {statusLabel}
+          </Text>
+        </View>
         {isSel && <Icon name="check-circle" size={24} color="#1f6ea7" />}
       </TouchableOpacity>
     );
@@ -177,6 +249,11 @@ export default function ContactPickerScreen() {
           <Text style={styles.syncStatusText}>None of your contacts have joined MoC yet.</Text>
         )}
       </View>
+      {createError ? (
+        <View style={styles.errorWrapper}>
+          <Text style={styles.errorText}>{createError}</Text>
+        </View>
+      ) : null}
       <FlatList
         data={filteredContacts}
         keyExtractor={c => c.id}
@@ -187,10 +264,11 @@ export default function ContactPickerScreen() {
       {/* Floating Send button */}
       {selected.length > 0 && (
         <TouchableOpacity
-          style={[styles.fab, { bottom: insets.bottom + 16 }]}
+          style={[styles.fab, isCreating && styles.fabDisabled, { bottom: insets.bottom + 16 }]}
           onPress={handleSend}
+          disabled={isCreating}
         >
-          <Icon name="send" size={24} color="#fff" />
+          {isCreating ? <ActivityIndicator color="#fff" /> : <Icon name="send" size={24} color="#fff" />}
         </TouchableOpacity>
       )}
     </SafeAreaView>
@@ -295,7 +373,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  name: { flex: 1, fontSize: 16 },
+ itemTextWrapper: {
+    flex: 1,
+  },
+  name: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#222',
+  },
+  statusLabel: {
+    fontSize: 12,
+    marginTop: 4,
+  },
+  statusAvailable: {
+    color: '#2e7d32',
+  },
+  statusUnavailable: {
+    color: '#888',
+  },
 
   fab: {
     position: 'absolute',
@@ -304,6 +399,9 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     padding: 16,
     elevation: 4,
+  },
+  fabDisabled: {
+    backgroundColor: '#7aa3c3',
   },
 
  syncStatusWrapper: {
@@ -318,7 +416,20 @@ const styles = StyleSheet.create({
     color: '#b3261e',
   },
 
-searchHeader: {
+  errorWrapper: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    backgroundColor: '#fdecea',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  errorText: {
+    color: '#b3261e',
+    fontSize: 13,
+  },
+
+  searchHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',

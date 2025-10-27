@@ -24,7 +24,7 @@ export interface ChatMessageDto {
 }
 
 type HistoryParams = {
-  beforeTs?: string;
+  beforeTs?: string | Date;
   beforeId?: string | number;
   limit?: number;
 };
