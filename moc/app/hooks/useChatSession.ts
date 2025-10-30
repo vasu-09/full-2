@@ -8,6 +8,7 @@ import {
   markRoomRead,
 } from '../services/roomsService';
 import stompClient, { StompFrame } from '../services/stompClient';
+import { getE2EEClient, E2EEClient, E2EEEnvelope } from '../services/e2ee';
 
 type InternalMessage = {
   messageId: string;
@@ -19,6 +20,8 @@ type InternalMessage = {
   pending?: boolean;
   error?: boolean;
   readByPeer?: boolean;
+  decryptionFailed?: boolean;
+  e2ee?: boolean;
 };
 
 export type DisplayMessage = {
@@ -68,6 +71,7 @@ const toInternalMessage = (dto: ChatMessageDto): InternalMessage => ({
   pending: false,
   error: false,
   readByPeer: false,
+  e2ee: dto.e2ee,
 });
 
 const generateMessageId = () => {
@@ -104,6 +108,9 @@ export const useChatSession = ({
   const [isConnected, setIsConnected] = useState(false);
   const [typing, setTyping] = useState<TypingUser[]>([]);
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+  const [userLoaded, setUserLoaded] = useState(false);
+  const [e2eeClient, setE2eeClient] = useState<E2EEClient | null>(null);
+  const [e2eeReady, setE2eeReady] = useState(false);
   const latestMessageIdRef = useRef<string | null>(null);
   const typingSentRef = useRef(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -117,7 +124,32 @@ export const useChatSession = ({
           setCurrentUserId(Number.isNaN(parsed) ? null : parsed);
         }
       })
-      .catch(() => setCurrentUserId(null));
+      .catch(() => setCurrentUserId(null))
+      .finally(() => setUserLoaded(true));
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    getE2EEClient()
+      .then(client => {
+        if (!cancelled) {
+          setE2eeClient(client);
+        }
+      })
+      .catch(err => {
+        console.warn('E2EE initialization failed', err);
+        if (!cancelled) {
+          setE2eeClient(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setE2eeReady(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -159,13 +191,44 @@ export const useChatSession = ({
     try {
       const data = await fetchRoomMessages(roomId, { limit: 50 });
       const ordered = data.slice().reverse();
-      setRawMessages(ordered.map(toInternalMessage));
+      const client = e2eeClient;
+      const processed = await Promise.all(
+        ordered.map(async dto => {
+          const base = toInternalMessage(dto);
+          let text = dto.body ?? null;
+          let failed = false;
+          if (dto.e2ee && dto.ciphertext && dto.aad && dto.iv && dto.keyRef) {
+            const envelope: E2EEEnvelope = {
+              messageId: dto.messageId,
+              aad: dto.aad,
+              iv: dto.iv,
+              ciphertext: dto.ciphertext,
+              keyRef: dto.keyRef,
+            };
+            const fromSelf = currentUserId != null && dto.senderId === currentUserId;
+            if (client) {
+              try {
+                text = await client.decryptEnvelope(envelope, Boolean(fromSelf));
+              } catch (decryptErr) {
+                console.warn('Failed to decrypt history message', decryptErr);
+                text = 'Unable to decrypt message';
+                failed = true;
+              }
+            } else {
+              text = 'Encrypted message';
+              failed = true;
+            }
+          }
+          return { ...base, body: text, decryptionFailed: failed };
+        }),
+      );
+      setRawMessages(processed);
       const last = ordered[ordered.length - 1];
       if (last) {
         latestMessageIdRef.current = last.messageId;
         updateRoomActivity(roomKey ?? String(roomId), {
           messageId: last.messageId,
-          text: last.body,
+          text: last.body ?? 'Encrypted message',
           at: last.serverTs ?? new Date().toISOString(),
           senderId: last.senderId,
         });
@@ -177,13 +240,20 @@ export const useChatSession = ({
     } finally {
       setIsLoading(false);
     }
-  }, [roomId, roomKey, updateRoomActivity, resetUnread]);
+  }, [roomId, roomKey, updateRoomActivity, resetUnread, e2eeClient, currentUserId]);
 
   useEffect(() => {
+    if (!userLoaded) {
+      return;
+    }
+    if (peerId && !e2eeReady) {
+      return;
+    }
     loadHistory();
-  }, [loadHistory]);
+  }, [loadHistory, userLoaded, peerId, e2eeReady]);
 
   useEffect(() => {
+    
     if (!roomId) {
       return;
     }
@@ -248,33 +318,72 @@ export const useChatSession = ({
       if (!payload) {
         return;
       }
-      const event: InternalMessage = {
+      const base: InternalMessage = {
         messageId: payload.messageId,
         roomId: payload.roomId,
         senderId: payload.senderId ?? null,
         type: payload.type ?? MESSAGE_TYPE_TEXT,
-        body: payload.body,
         serverTs: payload.serverTs ?? new Date().toISOString(),
         pending: false,
         error: false,
+        e2ee: Boolean(payload.e2ee),
       };
-      mergeMessage(event);
-      latestMessageIdRef.current = event.messageId;
-      updateRoomActivity(roomKey, {
-        messageId: event.messageId,
-        text: event.body,
-        at: event.serverTs ?? new Date().toISOString(),
-        senderId: event.senderId ?? null,
-      });
-      if (event.senderId != null && currentUserId != null && event.senderId !== currentUserId) {
-        incrementUnread(roomKey);
-        const ackId = Number(payload.messageId);
-        if (!Number.isNaN(ackId)) {
-          stompClient
-            .publish('/app/ack', { messageId: ackId })
-            .catch(err => console.warn('Failed to acknowledge message delivery', err));
+      const finalize = (text: string | null, failed = false) => {
+        mergeMessage({
+          ...base,
+          body: text,
+          decryptionFailed: failed,
+        });
+        latestMessageIdRef.current = base.messageId;
+        updateRoomActivity(roomKey, {
+          messageId: base.messageId,
+          text: text ?? 'Encrypted message',
+          at: base.serverTs ?? new Date().toISOString(),
+          senderId: base.senderId ?? null,
+        });
+        if (base.senderId != null && currentUserId != null && base.senderId !== currentUserId) {
+          incrementUnread(roomKey);
+          const ackId = Number(payload.messageId);
+          if (!Number.isNaN(ackId)) {
+            stompClient
+              .publish('/app/ack', { messageId: ackId })
+              .catch(err => console.warn('Failed to acknowledge message delivery', err));
+          }
         }
+      };
+
+      if (payload.e2ee) {
+        const fromSelf = currentUserId != null && base.senderId === currentUserId;
+        if (fromSelf) {
+          mergeMessage({ ...base });
+          return;
+        }
+        if (payload.ciphertext && payload.aad && payload.iv && payload.keyRef) {
+          const envelope: E2EEEnvelope = {
+            messageId: String(payload.messageId ?? ''),
+            aad: payload.aad,
+            iv: payload.iv,
+            ciphertext: payload.ciphertext,
+            keyRef: payload.keyRef,
+          };
+          if (e2eeClient) {
+            e2eeClient
+              .decryptEnvelope(envelope, false)
+              .then(text => finalize(text))
+              .catch(err => {
+                console.warn('Failed to decrypt incoming message', err);
+                finalize('Unable to decrypt message', true);
+              });
+          } else {
+            finalize('Encrypted message', true);
+          }
+        } else {
+          finalize('Encrypted message', true);
+        }
+        return;
       }
+
+      finalize(payload.body ?? null);
     });
 
     const ackSub = stompClient.subscribe('/user/queue/ack', frame => {
@@ -502,6 +611,7 @@ export const useChatSession = ({
         pending: true,
         error: false,
         readByPeer: false,
+        e2ee: Boolean(peerId && e2eeClient),
       };
       mergeMessage(optimistic);
       latestMessageIdRef.current = messageId;
@@ -513,12 +623,36 @@ export const useChatSession = ({
       });
       resetUnread(roomKey);
       try {
-        await stompClient.publish(`/app/rooms/${roomKey}/send`, {
-          messageId,
-          type: MESSAGE_TYPE_TEXT,
-          body,
-          e2ee: false,
-        });
+        let payload: Record<string, unknown> | null = null;
+        if (peerId && e2eeClient) {
+          try {
+            const encrypted = await e2eeClient.encryptForUser(peerId, messageId, body);
+            if (encrypted) {
+              payload = {
+                messageId,
+                type: MESSAGE_TYPE_TEXT,
+                e2ee: true,
+                e2eeVer: encrypted.envelope.e2eeVer,
+                algo: encrypted.envelope.algo,
+                aad: encrypted.envelope.aad,
+                iv: encrypted.envelope.iv,
+                ciphertext: encrypted.envelope.ciphertext,
+                keyRef: encrypted.envelope.keyRef,
+              };
+            }
+          } catch (encryptErr) {
+            console.warn('Failed to encrypt message', encryptErr);
+          }
+        }
+        if (!payload) {
+          payload = {
+            messageId,
+            type: MESSAGE_TYPE_TEXT,
+            body,
+            e2ee: false,
+          };
+        }
+        await stompClient.publish(`/app/rooms/${roomKey}/send`, payload);
       } catch (err) {
         console.warn('Failed to send message', err);
         mergeMessage({
@@ -528,7 +662,7 @@ export const useChatSession = ({
         });
       }
     },
-    [roomId, roomKey, currentUserId, mergeMessage, updateRoomActivity, resetUnread],
+    [roomId, roomKey, currentUserId, mergeMessage, updateRoomActivity, resetUnread, peerId, e2eeClient],
   );
 
   const markLatestRead = useCallback(async () => {
