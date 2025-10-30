@@ -18,6 +18,7 @@ type InternalMessage = {
   serverTs?: string | null;
   pending?: boolean;
   error?: boolean;
+  readByPeer?: boolean;
 };
 
 export type DisplayMessage = {
@@ -32,6 +33,7 @@ export type DisplayMessage = {
   pending?: boolean;
   failed?: boolean;
   raw: InternalMessage;
+  readByPeer?: boolean;
 };
 
 type TypingUser = {
@@ -65,6 +67,7 @@ const toInternalMessage = (dto: ChatMessageDto): InternalMessage => ({
   serverTs: dto.serverTs,
   pending: false,
   error: false,
+  readByPeer: false,
 });
 
 const generateMessageId = () => {
@@ -129,10 +132,21 @@ export const useChatSession = ({
       const idx = prev.findIndex(m => m.messageId === incoming.messageId);
       if (idx >= 0) {
         const next = [...prev];
-        next[idx] = { ...next[idx], ...incoming };
+       next[idx] = {
+          ...next[idx],
+          ...incoming,
+          readByPeer:
+            incoming.readByPeer !== undefined ? incoming.readByPeer : next[idx].readByPeer,
+        };
         return next;
       }
-      return [...prev, incoming];
+      return [
+        ...prev,
+        {
+          ...incoming,
+          readByPeer: incoming.readByPeer ?? false,
+        },
+      ];
     });
   }, []);
 
@@ -168,6 +182,45 @@ export const useChatSession = ({
   useEffect(() => {
     loadHistory();
   }, [loadHistory]);
+
+  useEffect(() => {
+    if (!roomId) {
+      return;
+    }
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setInterval> | null = null;
+
+    const sendPing = () =>
+      stompClient
+        .publish(`/app/room/${roomId}/ping`, {
+          deviceId: 'mobile',
+        })
+        .catch(err => {
+          console.warn('Failed to send presence ping', err);
+        });
+
+    stompClient
+      .ensureConnected()
+      .then(() => {
+        if (cancelled) {
+          return;
+        }
+        sendPing();
+        timer = setInterval(sendPing, 15000);
+      })
+      .catch(err => {
+        console.warn('Unable to establish STOMP connection for pings', err);
+      });
+
+    return () => {
+      cancelled = true;
+      if (timer) {
+        clearInterval(timer);
+      }
+    };
+  }, [roomId]);
+
 
   useEffect(() => {
     if (!roomId || !roomKey) {
@@ -215,6 +268,12 @@ export const useChatSession = ({
       });
       if (event.senderId != null && currentUserId != null && event.senderId !== currentUserId) {
         incrementUnread(roomKey);
+        const ackId = Number(payload.messageId);
+        if (!Number.isNaN(ackId)) {
+          stompClient
+            .publish('/app/ack', { messageId: ackId })
+            .catch(err => console.warn('Failed to acknowledge message delivery', err));
+        }
       }
     });
 
@@ -262,7 +321,56 @@ export const useChatSession = ({
       }
     });
 
-    subscriptionsRef.current = [messageSub, ackSub, typingSub, readSub];
+    const subs: (() => void)[] = [messageSub, ackSub, typingSub, readSub];
+
+    if (peerId != null) {
+      const dmTypingSub = stompClient.subscribe('/user/queue/typing', frame => {
+        const payload = parseFrameBody(frame);
+        if (!payload || payload.senderId == null) {
+          return;
+        }
+        const sender = typeof payload.senderId === 'number' ? payload.senderId : Number(payload.senderId);
+        if (sender !== peerId) {
+          return;
+        }
+        const expiresAt = Date.now() + 5000;
+        setTyping(prev => {
+          const filtered = prev.filter(t => t.userId !== sender);
+          return [...filtered, { userId: sender, expiresAt }];
+        });
+      });
+
+      const dmReadSub = stompClient.subscribe('/user/queue/receipts', frame => {
+        const payload = parseFrameBody(frame);
+        if (!payload) {
+          return;
+        }
+        const sender = typeof payload.senderId === 'number' ? payload.senderId : Number(payload.senderId);
+        const payloadRoomId =
+          typeof payload.roomId === 'number' ? payload.roomId : Number(payload.roomId ?? roomId);
+        if (Number.isNaN(payloadRoomId) || sender !== peerId || payloadRoomId !== roomId) {
+          return;
+        }
+        const messageKey = String(payload.messageId ?? '');
+        if (!messageKey) {
+          return;
+        }
+        setRawMessages(prev =>
+          prev.map(msg =>
+            msg.messageId === messageKey
+              ? {
+                  ...msg,
+                  readByPeer: true,
+                }
+              : msg,
+          ),
+        );
+      });
+
+      subs.push(dmTypingSub, dmReadSub);
+    }
+
+    subscriptionsRef.current = subs;
 
     return () => {
       cancelled = true;
@@ -270,7 +378,16 @@ export const useChatSession = ({
       subscriptionsRef.current.forEach(unsub => unsub());
       subscriptionsRef.current = [];
     };
-  }, [roomId, roomKey, mergeMessage, updateRoomActivity, incrementUnread, resetUnread, currentUserId]);
+ }, [
+    roomId,
+    roomKey,
+    mergeMessage,
+    updateRoomActivity,
+    incrementUnread,
+    resetUnread,
+    currentUserId,
+    peerId,
+  ]);
 
   useEffect(() => {
     if (!typing.length) {
@@ -313,6 +430,7 @@ export const useChatSession = ({
           pending: msg.pending,
           failed: msg.error,
           raw: msg,
+          readByPeer: msg.readByPeer,
         };
       });
   }, [rawMessages, currentUserId]);
@@ -326,8 +444,14 @@ export const useChatSession = ({
         typing: isTyping,
         deviceId: 'mobile',
       });
+      if (peerId != null) {
+        stompClient.publish(`/app/dm/${peerId}/typing`, {
+          roomId,
+          typing: isTyping,
+        });
+      }
     },
-    [roomId],
+    [roomId, peerId],
   );
 
   const notifyTyping = useCallback(
@@ -377,6 +501,7 @@ export const useChatSession = ({
         serverTs: nowIso,
         pending: true,
         error: false,
+        readByPeer: false,
       };
       mergeMessage(optimistic);
       latestMessageIdRef.current = messageId;
@@ -419,11 +544,17 @@ export const useChatSession = ({
       await stompClient.publish(`/app/room/${roomId}/read`, {
         lastReadMessageId: lastMessageId,
       });
+      if (peerId != null) {
+        await stompClient.publish(`/app/dm/${peerId}/read`, {
+          roomId,
+          messageId: lastMessageId,
+        });
+      }
       resetUnread(roomKey);
     } catch (err) {
       console.warn('Failed to mark messages as read', err);
     }
-  }, [roomId, roomKey, resetUnread]);
+  }, [roomId, roomKey, resetUnread, peerId]);
 
   const typingUsers = useMemo(() => typing.map(entry => entry.userId), [typing]);
 
@@ -436,6 +567,7 @@ export const useChatSession = ({
     notifyTyping,
     markLatestRead,
     typingUsers,
+    currentUserId,
   } as const;
 };
 

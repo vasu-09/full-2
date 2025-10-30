@@ -299,7 +299,8 @@ const styles = StyleSheet.create({
   // Empty-state center
   centerContent: {
     flex: 1,
-    justifyContent: 'center',
+    paddingTop: 150,
+    justifyContent: 'flex-start',
     alignItems: 'center',
     paddingHorizontal: 24,
     marginTop: windowHeight * 0.15,
@@ -315,8 +316,7 @@ const styles = StyleSheet.create({
   },
   avatarRow: { flexDirection: 'row', marginBottom: 16 },
   avatarRowContent: {
-    paddingTop: 150,
-    justifyContent: 'flex-start',
+    justifyContent: 'center',
     paddingHorizontal: 24,
   },
   avatarContainer: { alignItems: 'center', marginHorizontal: 10 },

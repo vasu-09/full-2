@@ -1,7 +1,8 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
+  Alert,
   Image,
   StyleSheet,
   Text,
@@ -12,7 +13,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
   
 import Icon from 'react-native-vector-icons/MaterialIcons';
-
+import useCallSignalingHook from '../hooks/useCallSignaling';
 
 // Fallback replacement for LinearGradient to avoid requiring an extra
 // dependency. It simply renders a solid color view that matches the
@@ -24,10 +25,98 @@ function GradientCircle({ style }) {
 export default function CallScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { name = 'Harika', image } = useLocalSearchParams();
+  const params = useLocalSearchParams();
+
+  const pickParam = value => {
+    if (Array.isArray(value)) {
+      return value[0];
+    }
+    return value;
+  };
+
+  const name = pickParam(params?.name) ?? 'Harika';
+  const image = pickParam(params?.image);
+  const callIdRaw = pickParam(params?.callId);
+  const role = pickParam(params?.role) ?? 'caller';
+
+  const parsedCallId = callIdRaw != null ? Number(callIdRaw) : null;
+  const callId = parsedCallId != null && !Number.isNaN(parsedCallId) ? parsedCallId : null;
+  const [statusText, setStatusText] = useState(
+    role === 'callee' ? 'Incoming call…' : 'Calling…',
+  );
+  const hasEndedRef = useRef(false);
 
   const wave1 = useRef(new Animated.Value(0)).current;
   const wave2 = useRef(new Animated.Value(0)).current;
+
+  const handleCallEvent = useCallback(
+    event => {
+      if (!event) {
+        return;
+      }
+      const eventCallId =
+        typeof event.callId === 'number' ? event.callId : Number(event.callId ?? callId);
+      if (callId && !Number.isNaN(eventCallId) && eventCallId !== callId) {
+        return;
+      }
+      switch (event.type) {
+        case 'call.ringing':
+          if (role === 'caller') {
+            setStatusText('Ringing…');
+          }
+          break;
+        case 'call.answer':
+        case 'call.join':
+          setStatusText('Connected');
+          break;
+        case 'call.decline':
+          if (!hasEndedRef.current) {
+            hasEndedRef.current = true;
+            setStatusText('Declined');
+            Alert.alert('Call declined', 'The other participant declined the call.');
+            router.back();
+          }
+          break;
+        case 'call.end':
+          if (!hasEndedRef.current) {
+            hasEndedRef.current = true;
+            setStatusText('Call ended');
+            router.back();
+          }
+          break;
+        case 'call.fail':
+          if (!hasEndedRef.current) {
+            hasEndedRef.current = true;
+            setStatusText('Call failed');
+            Alert.alert('Call failed', 'The call ended unexpectedly.');
+            router.back();
+          }
+          break;
+        default:
+          break;
+      }
+    },
+    [callId, role, router],
+  );
+
+  const { joinCall, leaveCall, endCall: signalEndCall, markRinging } = useCallSignalingHook({
+    callId,
+    onCallEvent: handleCallEvent,
+  });
+
+  useEffect(() => {
+    if (!callId) {
+      return;
+    }
+    hasEndedRef.current = false;
+    joinCall().catch(err => console.warn('Failed to join call', err));
+    if (role === 'callee') {
+      markRinging().catch(err => console.warn('Failed to signal ringing state', err));
+    }
+    return () => {
+      leaveCall().catch(err => console.warn('Failed to leave call', err));
+    };
+  }, [callId, joinCall, leaveCall, markRinging, role]);
 
   useEffect(() => {
     const animate = (anim, delay = 0) =>
@@ -55,7 +144,21 @@ export default function CallScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={[styles.header, { paddingTop: insets.top }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity
+          onPress={async () => {
+            if (callId) {
+              try {
+                hasEndedRef.current = true;
+                setStatusText('Call ended');
+                await signalEndCall();
+              } catch (err) {
+                console.warn('Failed to end call', err);
+              }
+            }
+            router.back();
+          }}
+          style={styles.backBtn}
+        >
           <Icon name="arrow-back" size={28} color="#1f6ea7" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{name}</Text>
@@ -81,7 +184,7 @@ export default function CallScreen() {
             )}
           </View>
         </View>
-        <Text style={styles.statusText}>Calling...</Text>
+        <Text style={styles.statusText}>{statusText}</Text>
       </View>
 
       <View style={[styles.controls, { paddingBottom: insets.bottom + 24 }]}>
@@ -91,7 +194,21 @@ export default function CallScreen() {
         <TouchableOpacity style={styles.controlBtn}>
           <Icon name="volume-up" size={28} color="#fff" />
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.controlBtn, styles.endCall]}>
+        <TouchableOpacity
+          style={[styles.controlBtn, styles.endCall]}
+          onPress={async () => {
+            if (callId) {
+              try {
+                hasEndedRef.current = true;
+                setStatusText('Call ended');
+                await signalEndCall();
+              } catch (err) {
+                console.warn('Failed to end call', err);
+              }
+            }
+            router.back();
+          }}
+        >
           <Icon name="call-end" size={28} color="#fff" />
         </TouchableOpacity>
       </View>

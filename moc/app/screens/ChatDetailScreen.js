@@ -2,7 +2,7 @@
 import { Audio } from 'expo-audio';
 import * as DocumentPicker from 'expo-document-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import useCallSignalingHook from '../hooks/useCallSignaling';
 import { useChatSession } from '../hooks/useChatSession';
 
 const BAR_HEIGHT = 56;
@@ -121,6 +122,7 @@ export default function ChatDetailScreen() {
   const [showListPicker, setShowListPicker] = useState(false);
   const [selectedListId, setSelectedListId] = useState(null);
   const flatListRef = useRef();
+  const activeCallIdRef = useRef(null);
   const [attachMenuVisible, setAttachMenuVisible] = useState(false);
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -137,7 +139,12 @@ export default function ChatDetailScreen() {
     typingUsers,
     isLoading: isHistoryLoading,
     error: historyError,
+    currentUserId,
   } = useChatSession({ roomId, roomKey, peerId, title: chatTitle });
+
+  useEffect(() => () => {
+    activeCallIdRef.current = null;
+  }, []);
 
   const [localMessages, setLocalMessages] = useState([]);
   const messages = useMemo(
@@ -160,6 +167,86 @@ export default function ChatDetailScreen() {
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
   const [playingMessageId, setPlayingMessageId] = useState(null);
+
+  const handleCallRoomEvent = useCallback(
+    event => {
+      if (!event || event.type !== 'call.invite') {
+        return;
+      }
+      const eventRoomId =
+        typeof event.roomId === 'number' ? event.roomId : Number(event.roomId ?? roomId);
+      if (!roomId || Number.isNaN(eventRoomId) || eventRoomId !== roomId) {
+        return;
+      }
+      const callId = typeof event.callId === 'number' ? event.callId : Number(event.callId);
+      if (!callId || Number.isNaN(callId)) {
+        return;
+      }
+      if (activeCallIdRef.current === callId) {
+        return;
+      }
+      const fromId = typeof event.from === 'number' ? event.from : Number(event.from);
+      const calleeIds = Array.isArray(event.callees)
+        ? event.callees
+            .map(value => (typeof value === 'number' ? value : Number(value)))
+            .filter(value => !Number.isNaN(value))
+        : [];
+      const participants = [...calleeIds, fromId].filter(value => !Number.isNaN(value));
+      if (currentUserId != null && !participants.includes(currentUserId)) {
+        return;
+      }
+      activeCallIdRef.current = callId;
+      const role = fromId === currentUserId ? 'caller' : 'callee';
+      router.push({
+        pathname: '/screens/CallScreen',
+        params: {
+          callId: String(callId),
+          roomId: roomId ? String(roomId) : '',
+          name: chatTitle,
+          image: avatarUri,
+          role,
+          peerId: peerId != null ? String(peerId) : undefined,
+        },
+      });
+      setTimeout(() => {
+        if (activeCallIdRef.current === callId) {
+          activeCallIdRef.current = null;
+        }
+      }, 3000);
+    },
+    [roomId, currentUserId, router, chatTitle, avatarUri, peerId],
+  );
+
+  const handleQueueEvent = useCallback(
+    event => {
+      if (!event) {
+        return;
+      }
+      if (event.type === 'call.busy') {
+        activeCallIdRef.current = null;
+        Alert.alert('Call unavailable', event.reason || 'Participants are busy at the moment.');
+        return;
+      }
+      if (event.event === 'BUSY') {
+        const eventRoomId =
+          typeof event.roomId === 'number' ? event.roomId : Number(event.roomId ?? roomId);
+        if (!roomId || Number.isNaN(eventRoomId) || eventRoomId !== roomId) {
+          return;
+        }
+        activeCallIdRef.current = null;
+        if (Array.isArray(event.users) && event.users.length) {
+          Alert.alert('Call unavailable', 'Some participants are already in another call.');
+        }
+      }
+    },
+    [roomId],
+  );
+
+  const { sendInviteDefault: sendRoomCallInvite } = useCallSignalingHook({
+    roomId: roomId ?? null,
+    onRoomEvent: handleCallRoomEvent,
+    onQueueEvent: handleQueueEvent,
+  });
   
   const pickAndSendFile = async () => {
   try {
@@ -641,15 +728,29 @@ export default function ChatDetailScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.iconBtn}
-                onPress={() =>
-                  router.push({
-                    pathname: '/screens/CallScreen',
-                    params: {
-                      name: chatTitle,
-                      image: avatarUri,
-                    },
-                  })
-                }
+                onPress={async () => {
+                  if (!roomId || !peerId) {
+                    Alert.alert('Call unavailable', 'This chat is not ready for calling yet.');
+                    return;
+                  }
+                  if (activeCallIdRef.current && activeCallIdRef.current !== 'pending') {
+                    return;
+                  }
+                  activeCallIdRef.current = 'pending';
+                  try {
+                    await sendRoomCallInvite([peerId]);
+                  } catch (err) {
+                    activeCallIdRef.current = null;
+                    console.warn('Failed to start voice call', err);
+                    Alert.alert('Call failed', 'Unable to start the call. Please try again.');
+                  } finally {
+                    setTimeout(() => {
+                      if (activeCallIdRef.current === 'pending') {
+                        activeCallIdRef.current = null;
+                      }
+                    }, 10000);
+                  }
+                }}
               >
                 <Icon name="call" size={24} color="#fff" />
               </TouchableOpacity>
