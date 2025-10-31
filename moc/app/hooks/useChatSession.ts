@@ -496,6 +496,7 @@ export const useChatSession = ({
     resetUnread,
     currentUserId,
     peerId,
+    e2eeClient,
   ]);
 
   useEffect(() => {
