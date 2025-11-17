@@ -52,28 +52,20 @@ const extractHost = (value?: string | null) => {
 };
 
 const getDebuggerHost = () => {
-  if (!expoConfig) {
-    return undefined;
-  }
 
   const extraHost = extractHost(expoConfig?.extra?.apiHost ?? expoConfig?.extra?.apiBaseUrl);
   if (extraHost) {
     return extraHost;
   }
 
-  const hostUriHost = extractHost(expoConfig?.hostUri);
+  const hostUriHost = extractHost(expoConfig?.hostUri ?? Constants?.expoGoConfig?.hostUri);
   if (hostUriHost) {
     return hostUriHost;
   }
 
-  const debuggerHost = extractHost(expoConfig?.debuggerHost);
+   const debuggerHost = extractHost(expoConfig?.debuggerHost ?? Constants?.expoGoConfig?.debuggerHost);
   if (debuggerHost) {
     return debuggerHost;
-  }
-
-  const expoGoDebugHost = extractHost(Constants?.expoGoConfig?.debuggerHost);
-  if (expoGoDebugHost) {
-    return expoGoDebugHost;
   }
 
   return undefined;
@@ -110,9 +102,44 @@ const getBundlerHost = () => {
   return getDebuggerHost();
 };
 
+const getAndroidConstants = () => {
+  const constants = (Platform as typeof Platform & { constants?: Record<string, any> }).constants;
+  return constants ?? {};
+};
+
+const isAndroidEmulator = () => {
+  if (Platform.OS !== 'android') {
+    return false;
+  }
+
+  const { Brand = '', Model = '', Fingerprint = '' } = getAndroidConstants();
+  const normalizedBrand = String(Brand).toLowerCase();
+  const normalizedModel = String(Model).toLowerCase();
+  const normalizedFingerprint = String(Fingerprint).toLowerCase();
+
+  if (normalizedBrand.includes('generic') || normalizedBrand.includes('unknown')) {
+    return true;
+  }
+
+  if (
+    normalizedModel.includes('emulator') ||
+    normalizedModel.includes('android sdk built for x86') ||
+    normalizedModel.includes('sdk_gphone') ||
+    normalizedModel.includes('sdk')
+  ) {
+    return true;
+  }
+
+  if (normalizedFingerprint.startsWith('generic') || normalizedFingerprint.startsWith('unknown')) {
+    return true;
+  }
+
+  return false;
+};
+
 const resolveLocalhost = () => {
   if (Platform.OS === 'android') {
-    return 'http://10.0.2.2:8080';
+     return isAndroidEmulator() ? 'http://10.0.2.2:8080' : 'http://127.0.0.1:8080';
   }
 
   if (Platform.OS === 'ios') {
