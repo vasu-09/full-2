@@ -1,7 +1,5 @@
 package com.om.Real_Time_Communication.presence;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -11,7 +9,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Component
 public class PresenceRegistry {
-    @Data @AllArgsConstructor
+
     public static class Presence {
         private Long userId;
         private String deviceId;

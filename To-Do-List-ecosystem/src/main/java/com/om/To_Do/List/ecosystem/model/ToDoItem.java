@@ -8,8 +8,6 @@ import org.hibernate.annotations.UpdateTimestamp;
 import java.time.LocalDateTime;
 
 @Entity
-@Data
-@Builder
 @Table(name = "todo_items")
 public class ToDoItem {
 
@@ -25,9 +23,11 @@ public class ToDoItem {
 
 
     @CreationTimestamp
+    @Convert(converter = LocalDateStringAttributeConverter.class)
     private LocalDateTime createdAt;
 
     @UpdateTimestamp
+    @Convert(converter = LocalDateStringAttributeConverter.class)
     private LocalDateTime updatedAt;
 
     @Lob

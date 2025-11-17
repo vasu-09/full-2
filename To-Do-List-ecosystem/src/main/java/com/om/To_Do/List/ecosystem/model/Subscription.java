@@ -7,8 +7,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
-@Data
-@Builder
 @Table(name = "subscriptions")
 public class Subscription {
 
@@ -21,7 +19,9 @@ public class Subscription {
     private String paymentToken;     // Token/mandate ID returned by Razorpay
 
 
+    @Convert(converter = LocalDateStringAttributeConverter.class)
     private LocalDate startDate;
+    @Convert(converter = LocalDateStringAttributeConverter.class)
     private LocalDate expiryDate;
     private Boolean isActive;
 

@@ -21,12 +21,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 @Service
-@RequiredArgsConstructor
 public class CallSessionService {
 
     private final CallSessionRepository repo;
-
-
     private final SimpMessagingTemplate broker;
     private final EventPublisher eventPublisher; // optional (can be null)
     private final ChatRoomRepository chatRoomRepository;
