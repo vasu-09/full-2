@@ -85,6 +85,7 @@ const LoginScreen = () => {
     <View style={styles.container}>
       <StatusBar backgroundColor="#1f6ea7" barStyle="light-content" />
       <Text style={styles.logo}>MOC</Text>
+      <Text style={styles.baseUrl}>API: {apiBaseURL}</Text>
 
       {!!error && <Text style={styles.error}>{error}</Text>}
 

@@ -112,9 +112,59 @@ const resolveLocalhost = () => {
   return 'http://localhost:8080';
 };
 
+const normalizeBaseUrl = (value?: string | null, { appendDefaultPort = false } = {}) => {
+  if (!value) {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const prefixed = trimmed.match(/^[a-zA-Z]+:\/\//) ? trimmed : `http://${trimmed}`;
+
+  try {
+    const parsed = new URL(prefixed);
+    if (appendDefaultPort && !parsed.port) {
+      parsed.port = '8080';
+    }
+    parsed.pathname = parsed.pathname.replace(/\/$/, '');
+    parsed.search = '';
+    parsed.hash = '';
+    return parsed.toString();
+  } catch {
+    return prefixed.replace(/\/$/, '');
+  }
+};
+
+const getExplicitBaseUrl = () => {
+  const extra = expoConfig?.extra ?? {};
+
+  const rawBase =
+    extra?.apiBaseUrl ??
+    extra?.apiBaseURL ??
+    extra?.apiUrl ??
+    extra?.apiURL ??
+    (process.env.EXPO_PUBLIC_API_URL ?? undefined);
+
+  const baseFromExtra = normalizeBaseUrl(typeof rawBase === 'string' ? rawBase : undefined);
+  if (baseFromExtra) {
+    return baseFromExtra;
+  }
+
+  const hostOnly = extra?.apiHost ?? extra?.apiHostname;
+  if (typeof hostOnly === 'string' && hostOnly.trim()) {
+    return normalizeBaseUrl(hostOnly, { appendDefaultPort: true });
+  }
+
+  return undefined;
+};
+
 const getBaseURL = () => {
-  if (process.env.EXPO_PUBLIC_API_URL) {
-    return process.env.EXPO_PUBLIC_API_URL;
+  const explicitBase = getExplicitBaseUrl();
+  if (explicitBase) {
+    return explicitBase;
   }
 
   const host = getBundlerHost();
