@@ -98,7 +98,32 @@ const isExpoHosted = (host?: string) => {
   return host === 'exp.host' || host === 'u.expo.dev' || host.endsWith('.expo.dev') || host.endsWith('.exp.direct');
 };
 
+const getNativeServerHost = () => {
+  if (Platform.OS === 'android') {
+    const { ServerHost, serverHost } = getAndroidConstants();
+    const hostValue = ServerHost ?? serverHost;
+    if (hostValue) {
+      const parsed = extractHost(hostValue);
+      if (parsed) {
+        return parsed;
+      }
+
+      const withoutPort = hostValue.split(':')[0];
+      if (withoutPort) {
+        return withoutPort;
+      }
+    }
+  }
+
+  return undefined;
+};
+
 const getBundlerHost = () => {
+  const nativeHost = getNativeServerHost();
+  if (nativeHost) {
+    return nativeHost;
+  }
+
   const scriptHost = getScriptUrlHost();
   if (scriptHost) {
     return scriptHost;
