@@ -10,9 +10,18 @@ import {
 } from './authStorage';
 
 
-type ExpoConfig = typeof Constants.expoConfig & {
+type DeveloperInfo = {
+  url?: string | null;
+  hostname?: string | null;
+  host?: string | null;
+  metroHostname?: string | null;
+  metroHost?: string | null;
+};
+
+type ExpoConfig = (typeof Constants.expoConfig) & {
   debuggerHost?: string | null;
   extra?: Record<string, any> | undefined;
+  developer?: DeveloperInfo | string | null;
 };
 
 type Manifest2 = {
@@ -198,6 +207,80 @@ const getExplicitBaseUrl = () => {
   return undefined;
 };
 
+const isLoopbackHost = (host?: string | null) => {
+  if (!host) {
+    return false;
+  }
+
+  const normalized = host.trim().toLowerCase();
+  return normalized === 'localhost' || normalized === '127.0.0.1' || normalized === '::1';
+};
+
+type DeveloperLike = DeveloperInfo | string | null | undefined;
+
+const extractDeveloperHost = (value: DeveloperLike) => {
+  if (!value) {
+    return undefined;
+  }
+
+  if (typeof value === 'string') {
+    return extractHost(value) ?? (isLoopbackHost(value) ? undefined : value);
+  }
+
+  const urlCandidate = extractHost(value.url ?? undefined);
+  if (urlCandidate) {
+    return urlCandidate;
+  }
+
+  const fallbackFields = [value.hostname, value.host, value.metroHostname, value.metroHost];
+  for (const field of fallbackFields) {
+    if (!field) {
+      continue;
+    }
+
+    const host = extractHost(field) ?? field;
+    if (host) {
+      return host;
+    }
+  }
+
+  return undefined;
+};
+
+const getLocalNetworkHost = () => {
+  const developerSources: DeveloperLike[] = [
+    manifest2?.extra?.expoGo?.developer,
+    manifest2?.extra?.expoClient?.developer,
+    expoConfig?.developer,
+    (Constants?.expoGoConfig as { developer?: DeveloperLike } | null | undefined)?.developer,
+  ];
+
+  for (const source of developerSources) {
+    const candidate = extractDeveloperHost(source);
+    if (candidate && !isLoopbackHost(candidate) && !isExpoHosted(candidate)) {
+      return candidate;
+    }
+  }
+
+  const debuggerHost = getDebuggerHost();
+  if (debuggerHost && !isLoopbackHost(debuggerHost) && !isExpoHosted(debuggerHost)) {
+    return debuggerHost;
+  }
+
+  const scriptHost = getScriptUrlHost();
+  if (scriptHost && !isLoopbackHost(scriptHost) && !isExpoHosted(scriptHost)) {
+    return scriptHost;
+  }
+
+  return undefined;
+};
+
+const buildHostBaseUrl = (host: string) => {
+  const parsedHost = extractHost(host) ?? host;
+  return `http://${parsedHost}:8080`;
+};
+
+
 const getBaseURL = () => {
   const explicitBase = getExplicitBaseUrl();
   if (explicitBase) {
@@ -206,7 +289,11 @@ const getBaseURL = () => {
 
   const host = getBundlerHost();
 
-  if (!host || host === 'localhost' || host === '127.0.0.1' || host === '::1' || isExpoHosted(host)) {
+  if (!host || isLoopbackHost(host) || isExpoHosted(host)) {
+    const lanHost = getLocalNetworkHost();
+    if (lanHost) {
+      return buildHostBaseUrl(lanHost);
+    }
     return resolveLocalhost();
   }
 
