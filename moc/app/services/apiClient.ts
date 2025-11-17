@@ -15,7 +15,17 @@ type ExpoConfig = typeof Constants.expoConfig & {
   extra?: Record<string, any> | undefined;
 };
 
-const expoConfig: ExpoConfig | null = (Constants.expoConfig ?? Constants.manifest) as ExpoConfig | null;
+type Manifest2 = {
+  extra?: {
+    expoClient?: ExpoConfig;
+    expoGo?: ExpoConfig;
+  };
+};
+
+const manifest2 = (Constants.manifest2 ?? null) as Manifest2 | null;
+const manifest2Config = manifest2?.extra?.expoClient ?? manifest2?.extra?.expoGo ?? null;
+
+const expoConfig: ExpoConfig | null = (Constants.expoConfig ?? Constants.manifest ?? manifest2Config ?? null) as ExpoConfig | null;
 
 const extractHost = (value?: string | null) => {
   if (!value) {
