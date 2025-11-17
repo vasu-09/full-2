@@ -1,6 +1,6 @@
 import axios, { AxiosError, AxiosHeaders, InternalAxiosRequestConfig } from 'axios';
 import Constants from 'expo-constants';
-import { Platform } from 'react-native';
+import { NativeModules, Platform } from 'react-native';
 
 import {
   clearSession,
@@ -69,6 +69,37 @@ const getDebuggerHost = () => {
   return undefined;
 };
 
+const getScriptUrlHost = () => {
+  const sourceCodeModule = NativeModules?.SourceCode as { scriptURL?: string } | undefined;
+  const scriptUrl = sourceCodeModule?.scriptURL;
+  if (!scriptUrl) {
+    return undefined;
+  }
+
+  return extractHost(scriptUrl);
+};
+
+const isExpoHosted = (host?: string) => {
+  if (!host) {
+    return false;
+  }
+
+  return host === 'exp.host' || host === 'u.expo.dev' || host.endsWith('.expo.dev') || host.endsWith('.exp.direct');
+};
+
+const getBundlerHost = () => {
+  const scriptHost = getScriptUrlHost();
+  if (scriptHost) {
+    return scriptHost;
+  }
+
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    return window.location.hostname;
+  }
+
+  return getDebuggerHost();
+};
+
 const resolveLocalhost = () => {
   if (Platform.OS === 'android') {
     return 'http://10.0.2.2:8080';
@@ -86,9 +117,9 @@ const getBaseURL = () => {
     return process.env.EXPO_PUBLIC_API_URL;
   }
 
-  const host = getDebuggerHost();
+  const host = getBundlerHost();
 
-  if (!host || host === 'localhost' || host === '127.0.0.1') {
+  if (!host || host === 'localhost' || host === '127.0.0.1' || host === '::1' || isExpoHosted(host)) {
     return resolveLocalhost();
   }
 

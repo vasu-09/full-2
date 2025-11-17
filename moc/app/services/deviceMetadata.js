@@ -5,8 +5,38 @@ import { Platform } from 'react-native';
 const FCM_TOKEN_KEY = 'fcmToken';
 
 const getDeviceModel = () => {
-  if (Constants?.deviceName) return Constants.deviceName;
-  if (Platform?.constants?.Model) return Platform.constants.Model;
+   if (Constants?.deviceName) {
+    return Constants.deviceName;
+  }
+
+  if (Platform.OS === 'ios') {
+    const iosModel = Constants?.platform?.ios?.model ?? Constants?.platform?.ios?.deviceModel;
+    if (iosModel) {
+      return iosModel;
+    }
+  }
+
+  if (Platform.OS === 'android') {
+    const androidModel = Constants?.platform?.android?.model;
+    if (androidModel) {
+      return androidModel;
+    }
+  }
+
+  const expoClientModel =
+    Constants?.manifest2?.extra?.expoClient?.deviceName ??
+    Constants?.manifest2?.extra?.expoClient?.deviceModel;
+  if (expoClientModel) {
+    return expoClientModel;
+  }
+
+  if (Platform.OS === 'web') {
+    if (typeof navigator !== 'undefined' && typeof navigator.userAgent === 'string') {
+      return navigator.userAgent;
+    }
+    return 'web';
+  }
+
   return 'unknown';
 };
 
