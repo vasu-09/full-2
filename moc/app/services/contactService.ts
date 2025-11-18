@@ -20,19 +20,41 @@ export const normalizePhoneNumber = (value: string): string | null => {
 
   let sanitized = trimmed.replace(/[^\d+]/g, '');
 
+   if (!sanitized) {
+    return null;
+  }
+
   if (sanitized.startsWith('00')) {
     sanitized = `+${sanitized.slice(2)}`;
   }
 
-  if (!sanitized.startsWith('+') && sanitized.length >= 10) {
-    sanitized = `+${sanitized}`;
+  if (sanitized.startsWith('+')) {
+    return sanitized.length >= 6 ? sanitized : null;
   }
 
-  if (sanitized.length < 6) {
+  const digitsOnly = sanitized.replace(/\D/g, '');
+  if (digitsOnly.length === 0) {
     return null;
   }
 
-  return sanitized;
+  // Handle common Indian formats to ensure they become +91XXXXXXXXXX
+  if (digitsOnly.length === 10) {
+    return `+91${digitsOnly}`;
+  }
+
+  if (digitsOnly.length === 11 && digitsOnly.startsWith('0')) {
+    return `+91${digitsOnly.slice(1)}`;
+  }
+
+  if (digitsOnly.length === 12 && digitsOnly.startsWith('91')) {
+    return `+${digitsOnly}`;
+  }
+
+  if (digitsOnly.length < 6) {
+    return null;
+  }
+
+  return `+${digitsOnly}`;
 };
 
 const collectPhoneNumbers = (contacts: Contact[]): string[] => {
