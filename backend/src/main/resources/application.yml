@@ -45,6 +45,7 @@ sms:
   test:
     enabled: ${SMS_TEST_ENABLED:true}
     phone-number: ${SMS_TEST_PHONE:919876543210}
+    additional-phone-numbers: ${SMS_TEST_EXTRA_PHONE:919987654321}
     otp-code: ${SMS_TEST_OTP:000000}
 
 

@@ -4,6 +4,9 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Data
 @Component
 @ConfigurationProperties(prefix = "sms")
@@ -175,6 +178,7 @@ public class SmsProperties {
     public static class Test {
         private boolean enabled = false;
         private String phoneNumber;
+        private List<String> additionalPhoneNumbers = new ArrayList<>();
         private String otpCode = "000000";
 
         public boolean isEnabled() {
@@ -199,6 +203,14 @@ public class SmsProperties {
 
         public void setOtpCode(String otpCode) {
             this.otpCode = otpCode;
+        }
+
+        public List<String> getAdditionalPhoneNumbers() {
+            return additionalPhoneNumbers;
+        }
+
+        public void setAdditionalPhoneNumbers(List<String> additionalPhoneNumbers) {
+            this.additionalPhoneNumbers = additionalPhoneNumbers;
         }
     }
 

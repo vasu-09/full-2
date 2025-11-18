@@ -32,7 +32,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.util.StringUtils;
 
 
+import java.util.LinkedHashSet;
 import java.util.Optional;
+import java.util.Set;
 //new code
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -297,6 +299,13 @@ public class OtpService {
     }
 
     private String normalizePhoneNumber(String rawPhone) {
+        if (isTestMode() && isRawTestNumber(rawPhone)) {
+            return normalizeTestPhone(rawPhone);
+        }
+        return normalizeWithPreferredFormat(rawPhone);
+    }
+
+    private String normalizeWithPreferredFormat(String rawPhone) {
         return "NSN10".equalsIgnoreCase(props.getNumberFormat())
                 ? PhoneNumberUtil1.toIndiaNsn10(rawPhone)
                 : PhoneNumberUtil1.toIndia91NoPlus(rawPhone);
@@ -307,14 +316,57 @@ public class OtpService {
     }
 
     private boolean isTestNumber(String normalizedPhone) {
+        return isTestMode() && getNormalizedTestNumbers().contains(normalizedPhone);
+    }
+
+    private boolean isRawTestNumber(String rawPhone) {
         if (!isTestMode()) {
             return false;
         }
-        String configured = props.getTest().getPhoneNumber();
-        if (!StringUtils.hasText(configured)) {
-            return false;
+        String normalized = normalizeTestPhone(rawPhone);
+        return StringUtils.hasText(normalized) && getNormalizedTestNumbers().contains(normalized);
+    }
+
+    private Set<String> getNormalizedTestNumbers() {
+        Set<String> normalized = new LinkedHashSet<>();
+        SmsProperties.Test test = props.getTest();
+        if (test == null) {
+            return normalized;
         }
-        return normalizedPhone.equals(normalizePhoneNumber(configured));
+        addNormalizedTestNumber(normalized, test.getPhoneNumber());
+        if (test.getAdditionalPhoneNumbers() != null) {
+            for (String extra : test.getAdditionalPhoneNumbers()) {
+                addNormalizedTestNumber(normalized, extra);
+            }
+        }
+        return normalized;
+    }
+
+    private void addNormalizedTestNumber(Set<String> normalized, String raw) {
+        String candidate = normalizeTestPhone(raw);
+        if (StringUtils.hasText(candidate)) {
+            normalized.add(candidate);
+        }
+    }
+
+    private String normalizeTestPhone(String rawPhone) {
+        if (!StringUtils.hasText(rawPhone)) {
+            return null;
+        }
+        try {
+            return normalizeWithPreferredFormat(rawPhone);
+        } catch (IllegalArgumentException ex) {
+            String digits = rawPhone.replaceAll("[^0-9]", "");
+            if (!StringUtils.hasText(digits)) {
+                return null;
+            }
+            if (!"NSN10".equalsIgnoreCase(props.getNumberFormat())
+                    && digits.length() == 10
+                    && !digits.startsWith("91")) {
+                digits = "91" + digits;
+            }
+            return digits;
+        }
     }
 
     private String resolveTestOtp() {
