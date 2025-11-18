@@ -29,6 +29,7 @@ export default function ContactPickerScreen() {
   const [selected, setSelected] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchInput, setSearchInput] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncError, setSyncError] = useState('');
   const [matchedContacts, setMatchedContacts] = useState([]);
@@ -131,9 +132,22 @@ export default function ContactPickerScreen() {
     }
   };
 
-  const filteredContacts = contacts.filter(c =>
-    c.name?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setSearchQuery(searchInput.trim());
+    }, 250);
+
+    return () => clearTimeout(handler);
+  }, [searchInput]);
+
+  const filteredContacts = useMemo(() => {
+    if (!searchQuery) {
+      return contacts;
+    }
+    const lower = searchQuery.toLowerCase();
+    return contacts.filter(c => c.name?.toLowerCase().includes(lower));
+  }, [contacts, searchQuery]);
+
 
   const renderItem = ({ item }) => {
     const isSel = selected.some(c => c.id === item.id);
@@ -174,8 +188,8 @@ export default function ContactPickerScreen() {
       style={styles.searchHeaderInput}
       placeholder="Search contacts"
       placeholderTextColor="#999"
-      value={searchQuery}
-      onChangeText={setSearchQuery}
+      value={searchInput}
+      onChangeText={setSearchInput}
       autoFocus
       underlineColorAndroid="transparent"
     />
@@ -192,7 +206,7 @@ export default function ContactPickerScreen() {
       <Text style={styles.subtitle}>{selected.length} selected</Text>
     </View>
 
-    <TouchableOpacity onPress={() => { setIsSearching(true); setSearchQuery(''); }} style={styles.searchBtn}>
+     <TouchableOpacity onPress={() => { setIsSearching(true); setSearchInput(''); setSearchQuery(''); }} style={styles.searchBtn}>
             <Icon name="search" size={24} color="#fff" />
           </TouchableOpacity>
   </View>
