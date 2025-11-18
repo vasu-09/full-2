@@ -144,8 +144,29 @@ export default function ContactPickerScreen() {
     if (!searchQuery) {
       return contacts;
     }
+
     const lower = searchQuery.toLowerCase();
-    return contacts.filter(c => c.name?.toLowerCase().includes(lower));
+   const numericQuery = searchQuery.replace(/\D/g, '');
+
+    return contacts.filter(contact => {
+      const nameMatch = contact.name?.toLowerCase().includes(lower);
+
+      const phoneMatch = (contact.phoneNumbers ?? []).some(phone => {
+        const rawNumber = phone?.number ?? '';
+        const normalizedNumber = rawNumber.replace(/\D/g, '');
+
+        if (!rawNumber) {
+          return false;
+        }
+
+        return (
+          rawNumber.toLowerCase().includes(lower) ||
+          (!!numericQuery && normalizedNumber.includes(numericQuery))
+        );
+      });
+
+      return nameMatch || phoneMatch;
+    });
   }, [contacts, searchQuery]);
 
 
