@@ -4,9 +4,10 @@ import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  FlatList,
   Image,
   ScrollView,
+  SectionList,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -39,8 +40,20 @@ export default function ContactPickerScreen() {
   const matchesByPhone = useMemo(() => {
     const map = new Map();
     matchedContacts.forEach(match => {
-      if (match?.phone) {
-        map.set(match.phone, match);
+    const rawPhone = match?.phone;
+      if (!rawPhone) {
+        return;
+      }
+
+      map.set(rawPhone, match);
+
+      const normalized = normalizePhoneNumber(rawPhone);
+      if (normalized) {
+        map.set(normalized, match);
+
+        if (normalized.startsWith('91') && normalized.length === 12) {
+          map.set(normalized.slice(2), match);
+        }
       }
     });
     return map;
@@ -169,11 +182,47 @@ export default function ContactPickerScreen() {
     });
   }, [contacts, searchQuery]);
 
+  const contactSections = useMemo(() => {
+    const registered = [];
+    const unregistered = [];
+
+    filteredContacts.forEach(contact => {
+      if (getMatchForContact(contact)) {
+        registered.push(contact);
+      } else {
+        unregistered.push(contact);
+      }
+    });
+
+    const sections = [];
+    if (registered.length) {
+      sections.push({ title: 'On MoC', data: registered, type: 'registered' });
+    }
+    if (unregistered.length) {
+      sections.push({ title: 'Invite to MoC', data: unregistered, type: 'unregistered' });
+    }
+    return sections;
+  }, [filteredContacts, getMatchForContact]);
+
+  const handleInvite = useCallback(async contact => {
+    const displayName = contact?.name?.trim();
+    const inviteMessage = displayName
+      ? `Hey ${displayName}, I'm using MoC to stay connected. Download the app and join me!`
+      : `I'm using MoC to stay connected. Download the app and join me!`;
+
+    try {
+      await Share.share({ message: inviteMessage });
+    } catch (error) {
+      console.warn('Unable to open invite share sheet', error);
+    }
+  }, []);
+
+
 
   const renderItem = ({ item }) => {
     const isSel = selected.some(c => c.id === item.id);
     const match = getMatchForContact(item);
-    const statusLabel = match ? 'On MoC' : 'Invite';
+     const statusLabel = match ? 'On MoC' : 'Not on MoC yet';
     return (
       <TouchableOpacity onPress={() => toggleSelect(item)} style={styles.item}>
         {item.imageAvailable ? (
@@ -189,7 +238,15 @@ export default function ContactPickerScreen() {
             {statusLabel}
           </Text>
         </View>
-        {isSel && <Icon name="check-circle" size={24} color="#1f6ea7" />}
+        <View style={styles.itemRight}>
+          {match ? (
+            isSel && <Icon name="check-circle" size={24} color="#1f6ea7" />
+          ) : (
+            <TouchableOpacity style={styles.inviteButton} onPress={() => handleInvite(item)}>
+              <Text style={styles.inviteButtonText}>Invite</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </TouchableOpacity>
     );
   };
@@ -289,10 +346,14 @@ export default function ContactPickerScreen() {
           <Text style={styles.errorText}>{createError}</Text>
         </View>
       ) : null}
-      <FlatList
-        data={filteredContacts}
+      <SectionList
+        sections={contactSections}
         keyExtractor={c => c.id}
         renderItem={renderItem}
+        renderSectionHeader={({ section }) => (
+          <Text style={styles.sectionDivider}>{section.title}</Text>
+        )}
+        stickySectionHeadersEnabled={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
       />
 
@@ -343,6 +404,16 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   // NORMAL header
+
+  sectionDivider: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1f6ea7',
+    marginHorizontal: 12,
+    marginTop: 16,
+    marginBottom: 6,
+    textTransform: 'uppercase',
+  },
   
   searchBtn: { padding: 8 },
 
@@ -438,6 +509,23 @@ const styles = StyleSheet.create({
   fabDisabled: {
     backgroundColor: '#7aa3c3',
   },
+  itemRight: {
+    marginLeft: 12,
+  },
+
+  inviteButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#1f6ea7',
+  },
+  inviteButtonText: {
+    color: '#1f6ea7',
+    fontWeight: '600',
+    fontSize: 13,
+  },
+
 
  syncStatusWrapper: {
     marginHorizontal: 16,
