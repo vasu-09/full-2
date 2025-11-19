@@ -140,7 +140,10 @@ const MocScreen = () => {
                 ))}
               </ScrollView>
 
-              <TouchableOpacity style={styles.inviteButton}>
+                <TouchableOpacity
+                style={styles.inviteButton}
+                onPress={() => router.push('/screens/InviteContactsScreen')}
+              >
                 <Text style={styles.inviteText}>Invite a friend</Text>
               </TouchableOpacity>
             </View>

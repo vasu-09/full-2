@@ -32,6 +32,7 @@ export default function RootLayout() {
             <Stack.Screen name="screens/AccountSettings" options={{ headerShown: false }} />
             <Stack.Screen name="screens/EditNameScreen" options={{ headerShown: false }} />
             <Stack.Screen name="screens/EditEmailScreen" options={{ headerShown: false }} />
+            <Stack.Screen name="screens/InviteContactsScreen" options={{ presentation: 'fullScreenModal' }} />
             <Stack.Screen name="screens/ListsScreen" options={{ presentation: 'fullScreenModal' }} />
             <Stack.Screen name="screens/LinkListScreen" options={{ presentation: 'fullScreenModal' }} />
             <Stack.Screen name="screens/SelectedPreview" options={{ presentation: 'fullScreenModal' }} />
