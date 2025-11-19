@@ -10,10 +10,15 @@
     "newArchEnabled": false,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.moc"
+      "bundleIdentifier": "com.anonymous.moc",
+      "infoPlist": {
+        "NSContactsUsageDescription": "This app needs access to your contacts to show who is already on MoC."
+      }
     },
     "android": {
       "permissions": [
+        "READ_CONTACTS",
+        "WRITE_CONTACTS",
         "READ_MEDIA_IMAGES",
         "READ_MEDIA_VIDEO",
         "READ_MEDIA_AUDIO",
