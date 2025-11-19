@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
+  Linking,
   ScrollView,
   SectionList,
   Share,
@@ -33,9 +34,13 @@ export default function ContactPickerScreen() {
   const [searchInput, setSearchInput] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncError, setSyncError] = useState('');
+  const [contactsError, setContactsError] = useState('');
   const [matchedContacts, setMatchedContacts] = useState([]);
   const [createError, setCreateError] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+  const [permissionStatus, setPermissionStatus] = useState('undetermined');
+  const [canAskPermission, setCanAskPermission] = useState(true);
+  const [isLoadingContacts, setIsLoadingContacts] = useState(true);
 
   const matchesByPhone = useMemo(() => {
     const map = new Map();
@@ -73,19 +78,48 @@ export default function ContactPickerScreen() {
     [matchesByPhone],
   );
 
-  useEffect(() => {
-    (async () => {
-      const { status } = await Contacts.requestPermissionsAsync();
-      if (status !== 'granted') return;
-      const { data } = await Contacts.getContactsAsync({
-        fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Image],
-        sort: Contacts.SortTypes.FirstName,
-      });
-      setContacts(data);
-       try {
-        setSyncError('');
+ const loadContacts = useCallback(async () => {
+    setContactsError('');
+    setSyncError('');
+    setIsLoadingContacts(true);
+    setIsSyncing(false);
+
+    try {
+      const { status, granted, canAskAgain } = await Contacts.requestPermissionsAsync();
+      setPermissionStatus(status);
+      setCanAskPermission(Boolean(canAskAgain));
+
+      if (!granted) {
+        setContacts([]);
+        setMatchedContacts([]);
+        if (status === 'denied') {
+          setContactsError('MoC needs access to your contacts to show them here.');
+        }
+        return;
+      }
+
+      const loaded = [];
+      let pageOffset = 0;
+      let hasNextPage = true;
+
+      while (hasNextPage) {
+        const response = await Contacts.getContactsAsync({
+          fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Image],
+          sort: Contacts.SortTypes.FirstName,
+          pageSize: 200,
+          pageOffset,
+        });
+
+        loaded.push(...response.data);
+        hasNextPage = response.hasNextPage;
+        pageOffset += response.data.length;
+      }
+
+      setContacts(loaded);
+
+      try {
         setIsSyncing(true);
-        const matches = await syncContacts(data);
+        const matches = await syncContacts(loaded);
         setMatchedContacts(matches);
       } catch (error) {
         console.error('Failed to sync contacts', error);
@@ -93,8 +127,19 @@ export default function ContactPickerScreen() {
       } finally {
         setIsSyncing(false);
       }
-    })();
+    } catch (error) {
+      console.error('Failed to load contacts from device', error);
+      setContacts([]);
+      setMatchedContacts([]);
+      setContactsError('Unable to read contacts from your device.');
+    } finally {
+      setIsLoadingContacts(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadContacts();
+  }, [loadContacts]);
 
   const toggleSelect = contact => {
     setCreateError('');
@@ -329,7 +374,11 @@ export default function ContactPickerScreen() {
       {/* All contacts */}
       <Text style={styles.sectionTitle}>All contacts</Text>
       <View style={styles.syncStatusWrapper}>
-        {isSyncing ? (
+         {isLoadingContacts ? (
+          <Text style={styles.syncStatusText}>Loading contacts from your phone…</Text>
+        ) : contactsError ? (
+          <Text style={[styles.syncStatusText, styles.syncStatusError]}>{contactsError}</Text>
+        ) : isSyncing ? (
           <Text style={styles.syncStatusText}>Syncing your contacts…</Text>
         ) : syncError ? (
           <Text style={[styles.syncStatusText, styles.syncStatusError]}>{syncError}</Text>
@@ -346,16 +395,51 @@ export default function ContactPickerScreen() {
           <Text style={styles.errorText}>{createError}</Text>
         </View>
       ) : null}
-      <SectionList
-        sections={contactSections}
-        keyExtractor={c => c.id}
-        renderItem={renderItem}
-        renderSectionHeader={({ section }) => (
-          <Text style={styles.sectionDivider}>{section.title}</Text>
-        )}
-        stickySectionHeadersEnabled={false}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
-      />
+       {permissionStatus !== 'granted' ? (
+        <View style={styles.permissionWrapper}>
+          <Icon name="contacts" size={42} color="#1f6ea7" />
+          <Text style={styles.permissionTitle}>Contacts permission needed</Text>
+          <Text style={styles.permissionMessage}>
+            Allow MoC to access your address book so we can show who is already using the app and who you can
+            invite.
+          </Text>
+          <TouchableOpacity
+            style={styles.permissionButton}
+            onPress={() => {
+              if (permissionStatus === 'denied' && !canAskPermission) {
+                Linking.openSettings();
+              } else {
+                loadContacts();
+              }
+            }}
+          >
+            <Text style={styles.permissionButtonText}>
+              {permissionStatus === 'denied' && !canAskPermission ? 'Open settings' : 'Allow contact access'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <SectionList
+          sections={contactSections}
+          keyExtractor={c => c.id}
+          renderItem={renderItem}
+          renderSectionHeader={({ section }) => (
+            <Text style={styles.sectionDivider}>{section.title}</Text>
+          )}
+          stickySectionHeadersEnabled={false}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
+          ListEmptyComponent={
+            !isLoadingContacts && (
+              <View style={styles.emptyStateWrapper}>
+                <Text style={styles.emptyStateText}>No contacts found on this device.</Text>
+                <TouchableOpacity style={styles.permissionButton} onPress={loadContacts}>
+                  <Text style={styles.permissionButtonText}>Reload contacts</Text>
+                </TouchableOpacity>
+              </View>
+            )
+          }
+        />
+      )}
 
       {/* Floating Send button */}
       {selected.length > 0 && (
@@ -527,7 +611,7 @@ const styles = StyleSheet.create({
   },
 
 
- syncStatusWrapper: {
+  syncStatusWrapper: {
     marginHorizontal: 16,
     marginBottom: 8,
   },
@@ -537,6 +621,54 @@ const styles = StyleSheet.create({
   },
   syncStatusError: {
     color: '#b3261e',
+  },
+
+  permissionWrapper: {
+    marginHorizontal: 16,
+    marginTop: 24,
+    padding: 20,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  permissionTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    marginTop: 12,
+    color: '#1f1f1f',
+    textAlign: 'center',
+  },
+  permissionMessage: {
+    fontSize: 14,
+    color: '#555',
+    textAlign: 'center',
+    marginTop: 8,
+    lineHeight: 20,
+  },
+  permissionButton: {
+    marginTop: 16,
+    backgroundColor: '#1f6ea7',
+    borderRadius: 22,
+    paddingVertical: 10,
+    paddingHorizontal: 22,
+  },
+  permissionButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  emptyStateWrapper: {
+    alignItems: 'center',
+    marginTop: 40,
+  },
+  emptyStateText: {
+    fontSize: 15,
+    color: '#333',
+    marginBottom: 12,
   },
 
   errorWrapper: {
