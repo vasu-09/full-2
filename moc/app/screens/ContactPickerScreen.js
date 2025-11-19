@@ -249,6 +249,14 @@ export default function ContactPickerScreen() {
     return sections;
   }, [filteredContacts, getMatchForContact]);
 
+  const searchResults = useMemo(() => {
+    if (!searchQuery) {
+      return [];
+    }
+
+    return filteredContacts.filter(contact => Boolean(getMatchForContact(contact)));
+  }, [filteredContacts, getMatchForContact, searchQuery]);
+
   const handleInvite = useCallback(async contact => {
     const displayName = contact?.name?.trim();
     const inviteMessage = displayName
@@ -292,6 +300,28 @@ export default function ContactPickerScreen() {
             </TouchableOpacity>
           )}
         </View>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderSearchResult = contact => {
+    const isSel = selected.some(c => c.id === contact.id);
+    const match = getMatchForContact(contact);
+
+    return (
+      <TouchableOpacity key={contact.id} style={styles.searchResultItem} onPress={() => toggleSelect(contact)}>
+        {contact.imageAvailable ? (
+          <Image source={{ uri: contact.image.uri }} style={styles.searchResultAvatar} />
+        ) : (
+          <View style={[styles.searchResultAvatar, styles.placeholder]}>
+            <Icon name="person" size={22} color="#888" />
+          </View>
+        )}
+        <View style={styles.searchResultText}>
+          <Text style={styles.searchResultName}>{contact.name}</Text>
+          <Text style={styles.searchResultStatus}>{match?.phone}</Text>
+        </View>
+        {isSel && <Icon name="check-circle" size={22} color="#1f6ea7" />}
       </TouchableOpacity>
     );
   };
@@ -371,74 +401,99 @@ export default function ContactPickerScreen() {
         </View>
       )}
 
-      {/* All contacts */}
-      <Text style={styles.sectionTitle}>All contacts</Text>
-      <View style={styles.syncStatusWrapper}>
-         {isLoadingContacts ? (
-          <Text style={styles.syncStatusText}>Loading contacts from your phone…</Text>
-        ) : contactsError ? (
-          <Text style={[styles.syncStatusText, styles.syncStatusError]}>{contactsError}</Text>
-        ) : isSyncing ? (
-          <Text style={styles.syncStatusText}>Syncing your contacts…</Text>
-        ) : syncError ? (
-          <Text style={[styles.syncStatusText, styles.syncStatusError]}>{syncError}</Text>
-        ) : matchedContacts.length > 0 ? (
-          <Text style={styles.syncStatusText}>
-            {matchedContacts.length} of your contacts are already on MoC.
-          </Text>
-        ) : (
-          <Text style={styles.syncStatusText}>None of your contacts have joined MoC yet.</Text>
-        )}
-      </View>
-      {createError ? (
-        <View style={styles.errorWrapper}>
-          <Text style={styles.errorText}>{createError}</Text>
-        </View>
-      ) : null}
-       {permissionStatus !== 'granted' ? (
-        <View style={styles.permissionWrapper}>
-          <Icon name="contacts" size={42} color="#1f6ea7" />
-          <Text style={styles.permissionTitle}>Contacts permission needed</Text>
-          <Text style={styles.permissionMessage}>
-            Allow MoC to access your address book so we can show who is already using the app and who you can
-            invite.
-          </Text>
-          <TouchableOpacity
-            style={styles.permissionButton}
-            onPress={() => {
-              if (permissionStatus === 'denied' && !canAskPermission) {
-                Linking.openSettings();
-              } else {
-                loadContacts();
-              }
-            }}
-          >
-            <Text style={styles.permissionButtonText}>
-              {permissionStatus === 'denied' && !canAskPermission ? 'Open settings' : 'Allow contact access'}
+{isSearching && searchQuery ? (
+        <View style={styles.searchResultsWrapper}>
+          <View style={styles.searchResultsHeader}>
+            <Text style={styles.searchResultsLabel}>Contacts</Text>
+            <Text style={styles.searchResultsCount}>
+              {searchResults.length ? `${searchResults.length} found` : 'No matches'}
             </Text>
-          </TouchableOpacity>
+          </View>
+
+          {searchResults.length ? (
+            searchResults.map(renderSearchResult)
+          ) : (
+            <View style={styles.emptySearchWrapper}>
+              <Icon name="search" size={36} color="#999" />
+              <Text style={styles.emptySearchTitle}>No MoC contacts found</Text>
+              <Text style={styles.emptySearchMessage}>
+                Try a different name or number to find people already using MoC.
+              </Text>
+            </View>
+          )}
         </View>
       ) : (
-        <SectionList
-          sections={contactSections}
-          keyExtractor={c => c.id}
-          renderItem={renderItem}
-          renderSectionHeader={({ section }) => (
-            <Text style={styles.sectionDivider}>{section.title}</Text>
+         <>
+          {/* All contacts */}
+          <Text style={styles.sectionTitle}>All contacts</Text>
+          <View style={styles.syncStatusWrapper}>
+            {isLoadingContacts ? (
+              <Text style={styles.syncStatusText}>Loading contacts from your phone…</Text>
+            ) : contactsError ? (
+              <Text style={[styles.syncStatusText, styles.syncStatusError]}>{contactsError}</Text>
+            ) : isSyncing ? (
+              <Text style={styles.syncStatusText}>Syncing your contacts…</Text>
+            ) : syncError ? (
+              <Text style={[styles.syncStatusText, styles.syncStatusError]}>{syncError}</Text>
+            ) : matchedContacts.length > 0 ? (
+              <Text style={styles.syncStatusText}>
+                {matchedContacts.length} of your contacts are already on MoC.
+              </Text>
+            ) : (
+              <Text style={styles.syncStatusText}>None of your contacts have joined MoC yet.</Text>
+            )}
+          </View>
+          {createError ? (
+            <View style={styles.errorWrapper}>
+              <Text style={styles.errorText}>{createError}</Text>
+            </View>
+          ) : null}
+          {permissionStatus !== 'granted' ? (
+            <View style={styles.permissionWrapper}>
+              <Icon name="contacts" size={42} color="#1f6ea7" />
+              <Text style={styles.permissionTitle}>Contacts permission needed</Text>
+              <Text style={styles.permissionMessage}>
+                Allow MoC to access your address book so we can show who is already using the app and who you can
+                invite.
+              </Text>
+              <TouchableOpacity
+                style={styles.permissionButton}
+                onPress={() => {
+                  if (permissionStatus === 'denied' && !canAskPermission) {
+                    Linking.openSettings();
+                  } else {
+                    loadContacts();
+                  }
+                }}
+              >
+                <Text style={styles.permissionButtonText}>
+                  {permissionStatus === 'denied' && !canAskPermission ? 'Open settings' : 'Allow contact access'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <SectionList
+              sections={contactSections}
+              keyExtractor={c => c.id}
+              renderItem={renderItem}
+              renderSectionHeader={({ section }) => (
+                <Text style={styles.sectionDivider}>{section.title}</Text>
+              )}
+              stickySectionHeadersEnabled={false}
+              contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
+              ListEmptyComponent={
+                !isLoadingContacts && (
+                  <View style={styles.emptyStateWrapper}>
+                    <Text style={styles.emptyStateText}>No contacts found on this device.</Text>
+                    <TouchableOpacity style={styles.permissionButton} onPress={loadContacts}>
+                      <Text style={styles.permissionButtonText}>Reload contacts</Text>
+                    </TouchableOpacity>
+                  </View>
+                )
+              }
+            />
           )}
-          stickySectionHeadersEnabled={false}
-          contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
-          ListEmptyComponent={
-            !isLoadingContacts && (
-              <View style={styles.emptyStateWrapper}>
-                <Text style={styles.emptyStateText}>No contacts found on this device.</Text>
-                <TouchableOpacity style={styles.permissionButton} onPress={loadContacts}>
-                  <Text style={styles.permissionButtonText}>Reload contacts</Text>
-                </TouchableOpacity>
-              </View>
-            )
-          }
-        />
+          </>
       )}
 
       {/* Floating Send button */}
@@ -704,5 +759,80 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#333',
     paddingVertical: 8,
+  },
+  searchResultsWrapper: {
+    flex: 1,
+    backgroundColor: '#fff',
+    margin: 16,
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  searchResultsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  searchResultsLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1f1f1f',
+  },
+  searchResultsCount: {
+    fontSize: 13,
+    color: '#666',
+  },
+  searchResultItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f1f1',
+  },
+  searchResultAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    marginRight: 12,
+    backgroundColor: '#ddd',
+  },
+  searchResultText: {
+    flex: 1,
+  },
+  searchResultName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#222',
+  },
+  searchResultStatus: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
+  },
+  emptySearchWrapper: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 16,
+  },
+  emptySearchTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 12,
+    color: '#1f1f1f',
+  },
+  emptySearchMessage: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 4,
+    lineHeight: 20,
   },
 });
