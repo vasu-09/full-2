@@ -98,21 +98,39 @@ export default function ContactPickerScreen() {
 
   const matchesByPhone = useMemo(() => {
     const map = new Map();
+
+     const addEntry = (key, match) => {
+      if (key && !map.has(key)) {
+        map.set(key, match);
+      }
+    };
+
     matchedContacts.forEach(match => {
-    const rawPhone = match?.phone;
+     const rawPhone = match?.phone?.trim?.() ?? '';
       if (!rawPhone) {
         return;
       }
 
-      map.set(rawPhone, match);
+      // Store raw value straight from the server
+      addEntry(rawPhone, match);
 
       const normalized = normalizePhoneNumber(rawPhone);
       if (normalized) {
-        map.set(normalized, match);
+        addEntry(normalized, match);
 
-        if (normalized.startsWith('91') && normalized.length === 12) {
-          map.set(normalized.slice(2), match);
+        const normalizedDigits = normalized.replace(/\D/g, '');
+        addEntry(normalizedDigits, match);
+
+        if (normalizedDigits.startsWith('91') && normalizedDigits.length === 12) {
+          addEntry(normalizedDigits.slice(2), match);;
         }
+      }
+
+      // Also store digits-only fallbacks so we can match contacts saved without country codes
+      const digitsOnly = rawPhone.replace(/\D/g, '');
+      addEntry(digitsOnly, match);
+      if (digitsOnly.startsWith('91') && digitsOnly.length === 12) {
+        addEntry(digitsOnly.slice(2), match);
       }
     });
     return map;
@@ -123,8 +141,13 @@ export default function ContactPickerScreen() {
       const numbers = contact?.phoneNumbers ?? [];
       for (const phone of numbers) {
         const normalized = phone?.number ? normalizePhoneNumber(phone.number) : null;
+        const digitsOnly = phone?.number ? phone.number.replace(/\D/g, '') : '';
         if (normalized && matchesByPhone.has(normalized)) {
           return matchesByPhone.get(normalized);
+        }
+
+        if (digitsOnly && matchesByPhone.has(digitsOnly)) {
+          return matchesByPhone.get(digitsOnly);
         }
       }
       return null;

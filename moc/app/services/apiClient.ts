@@ -210,7 +210,7 @@ const normalizeBaseUrl = (value?: string | null, { appendDefaultPort = false } =
 };
 
 const getExplicitBaseUrl = () => {
-  const extra = expoConfig?.extra ?? {};
+  const extra = expoConfig?.extra ?? manifest2Config?.extra ?? {};
 
   const rawBase =
     extra?.apiBaseUrl ??
