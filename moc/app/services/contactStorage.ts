@@ -1,4 +1,4 @@
-import type { Contact } from 'expo-contacts';
+import type { ExistingContact } from 'expo-contacts';
 
 import { buildContactIndex, normalizePhoneNumber, type ContactMatch } from './contactService';
 import { getContactsFromDb, replaceContactsInDb, type StoredContactInput } from './database';
@@ -51,7 +51,10 @@ const findMatchForPhones = (phones: PhoneEntry[], lookup: MatchLookup): ContactM
   return null;
 };
 
-export const persistContactsToDb = async (contacts: Contact[], matches: ContactMatch[]): Promise<void> => {
+export const persistContactsToDb = async (
+  contacts: ExistingContact[],
+  matches: ContactMatch[],
+): Promise<void> => {
   const lookup = buildMatchLookup(matches ?? []);
   const contactIndex = buildContactIndex(contacts);
 
