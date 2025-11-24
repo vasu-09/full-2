@@ -324,7 +324,8 @@ export default function ContactPickerScreen() {
    const numericQuery = searchQuery.replace(/\D/g, '');
 
     return contacts.filter(contact => {
-      const nameMatch = contact.name?.toLowerCase().includes(lower);
+      const name = contact?.name ?? '';
+      const nameMatch = name.toLowerCase().includes(lower);
 
       const phoneMatch = (contact.phoneNumbers ?? []).some(phone => {
         const rawNumber = phone?.number ?? '';
@@ -371,7 +372,37 @@ export default function ContactPickerScreen() {
       return [];
     }
 
-    return filteredContacts;
+    const numericQuery = searchQuery.replace(/\D/g, '');
+
+    const hasExistingContact = filteredContacts.some(contact =>
+      (contact.phoneNumbers ?? []).some(phone => {
+        const normalized = phone?.number?.replace(/\D/g, '') ?? '';
+        return numericQuery && normalized.includes(numericQuery);
+      }),
+    );
+
+    const virtualContact =
+      !filteredContacts.length && numericQuery.length >= 7 && !hasExistingContact
+        ? {
+            id: `virtual-${numericQuery}`,
+            name: searchQuery,
+            phoneNumbers: [
+              {
+                id: `virtual-${numericQuery}-phone`,
+                label: 'mobile',
+                number: searchQuery,
+              },
+            ],
+            imageAvailable: false,
+            image: undefined,
+          }
+        : null;
+
+    if (filteredContacts.length) {
+      return filteredContacts;
+    }
+
+    return virtualContact ? [virtualContact] : [];
   }, [filteredContacts, searchQuery]);
 
   const handleInvite = useCallback(async contact => {
@@ -441,7 +472,7 @@ export default function ContactPickerScreen() {
           </View>
         )}
         <View style={styles.searchResultText}>
-          <Text style={styles.searchResultName}>{contact.name}</Text>
+           <Text style={styles.searchResultName}>{displayName}</Text>
           <Text style={styles.searchResultStatus}>{statusText}</Text>
         </View>
         {isSel && <Icon name="check-circle" size={22} color="#1f6ea7" />}
@@ -534,7 +565,9 @@ export default function ContactPickerScreen() {
           </View>
 
           {searchResults.length ? (
-            searchResults.map(renderSearchResult)
+            <ScrollView keyboardShouldPersistTaps="handled">
+              {searchResults.map(renderSearchResult)}
+            </ScrollView>
           ) : (
             <View style={styles.emptySearchWrapper}>
               <Icon name="search" size={36} color="#999" />
