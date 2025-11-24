@@ -139,15 +139,47 @@ export default function ContactPickerScreen() {
   const getMatchForContact = useCallback(
     contact => {
       const numbers = contact?.phoneNumbers ?? [];
+
       for (const phone of numbers) {
-        const normalized = phone?.number ? normalizePhoneNumber(phone.number) : null;
-        const digitsOnly = phone?.number ? phone.number.replace(/\D/g, '') : '';
-        if (normalized && matchesByPhone.has(normalized)) {
-          return matchesByPhone.get(normalized);
+        const rawNumber = phone?.number ?? '';
+        if (!rawNumber) {
+          continue;
         }
 
-        if (digitsOnly && matchesByPhone.has(digitsOnly)) {
-          return matchesByPhone.get(digitsOnly);
+        const normalized = normalizePhoneNumber(rawNumber);
+        const digitsOnly = rawNumber.replace(/\D/g, '');
+
+        const candidates = [];
+
+        if (normalized) {
+          candidates.push(normalized);
+
+          const normalizedDigits = normalized.replace(/\D/g, '');
+          if (normalizedDigits) {
+            candidates.push(normalizedDigits);
+
+            if (normalizedDigits.startsWith('91') && normalizedDigits.length === 12) {
+              candidates.push(normalizedDigits.slice(2));
+            }
+          }
+        }
+
+        if (digitsOnly) {
+          candidates.push(digitsOnly);
+
+          if (digitsOnly.startsWith('0') && digitsOnly.length === 11) {
+            candidates.push(digitsOnly.slice(1));
+          }
+
+          if (digitsOnly.startsWith('91') && digitsOnly.length === 12) {
+            candidates.push(digitsOnly.slice(2));
+          }
+        }
+
+        for (const key of candidates) {
+          if (matchesByPhone.has(key)) {
+            return matchesByPhone.get(key);
+          }
         }
       }
       return null;
