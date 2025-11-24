@@ -371,8 +371,8 @@ export default function ContactPickerScreen() {
       return [];
     }
 
-    return filteredContacts.filter(contact => Boolean(getMatchForContact(contact)));
-  }, [filteredContacts, getMatchForContact, searchQuery]);
+    return filteredContacts;
+  }, [filteredContacts, searchQuery]);
 
   const handleInvite = useCallback(async contact => {
     const displayName = contact?.name?.trim();
@@ -425,6 +425,12 @@ export default function ContactPickerScreen() {
     const isSel = selected.some(c => c.id === contact.id);
     const match = getMatchForContact(contact);
 
+    const primaryNumber = contact?.phoneNumbers?.[0]?.number ?? match?.phone ?? '';
+
+    const statusText = match
+      ? `${primaryNumber || match.phone} · On MoC`
+      : primaryNumber || 'No phone number';
+
     return (
       <TouchableOpacity key={contact.id} style={styles.searchResultItem} onPress={() => toggleSelect(contact)}>
         {contact.imageAvailable ? (
@@ -436,7 +442,7 @@ export default function ContactPickerScreen() {
         )}
         <View style={styles.searchResultText}>
           <Text style={styles.searchResultName}>{contact.name}</Text>
-          <Text style={styles.searchResultStatus}>{match?.phone}</Text>
+          <Text style={styles.searchResultStatus}>{statusText}</Text>
         </View>
         {isSel && <Icon name="check-circle" size={22} color="#1f6ea7" />}
       </TouchableOpacity>
