@@ -188,7 +188,7 @@ export const getListsFromDb = async (): Promise<{ id: string; title: string; lis
 export const replaceListsInDb = async (lists: ListRecordInput[]): Promise<void> => {
   const db = await getDatabase();
 
-  await db.withTransactionAsync(async (tx) => {
+  await db.withExclusiveTransactionAsync(async (tx: SQLite.SQLiteDatabase) => {
     if (!lists.length) {
       await tx.runAsync('DELETE FROM list_items');
       await tx.runAsync('DELETE FROM lists');
@@ -314,7 +314,7 @@ export const saveListSummaryToDb = async (summary: ListSummaryInput): Promise<vo
   const db = await getDatabase();
   const normalizedId = summary.id;
 
-  await db.withTransactionAsync(async (tx) => {
+  await db.withExclusiveTransactionAsync(async (tx: SQLite.SQLiteDatabase) => {
     const existing = await tx.getFirstAsync<{ pinned: number }>('SELECT pinned FROM lists WHERE id = ?', [normalizedId]);
     const pinnedValue = summary.pinned != null ? (summary.pinned ? 1 : 0) : existing?.pinned ?? 0;
 
@@ -376,7 +376,7 @@ export const saveListSummaryToDb = async (summary: ListSummaryInput): Promise<vo
 export const replaceContactsInDb = async (contacts: StoredContactInput[]): Promise<void> => {
   const db = await getDatabase();
 
-  await db.withTransactionAsync(async (tx) => {
+  await db.withExclusiveTransactionAsync(async (tx: SQLite.SQLiteDatabase) => {
     await tx.runAsync('DELETE FROM contacts');
 
     for (const contact of contacts) {
