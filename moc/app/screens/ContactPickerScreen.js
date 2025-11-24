@@ -19,6 +19,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useChatRegistry } from '../context/ChatContext';
 import { normalizePhoneNumber, syncContacts } from '../services/contactService';
+import { persistContactsToDb, readStoredContacts } from '../services/contactStorage';
 import { createDirectRoom } from '../services/roomsService';
 
 
@@ -41,6 +42,59 @@ export default function ContactPickerScreen() {
   const [permissionStatus, setPermissionStatus] = useState('undetermined');
   const [canAskPermission, setCanAskPermission] = useState(true);
   const [isLoadingContacts, setIsLoadingContacts] = useState(true);
+
+   useEffect(() => {
+    let isMounted = true;
+
+    const restoreCachedContacts = async () => {
+      try {
+        const cached = await readStoredContacts();
+
+        if (!isMounted || !cached?.length) {
+          return;
+        }
+
+        setContacts(curr => (curr?.length ? curr : cached.map(contact => ({
+          id: contact.id,
+          name: contact.name,
+          phoneNumbers: (contact.phoneNumbers ?? []).map((phone, idx) => ({
+            id: `${contact.id}-${idx}`,
+            label: phone.label ?? undefined,
+            number: phone.number,
+          })),
+          imageAvailable: Boolean(contact.imageUri),
+          image: contact.imageUri ? { uri: contact.imageUri } : undefined,
+        }))));
+
+        setMatchedContacts(currMatches => {
+          if (currMatches?.length) {
+            return currMatches;
+          }
+
+          const dedup = new Map();
+          cached.forEach(contact => {
+            if (contact.matchPhone && contact.matchUserId != null) {
+              const key = normalizePhoneNumber(contact.matchPhone) ?? contact.matchPhone;
+              if (key && !dedup.has(key)) {
+                dedup.set(key, { phone: contact.matchPhone, userId: Number(contact.matchUserId) });
+              }
+            }
+          });
+
+          return Array.from(dedup.values());
+        });
+      } catch (error) {
+        console.warn('Unable to restore cached contacts', error);
+      }
+    };
+
+    restoreCachedContacts();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
 
   const matchesByPhone = useMemo(() => {
     const map = new Map();
@@ -90,8 +144,8 @@ export default function ContactPickerScreen() {
       setCanAskPermission(Boolean(canAskAgain));
 
       if (!granted) {
-        setContacts([]);
-        setMatchedContacts([]);
+        setContacts(current => (current?.length ? current : []));
+        setMatchedContacts(current => (current?.length ? current : []));
         if (status === 'denied') {
           setContactsError('MoC needs access to your contacts to show them here.');
         }
@@ -117,15 +171,23 @@ export default function ContactPickerScreen() {
 
       setContacts(loaded);
 
+      let matches = [];
+
       try {
         setIsSyncing(true);
-        const matches = await syncContacts(loaded);
+        matches = await syncContacts(loaded);
         setMatchedContacts(matches);
       } catch (error) {
         console.error('Failed to sync contacts', error);
         setSyncError('Unable to sync contacts with MoC right now.');
       } finally {
         setIsSyncing(false);
+      }
+
+       try {
+        await persistContactsToDb(loaded, matches);
+      } catch (error) {
+        console.warn('Unable to cache contacts locally', error);
       }
     } catch (error) {
       console.error('Failed to load contacts from device', error);

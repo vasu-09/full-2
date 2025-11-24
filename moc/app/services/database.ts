@@ -50,6 +50,7 @@ type ItemRow = {
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let isInitialized = false;
 let localItemCounter = 0;
+let localContactCounter = 0;
 
 const getDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
   if (!dbPromise) {
@@ -82,6 +83,17 @@ const getDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
         created_at TEXT,
         updated_at TEXT,
         FOREIGN KEY(list_id) REFERENCES lists(id) ON DELETE CASCADE
+      );
+    `);
+     await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS contacts (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        phone_numbers_json TEXT,
+        image_uri TEXT,
+        match_phone TEXT,
+        match_user_id INTEGER,
+        updated_at TEXT
       );
     `);
     isInitialized = true;
@@ -131,6 +143,32 @@ const serializeSubQuantities = (
 
   return fallbackJson ?? null;
 };
+
+const generateLocalContactId = (): string => {
+  localContactCounter += 1;
+  return `local-contact-${Date.now()}-${localContactCounter}`;
+};
+
+export type StoredContactInput = {
+  id?: string | null;
+  name: string;
+  phoneNumbers?: { label?: string | null; number: string }[];
+  imageUri?: string | null;
+  matchPhone?: string | null;
+  matchUserId?: number | null;
+  updatedAt?: string | null;
+};
+
+type ContactRow = {
+  id: string;
+  name: string;
+  phone_numbers_json: string | null;
+  image_uri: string | null;
+  match_phone: string | null;
+  match_user_id: number | null;
+  updated_at: string | null;
+};
+
 
 export const getListsFromDb = async (): Promise<{ id: string; title: string; listType: string | null; pinned: boolean; createdAt: string | null; updatedAt: string | null; createdByUserId: string | null }[]> => {
   const db = await getDatabase();
@@ -333,4 +371,88 @@ export const saveListSummaryToDb = async (summary: ListSummaryInput): Promise<vo
       }
     }
   });
+};
+
+export const replaceContactsInDb = async (contacts: StoredContactInput[]): Promise<void> => {
+  const db = await getDatabase();
+
+  await db.withTransactionAsync(async (tx) => {
+    await tx.runAsync('DELETE FROM contacts');
+
+    for (const contact of contacts) {
+      const normalizedId = contact.id ? String(contact.id) : generateLocalContactId();
+      let phoneJson: string | null = null;
+
+      if (Array.isArray(contact.phoneNumbers)) {
+        try {
+          const cleaned = contact.phoneNumbers
+            .filter((entry) => Boolean(entry?.number))
+            .map((entry) => ({
+              number: entry?.number ?? '',
+              label: entry?.label ?? null,
+            }));
+          phoneJson = cleaned.length ? JSON.stringify(cleaned) : null;
+        } catch (error) {
+          console.warn('Unable to serialize phone numbers for contact', contact?.id ?? contact?.name, error);
+          phoneJson = null;
+        }
+      }
+
+      await tx.runAsync(
+        `INSERT INTO contacts (id, name, phone_numbers_json, image_uri, match_phone, match_user_id, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           name = excluded.name,
+           phone_numbers_json = excluded.phone_numbers_json,
+           image_uri = excluded.image_uri,
+           match_phone = excluded.match_phone,
+           match_user_id = excluded.match_user_id,
+           updated_at = COALESCE(excluded.updated_at, contacts.updated_at)
+        `,
+        [
+          normalizedId,
+          contact.name,
+          phoneJson,
+          contact.imageUri ?? null,
+          contact.matchPhone ?? null,
+          contact.matchUserId ?? null,
+          contact.updatedAt ?? new Date().toISOString(),
+        ],
+      );
+    }
+  });
+};
+
+export const getContactsFromDb = async (): Promise<StoredContactInput[]> => {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<ContactRow>('SELECT * FROM contacts ORDER BY name COLLATE NOCASE ASC');
+
+  return (
+    rows?.map((row) => {
+      let phoneNumbers: { label?: string | null; number: string }[] | undefined;
+
+      if (row.phone_numbers_json) {
+        try {
+          const parsed = JSON.parse(row.phone_numbers_json);
+          if (Array.isArray(parsed)) {
+            phoneNumbers = parsed
+              .filter((entry) => Boolean(entry?.number))
+              .map((entry) => ({ number: String(entry.number), label: entry?.label ?? null }));
+          }
+        } catch (error) {
+          console.warn('Unable to parse stored phone numbers for contact', row.id, error);
+        }
+      }
+
+      return {
+        id: row.id,
+        name: row.name,
+        phoneNumbers,
+        imageUri: row.image_uri,
+        matchPhone: row.match_phone,
+        matchUserId: row.match_user_id,
+        updatedAt: row.updated_at,
+      } as StoredContactInput;
+    }) ?? []
+  );
 };
