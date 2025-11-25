@@ -18,8 +18,8 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useChatRegistry } from '../context/ChatContext';
-import { normalizePhoneNumber, syncContacts } from '../services/contactService';
-import { persistContactsToDb, readStoredContacts } from '../services/contactStorage';
+import { normalizePhoneNumber } from '../services/contactService';
+import { readStoredContacts, syncAndPersistContacts } from '../services/contactStorage';
 import { createDirectRoom } from '../services/roomsService';
 
 
@@ -229,11 +229,9 @@ export default function ContactPickerScreen() {
 
       setContacts(loaded);
 
-      let matches = [];
-
       try {
         setIsSyncing(true);
-        matches = await syncContacts(loaded);
+        const matches = await syncAndPersistContacts(loaded);
         setMatchedContacts(matches);
       } catch (error) {
         console.error('Failed to sync contacts', error);
@@ -242,11 +240,6 @@ export default function ContactPickerScreen() {
         setIsSyncing(false);
       }
 
-       try {
-        await persistContactsToDb(loaded, matches);
-      } catch (error) {
-        console.warn('Unable to cache contacts locally', error);
-      }
     } catch (error) {
       console.error('Failed to load contacts from device', error);
       setContacts([]);

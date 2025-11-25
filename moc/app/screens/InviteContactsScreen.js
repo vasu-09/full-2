@@ -2,20 +2,21 @@ import * as Contacts from 'expo-contacts';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    FlatList,
-    Image,
-    Share,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  FlatList,
+  Image,
+  Share,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { normalizePhoneNumber } from '../services/contactService';
+import { syncAndPersistContacts } from '../services/contactStorage';
 
-import { normalizePhoneNumber, syncContacts } from '../services/contactService';
 
 const INVITE_MESSAGE =
   'Hey! I am using MoC to stay connected. Download the app and join me: https://moc-app.example/invite';
@@ -78,7 +79,7 @@ export default function InviteContactsScreen() {
           return;
         }
 
-        const matches = await syncContacts(withNumbers);
+        const matches = await syncAndPersistContacts(withNumbers);
         const matchedNumbers = new Set(
           matches
             .map(match => (match?.phone ? normalizePhoneNumber(match.phone) : null))

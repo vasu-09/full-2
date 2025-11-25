@@ -1,7 +1,7 @@
 import type { ExistingContact } from 'expo-contacts';
 
-import { buildContactIndex, normalizePhoneNumber, type ContactMatch } from './contactService';
-import { getContactsFromDb, replaceContactsInDb, type StoredContactInput } from './database';
+import { buildContactIndex, normalizePhoneNumber, syncContacts, type ContactMatch } from './contactService';
+import { getContactsFromDb, replaceContactsInDb, type StoredContactInput } from './database.native';
 
 type PhoneEntry = { label?: string | null; number: string };
 
@@ -82,3 +82,21 @@ export const persistContactsToDb = async (
 };
 
 export const readStoredContacts = async (): Promise<StoredContactInput[]> => getContactsFromDb();
+
+export const syncAndPersistContacts = async (
+  contacts: ExistingContact[],
+): Promise<ContactMatch[]> => {
+  if (!contacts?.length) {
+    return [];
+  }
+
+  const matches = await syncContacts(contacts);
+
+  try {
+    await persistContactsToDb(contacts, matches);
+  } catch (error) {
+    console.warn('Unable to cache contacts locally', error);
+  }
+
+  return matches;
+};
