@@ -452,22 +452,48 @@ export const getContactsFromDb = async (): Promise<StoredContactInput[]> => {
   const db = await getDatabase();
   const rows = await db.getAllAsync<ContactRow>('SELECT * FROM contacts ORDER BY name COLLATE NOCASE ASC');
 
-   return rows?.map(deserializeContactRow) ?? [];
+  return rows?.map(deserializeContactRow) ?? [];
 };
 
-      export const searchContactsInDb = async (query: string): Promise<StoredContactInput[]> => {
+export const searchContactsInDb = async (query: string): Promise<StoredContactInput[]> => {
   const db = await getDatabase();
-  const like = `%${query}%`;
+  
+  const trimmed = query.trim();
 
-  const rows = await db.getAllAsync<ContactRow>(
-    `SELECT *
-     FROM contacts
-     WHERE LOWER(name) LIKE LOWER(?)
-        OR phone_numbers_json LIKE ?
-        OR match_phone LIKE ?
-     ORDER BY name COLLATE NOCASE ASC`,
-    [like, like, like],
-  );
+  if (!trimmed) {
+    const rows = await db.getAllAsync<ContactRow>('SELECT * FROM contacts ORDER BY name COLLATE NOCASE ASC');
+    return rows?.map(deserializeContactRow) ?? [];
+  }
 
-   return rows?.map(deserializeContactRow) ?? [];
+  const lower = trimmed.toLowerCase();
+  const like = `%${lower}%`;
+  const digits = trimmed.replace(/\D/g, '');
+  const digitsLike = digits ? `%${digits}%` : null;
+
+  console.log('[DB_SEARCH] query=', trimmed, 'digits=', digits);
+
+  const params: (string | null)[] = [like, like, like];
+  let sql = `
+    SELECT *
+    FROM contacts
+    WHERE LOWER(name) LIKE ?
+       OR LOWER(IFNULL(phone_numbers_json, '')) LIKE ?
+       OR LOWER(IFNULL(match_phone, '')) LIKE ?
+  `;
+
+  if (digitsLike) {
+    sql += `
+       OR REPLACE(REPLACE(REPLACE(IFNULL(phone_numbers_json, ''), ' ', ''), '-', ''), '+', '') LIKE ?
+       OR REPLACE(REPLACE(REPLACE(IFNULL(match_phone, ''), ' ', ''), '-', ''), '+', '') LIKE ?
+    `;
+    params.push(digitsLike, digitsLike);
+  }
+
+  sql += ' ORDER BY name COLLATE NOCASE ASC';
+
+  const rows = await db.getAllAsync<ContactRow>(sql, params);
+
+  console.log('[DB_SEARCH] rows found =', rows?.length ?? 0);
+
+  return rows?.map(deserializeContactRow) ?? [];
 };

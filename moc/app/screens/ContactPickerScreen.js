@@ -250,9 +250,9 @@ export default function ContactPickerScreen() {
 
       try {
         setIsSyncing(true);
-         const matches = await saveContactsToDb(loaded);
+        const matches = await saveContactsToDb(loaded);
         setMatchedContacts(matches);
-        await refreshContactsFromDb(searchQuery);
+        await refreshContactsFromDb('');
       } catch (error) {
         console.error('Failed to sync contacts', error);
         setSyncError('Unable to sync contacts with MoC right now.');
@@ -268,7 +268,7 @@ export default function ContactPickerScreen() {
     } finally {
       setIsLoadingContacts(false);
     }
-  }, [refreshContactsFromDb, searchQuery]);
+  }, [refreshContactsFromDb]);
 
   useEffect(() => {
     loadContacts();

@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import { getAllContactsFromDb, saveContactsToDb } from '../services/contactStorage';
+import { getAllContactsFromDb, syncAndPersistContacts } from '../services/contactStorage';
 
 
 const INVITE_MESSAGE =
@@ -79,7 +79,7 @@ export default function InviteContactsScreen() {
         }
 
         // Persist synced contacts locally so invite options always read from SQLite.
-        await saveContactsToDb(withNumbers);
+        await syncAndPersistContacts(withNumbers);
 
         const storedContacts = await getAllContactsFromDb();
 
