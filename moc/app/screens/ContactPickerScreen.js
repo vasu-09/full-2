@@ -4,7 +4,6 @@ import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Linking,
   ScrollView,
@@ -26,9 +25,7 @@ import { createDirectRoom } from '../services/roomsService';
 
 export default function ContactPickerScreen() {
   console.log('[CONTACT_PICKER] render');
-  useEffect(() => {
-    Alert.alert('Debug', 'ContactPickerScreen mounted');
-  }, []);
+  
   
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -351,15 +348,9 @@ export default function ContactPickerScreen() {
     });
   }, [contacts, searchQuery]);
 
-    useEffect(() => {
+  useEffect(() => {
     console.log('searchQuery:', searchQuery, 'filteredContacts:', filteredContacts.length);
   }, [filteredContacts.length, searchQuery]);
-  useEffect(() => {
-  Alert.alert(
-    'Search debug',
-    `input="${searchInput}"\nquery="${searchQuery}"\nfiltered=${filteredContacts.length}`
-  );
-}, [searchQuery, filteredContacts.length]);
   
   const contactSections = useMemo(() => {
     const registered = [];
@@ -498,10 +489,16 @@ export default function ContactPickerScreen() {
   };
 
   const DebugInfo = () => (
-    <View style={{ paddingHorizontal: 12, paddingVertical: 4 }}>
-      <Text style={{ fontSize: 10, color: 'red' }}>
-        input="{searchInput}" | query="{searchQuery}" | filtered={filteredContacts.length}
+    <View style={styles.debugInfo}>
+      <Text style={styles.debugText}>
+        {`input="${searchInput}" | query="${searchQuery}" | filtered=${filteredContacts.length} | contacts=${contacts.length}`}
       </Text>
+      <Text style={styles.debugText}>
+        {`matches=${matchedContacts.length} | permission=${permissionStatus} | loading=${isLoadingContacts}`}
+      </Text>
+      {contactsError ? <Text style={[styles.debugText, styles.debugError]}>{contactsError}</Text> : null}
+      {syncError ? <Text style={[styles.debugText, styles.debugError]}>{syncError}</Text> : null}
+      <Text/>
     </View>
   );
 
@@ -601,6 +598,13 @@ export default function ContactPickerScreen() {
               <Text style={styles.emptySearchMessage}>
                 Try a different name or number to find people already using MoC.
               </Text>
+               {isLoadingContacts ? (
+                <Text style={styles.emptySearchHint}>Still loading contacts from your phone…</Text>
+              ) : contactsError ? (
+                <Text style={styles.emptySearchHint}>{contactsError}</Text>
+              ) : syncError ? (
+                <Text style={styles.emptySearchHint}>{syncError}</Text>
+              ) : null}
             </View>
           )}
         </View>
@@ -738,8 +742,21 @@ const styles = StyleSheet.create({
   
   searchBtn: { padding: 8 },
 
+  debugInfo: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  debugText: {
+    fontSize: 10,
+    color: '#b3261e',
+  },
+  debugError: {
+    fontWeight: '600',
+  },
+
+
   // SEARCH header replaces the normal header
- selectedCount: {
+  selectedCount: {
     fontSize: 14,
     fontWeight: '600',
     color: '#333',
@@ -1016,5 +1033,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 4,
     lineHeight: 20,
+  },
+  emptySearchHint: {
+    fontSize: 13,
+    color: '#b3261e',
+    textAlign: 'center',
+    marginTop: 8,
   },
 });

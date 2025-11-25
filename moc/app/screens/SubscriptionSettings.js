@@ -1,21 +1,21 @@
-import React, { useState } from 'react';
+import { useRouter } from 'expo-router';
+import { useState } from 'react';
 import {
-  View,
-  Text,
+  Alert,
   StyleSheet,
   Switch,
+  Text,
   TouchableOpacity,
-  Alert,
+  View,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialIcons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 
 export default function SubscriptionSettings() {
   const router = useRouter();
 
   // Replace with real subscription data
-  const [isSubscribed, setIsSubscribed] = useState(true);
+  const [isSubscribed] = useState(true);
   const [autopayEnabled, setAutopayEnabled] = useState(false);
   const startDate = '2025-07-01';
   const expiryDate = '2025-08-01';

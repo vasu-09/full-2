@@ -25,7 +25,6 @@ export default function CompleteProfileScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const rawPhone = Array.isArray(params.phoneNumber) ? params.phoneNumber[0] : params.phoneNumber;
-  const rawInitialName = Array.isArray(params.initialName) ? params.initialName[0] : params.initialName;
   const displayPhone = typeof rawPhone === 'string' && rawPhone.trim() ? rawPhone : '';
   const [photoUri, setPhotoUri] = useState(null);
    const [name, setName] = useState('');
