@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Linking,
   ScrollView,
@@ -13,7 +14,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
@@ -24,6 +25,11 @@ import { createDirectRoom } from '../services/roomsService';
 
 
 export default function ContactPickerScreen() {
+  console.log('[CONTACT_PICKER] render');
+  useEffect(() => {
+    Alert.alert('Debug', 'ContactPickerScreen mounted');
+  }, []);
+  
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { upsertRoom } = useChatRegistry();
@@ -345,6 +351,16 @@ export default function ContactPickerScreen() {
     });
   }, [contacts, searchQuery]);
 
+    useEffect(() => {
+    console.log('searchQuery:', searchQuery, 'filteredContacts:', filteredContacts.length);
+  }, [filteredContacts.length, searchQuery]);
+  useEffect(() => {
+  Alert.alert(
+    'Search debug',
+    `input="${searchInput}"\nquery="${searchQuery}"\nfiltered=${filteredContacts.length}`
+  );
+}, [searchQuery, filteredContacts.length]);
+  
   const contactSections = useMemo(() => {
     const registered = [];
     const unregistered = [];
@@ -457,6 +473,7 @@ export default function ContactPickerScreen() {
     const match = getMatchForContact(contact);
 
     const primaryNumber = contact?.phoneNumbers?.[0]?.number ?? match?.phone ?? '';
+    const displayName = contact?.name?.trim?.() || primaryNumber || match?.phone || 'Unknown contact';
 
     const statusText = match
       ? `${primaryNumber || match.phone} · On MoC`
@@ -472,13 +489,21 @@ export default function ContactPickerScreen() {
           </View>
         )}
         <View style={styles.searchResultText}>
-           <Text style={styles.searchResultName}>{displayName}</Text>
+          <Text style={styles.searchResultName}>{displayName}</Text>
           <Text style={styles.searchResultStatus}>{statusText}</Text>
         </View>
         {isSel && <Icon name="check-circle" size={22} color="#1f6ea7" />}
       </TouchableOpacity>
     );
   };
+
+  const DebugInfo = () => (
+    <View style={{ paddingHorizontal: 12, paddingVertical: 4 }}>
+      <Text style={{ fontSize: 10, color: 'red' }}>
+        input="{searchInput}" | query="{searchQuery}" | filtered={filteredContacts.length}
+      </Text>
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -520,6 +545,7 @@ export default function ContactPickerScreen() {
 
         
       )}
+      <DebugInfo />
 
       {/* Selected strip (unchanged) */}
       {selected.length > 0 && (
@@ -555,7 +581,7 @@ export default function ContactPickerScreen() {
         </View>
       )}
 
-{isSearching && searchQuery ? (
+{isSearching && searchInput  ? (
         <View style={styles.searchResultsWrapper}>
           <View style={styles.searchResultsHeader}>
             <Text style={styles.searchResultsLabel}>Contacts</Text>

@@ -1,20 +1,23 @@
+import * as Contacts from 'expo-contacts';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Linking,
+  PermissionsAndroid,
   Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
-  PermissionsAndroid
+  View
 } from 'react-native';
-import * as Contacts from 'expo-contacts';
 
 
 const androidPhonePermission =
-  PermissionsAndroid.PERMISSIONS?.READ_PHONE_STATE ?? PermissionsAndroid.PERMISSIONS?.CALL_PHONE ?? null;
+  PermissionsAndroid?.PERMISSIONS?.READ_PHONE_STATE ??
+  PermissionsAndroid?.PERMISSIONS?.CALL_PHONE ??
+  null;
+
 
 const PermissionsScreen = () => {
   const router = useRouter();
