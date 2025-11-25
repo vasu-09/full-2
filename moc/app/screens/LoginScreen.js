@@ -28,7 +28,13 @@ const LoginScreen = () => {
       const baseMessage = serverMessage || err?.message || 'Unable to send OTP. Please try again.';
 
       if (!serverMessage && err?.message === 'Network Error') {
-        setError(`Unable to reach the server at ${apiBaseURL}. Please ensure the API is running and reachable from your device.`);
+        const hintLines = [
+          `Unable to reach the server at ${apiBaseURL}.`,
+          '• Make sure the API gateway is running and accessible on your LAN.',
+          '• If you are using Expo Go over a tunnel, set EXPO_PUBLIC_API_URL to a reachable host (or expose the API publicly).',
+        ];
+
+        setError(hintLines.join('\n'));
         return;
       }
 

@@ -51,11 +51,48 @@ const detectLanIPv4 = () => {
   return candidates[0] ?? null;
 };
 
+const normalizeHost = (value) => {
+  if (!value) return null;
+
+  const trimmed = String(value).trim();
+  if (!trimmed) return null;
+
+  try {
+    const prefixed = trimmed.match(/^[a-zA-Z]+:\/\//) ? trimmed : `http://${trimmed}`;
+    const parsed = new URL(prefixed);
+    return parsed.hostname || null;
+  } catch {
+    return trimmed.split(':')[0];
+  }
+};
+
+const getExpoDevHost = () => {
+  // Expo sets these when running through `expo start`.
+  const envCandidates = [process.env.EXPO_DEV_SERVER_HOST, process.env.EXPO_SERVER_HOSTNAME];
+
+  for (const candidate of envCandidates) {
+    const host = normalizeHost(candidate);
+    if (host && host !== 'localhost' && host !== '127.0.0.1') {
+      return host;
+    }
+  }
+
+  return null;
+};
+
 const inferDevApiBaseUrl = () => {
   const isBuild = process.env.EAS_BUILD === 'true' || process.env.CI === 'true';
   const isProduction = process.env.NODE_ENV === 'production';
   if (isBuild || isProduction) {
     return null;
+  }
+
+  const expoDevHost = getExpoDevHost();
+  if (expoDevHost) {
+    const port = process.env.EXPO_PUBLIC_API_PORT || '8080';
+    const url = `http://${expoDevHost}:${port}`;
+    console.log(`[app.config] Using Expo dev host for EXPO_PUBLIC_API_URL: ${url}`);
+    return url;
   }
 
   const ip = detectLanIPv4();

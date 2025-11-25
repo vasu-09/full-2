@@ -305,6 +305,21 @@ const buildHostBaseUrl = (host: string) => {
   return `http://${parsedHost}:8080`;
 };
 
+const warnIfLikelyUnreachableBaseUrl = (baseUrl: string) => {
+  if (Platform.OS === 'web' || !baseUrl) {
+    return;
+  }
+
+  const host = extractHost(baseUrl) ?? baseUrl;
+  const isLoopback = isLoopbackHost(host) || host.includes('10.0.2.2');
+
+  if (isLoopback && !isAndroidEmulator()) {
+    console.warn(
+      `[apiClient] The API base URL (${baseUrl}) points to a loopback address. ` +
+        'Set EXPO_PUBLIC_API_URL to a LAN/IP reachable from your device when using Expo Go or tunnels.',
+    );
+  }
+};
 
 const getBaseURL = () => {
   const explicitBase = getExplicitBaseUrl();
@@ -326,6 +341,7 @@ const getBaseURL = () => {
 };
 
 export const apiBaseURL = getBaseURL();
+warnIfLikelyUnreachableBaseUrl(apiBaseURL);
 
 export const buildWsUrl = (baseUrl: string = apiBaseURL) => {
   try {

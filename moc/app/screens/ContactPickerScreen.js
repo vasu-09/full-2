@@ -13,33 +13,29 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+
 import { useChatRegistry } from '../context/ChatContext';
 import { normalizePhoneNumber } from '../services/contactService';
-import {
-  getAllContactsFromDb,
-  saveContactsToDb,
-  searchContactsInDb,
-} from '../services/contactStorage';
+import { getAllContactsFromDb, syncAndPersistContacts } from '../services/contactStorage';
 import { createDirectRoom } from '../services/roomsService';
-
 
 export default function ContactPickerScreen() {
   console.log('[CONTACT_PICKER] render');
-  
-  
+
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { upsertRoom } = useChatRegistry();
 
   const [contacts, setContacts] = useState([]);
+  const [allContacts, setAllContacts] = useState([]);
   const [selected, setSelected] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
   const [searchInput, setSearchInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncError, setSyncError] = useState('');
   const [contactsError, setContactsError] = useState('');
@@ -50,8 +46,17 @@ export default function ContactPickerScreen() {
   const [canAskPermission, setCanAskPermission] = useState(true);
   const [isLoadingContacts, setIsLoadingContacts] = useState(true);
 
-  const mapStoredContactToUi = useCallback(
-    stored => ({
+  // --- helpers to map DB rows to UI shape ---
+
+  console.log(
+    '[CONTACT_PICKER] synced contacts:',
+    stored.length,
+    'matches:',
+    matches.length,
+  );  
+
+  const mapStoredContactToUi = useCallback(stored => {
+    return {
       id: stored.id ?? `db-contact-${Math.random().toString(36).slice(2)}`,
       name: stored.name ?? 'Unknown contact',
       phoneNumbers: (stored.phoneNumbers ?? []).map((phone, idx) => ({
@@ -61,9 +66,8 @@ export default function ContactPickerScreen() {
       })),
       imageAvailable: Boolean(stored.imageUri),
       image: stored.imageUri ? { uri: stored.imageUri } : undefined,
-    }),
-    [],
-  );
+    };
+  }, []);
 
   const extractMatchesFromStored = useCallback(storedContacts => {
     const dedup = new Map();
@@ -72,7 +76,10 @@ export default function ContactPickerScreen() {
       if (contact.matchPhone && contact.matchUserId != null) {
         const key = normalizePhoneNumber(contact.matchPhone) ?? contact.matchPhone;
         if (key && !dedup.has(key)) {
-          dedup.set(key, { phone: contact.matchPhone, userId: Number(contact.matchUserId) });
+          dedup.set(key, {
+            phone: contact.matchPhone,
+            userId: Number(contact.matchUserId),
+          });
         }
       }
     });
@@ -80,22 +87,23 @@ export default function ContactPickerScreen() {
     return Array.from(dedup.values());
   }, []);
 
+  // --- initial restore from SQLite (before fresh sync) ---
+
   useEffect(() => {
     let isMounted = true;
 
     const restoreCachedContacts = async () => {
       try {
         const cached = await getAllContactsFromDb();
+        if (!isMounted || !cached?.length) return;
 
-        if (!isMounted || !cached?.length) {
-          return;
-        }
+        const uiContacts = cached.map(mapStoredContactToUi);
 
-        // Pull existing rows from SQLite so our initial render mirrors disk state.
-        setContacts(curr => (curr?.length ? curr : cached.map(mapStoredContactToUi)));
-        setMatchedContacts(currMatches => (currMatches?.length ? currMatches : extractMatchesFromStored(cached)));
-      } catch (error) {
-        console.warn('Unable to restore cached contacts', error);
+        setAllContacts(uiContacts); // master list from DB
+        setContacts(uiContacts);    // current view
+        setMatchedContacts(extractMatchesFromStored(cached));
+      } catch (err) {
+        console.warn('Unable to restore cached contacts', err);
       }
     };
 
@@ -106,23 +114,22 @@ export default function ContactPickerScreen() {
     };
   }, [extractMatchesFromStored, mapStoredContactToUi]);
 
+  // --- matches map for "on MoC" info ---
 
   const matchesByPhone = useMemo(() => {
     const map = new Map();
 
-     const addEntry = (key, match) => {
+    const addEntry = (key, match) => {
       if (key && !map.has(key)) {
         map.set(key, match);
       }
     };
 
     matchedContacts.forEach(match => {
-     const rawPhone = match?.phone?.trim?.() ?? '';
-      if (!rawPhone) {
-        return;
-      }
+      const rawPhone = match?.phone?.trim?.() ?? '';
+      if (!rawPhone) return;
 
-      // Store raw value straight from the server
+      // store raw
       addEntry(rawPhone, match);
 
       const normalized = normalizePhoneNumber(rawPhone);
@@ -133,17 +140,17 @@ export default function ContactPickerScreen() {
         addEntry(normalizedDigits, match);
 
         if (normalizedDigits.startsWith('91') && normalizedDigits.length === 12) {
-          addEntry(normalizedDigits.slice(2), match);;
+          addEntry(normalizedDigits.slice(2), match);
         }
       }
 
-      // Also store digits-only fallbacks so we can match contacts saved without country codes
       const digitsOnly = rawPhone.replace(/\D/g, '');
       addEntry(digitsOnly, match);
       if (digitsOnly.startsWith('91') && digitsOnly.length === 12) {
         addEntry(digitsOnly.slice(2), match);
       }
     });
+
     return map;
   }, [matchedContacts]);
 
@@ -153,9 +160,7 @@ export default function ContactPickerScreen() {
 
       for (const phone of numbers) {
         const rawNumber = phone?.number ?? '';
-        if (!rawNumber) {
-          continue;
-        }
+        if (!rawNumber) continue;
 
         const normalized = normalizePhoneNumber(rawNumber);
         const digitsOnly = rawNumber.replace(/\D/g, '');
@@ -181,7 +186,6 @@ export default function ContactPickerScreen() {
           if (digitsOnly.startsWith('0') && digitsOnly.length === 11) {
             candidates.push(digitsOnly.slice(1));
           }
-
           if (digitsOnly.startsWith('91') && digitsOnly.length === 12) {
             candidates.push(digitsOnly.slice(2));
           }
@@ -193,23 +197,13 @@ export default function ContactPickerScreen() {
           }
         }
       }
+
       return null;
     },
     [matchesByPhone],
   );
 
-  const refreshContactsFromDb = useCallback(
-    async (queryText = '') => {
-      try {
-        const stored = queryText ? await searchContactsInDb(queryText) : await getAllContactsFromDb();
-        setContacts(stored.map(mapStoredContactToUi));
-        setMatchedContacts(extractMatchesFromStored(stored));
-      } catch (error) {
-        console.warn('Unable to refresh contacts from SQLite', error);
-      }
-    },
-    [extractMatchesFromStored, mapStoredContactToUi],
-  );
+  // --- load from device + sync with backend + refill SQLite ---
 
   const loadContacts = useCallback(async () => {
     setContactsError('');
@@ -223,8 +217,8 @@ export default function ContactPickerScreen() {
       setCanAskPermission(Boolean(canAskAgain));
 
       if (!granted) {
-        setContacts(current => (current?.length ? current : []));
-        setMatchedContacts(current => (current?.length ? current : []));
+        setContacts([]);
+        setMatchedContacts([]);
         if (status === 'denied') {
           setContactsError('MoC needs access to your contacts to show them here.');
         }
@@ -250,29 +244,109 @@ export default function ContactPickerScreen() {
 
       try {
         setIsSyncing(true);
-        const matches = await saveContactsToDb(loaded);
-        setMatchedContacts(matches);
-        await refreshContactsFromDb('');
-      } catch (error) {
-        console.error('Failed to sync contacts', error);
+
+        // 1) sync with backend and write into SQLite
+        const matches = await syncAndPersistContacts(loaded);
+
+        // 2) read everything back from SQLite
+        const stored = await getAllContactsFromDb();
+
+        // 3) push into UI
+        setContacts(stored.map(mapStoredContactToUi));
+        setMatchedContacts(extractMatchesFromStored(stored));
+
+        console.log(
+          '[CONTACT_PICKER] synced contacts:',
+          stored.length,
+          'matches:',
+          matches.length,
+        );
+      } catch (err) {
+        console.error('Failed to sync contacts', err);
         setSyncError('Unable to sync contacts with MoC right now.');
       } finally {
         setIsSyncing(false);
       }
-
-    } catch (error) {
-      console.error('Failed to load contacts from device', error);
+    } catch (err) {
+      console.error('Failed to load contacts from device', err);
       setContacts([]);
       setMatchedContacts([]);
       setContactsError('Unable to read contacts from your device.');
     } finally {
       setIsLoadingContacts(false);
     }
-  }, [refreshContactsFromDb]);
+  }, [extractMatchesFromStored, mapStoredContactToUi]);
 
   useEffect(() => {
     loadContacts();
   }, [loadContacts]);
+
+  // --- search: debounce `searchInput` into `searchQuery` ---
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      console.log('[CONTACT_PICKER] debounced searchInput -> searchQuery', {
+      searchInput,
+    });
+      setSearchQuery(searchInput.trim());
+    }, 250);
+
+    return () => clearTimeout(handler);
+  }, [searchInput]);
+
+  // --- in-memory filter over `contacts` ---
+
+  const filteredContacts = useMemo(() => {
+    const trimmed = searchQuery.trim().toLowerCase();
+    console.log('[CONTACT_PICKER] filtering contacts', {
+    searchQuery,
+    contactsCount: contacts.length,
+  });
+    if (!trimmed) return contacts;
+
+    const numericQuery = trimmed.replace(/\D/g, '');
+
+    return contacts.filter(contact => {
+      const name = (contact.name ?? '').toLowerCase();
+
+      // match name
+      if (name.includes(trimmed)) return true;
+
+      const phones = (contact.phoneNumbers ?? []).map(p => p.number ?? '');
+      const cleanedPhones = phones.map(n => n.replace(/[\s\-+]/g, ''));
+
+      // digits-only match
+      if (numericQuery && cleanedPhones.some(n => n.includes(numericQuery))) {
+        return true;
+      }
+
+      // raw substring match
+      return phones.some(n => n.toLowerCase().includes(trimmed));
+    });
+  }, [contacts, searchQuery]);
+
+  // --- split into "On MoC" vs "Invite" sections ---
+
+  const contactSections = useMemo(() => {
+    const registered = [];
+    const unregistered = [];
+
+    filteredContacts.forEach(contact => {
+      if (getMatchForContact(contact)) registered.push(contact);
+      else unregistered.push(contact);
+    });
+
+    const sections = [];
+    if (registered.length) {
+      sections.push({ title: 'On MoC', data: registered });
+    }
+    if (unregistered.length) {
+      sections.push({ title: 'Invite to MoC', data: unregistered });
+    }
+    return sections;
+  }, [filteredContacts, getMatchForContact]);
+
+  // --- selection + send room ---
 
   const toggleSelect = contact => {
     setCreateError('');
@@ -285,9 +359,8 @@ export default function ContactPickerScreen() {
   };
 
   const handleSend = async () => {
-    if (!selected.length) {
-      return;
-    }
+    if (!selected.length) return;
+
     const contact = selected[0];
     const match = getMatchForContact(contact);
     if (!match) {
@@ -298,6 +371,7 @@ export default function ContactPickerScreen() {
     try {
       setCreateError('');
       setIsCreating(true);
+
       const room = await createDirectRoom(match.userId);
       upsertRoom({
         id: room.id,
@@ -306,6 +380,7 @@ export default function ContactPickerScreen() {
         avatar: contact?.imageAvailable ? contact?.image?.uri ?? null : null,
         peerId: match.userId,
       });
+
       router.replace({
         pathname: '/screens/ChatDetailScreen',
         params: {
@@ -323,82 +398,6 @@ export default function ContactPickerScreen() {
     }
   };
 
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setSearchQuery(searchInput.trim());
-    }, 250);
-
-    return () => clearTimeout(handler);
-  }, [searchInput]);
-
-  
-  useEffect(() => {
-    // Re-query SQLite whenever the search input stabilizes so new synced rows show up mid-search.
-    refreshContactsFromDb(searchQuery);
-  }, [refreshContactsFromDb, searchQuery]);
-
-  const filteredContacts = useMemo(() => contacts, [contacts]);
-  
-  const contactSections = useMemo(() => {
-    const registered = [];
-    const unregistered = [];
-
-    filteredContacts.forEach(contact => {
-      if (getMatchForContact(contact)) {
-        registered.push(contact);
-      } else {
-        unregistered.push(contact);
-      }
-    });
-
-    const sections = [];
-    if (registered.length) {
-      sections.push({ title: 'On MoC', data: registered, type: 'registered' });
-    }
-    if (unregistered.length) {
-      sections.push({ title: 'Invite to MoC', data: unregistered, type: 'unregistered' });
-    }
-    return sections;
-  }, [filteredContacts, getMatchForContact]);
-
-  const searchResults = useMemo(() => {
-    if (!searchQuery) {
-      return [];
-    }
-
-    const numericQuery = searchQuery.replace(/\D/g, '');
-
-    const hasExistingContact = filteredContacts.some(contact =>
-      (contact.phoneNumbers ?? []).some(phone => {
-        const normalized = phone?.number?.replace(/\D/g, '') ?? '';
-        return numericQuery && normalized.includes(numericQuery);
-      }),
-    );
-
-    const virtualContact =
-      !filteredContacts.length && numericQuery.length >= 7 && !hasExistingContact
-        ? {
-            id: `virtual-${numericQuery}`,
-            name: searchQuery,
-            phoneNumbers: [
-              {
-                id: `virtual-${numericQuery}-phone`,
-                label: 'mobile',
-                number: searchQuery,
-              },
-            ],
-            imageAvailable: false,
-            image: undefined,
-          }
-        : null;
-
-    if (filteredContacts.length) {
-      return filteredContacts;
-    }
-
-    return virtualContact ? [virtualContact] : [];
-  }, [filteredContacts, searchQuery]);
-
   const handleInvite = useCallback(async contact => {
     const displayName = contact?.name?.trim();
     const inviteMessage = displayName
@@ -407,17 +406,18 @@ export default function ContactPickerScreen() {
 
     try {
       await Share.share({ message: inviteMessage });
-    } catch (error) {
-      console.warn('Unable to open invite share sheet', error);
+    } catch (err) {
+      console.warn('Unable to open invite share sheet', err);
     }
   }, []);
 
-
+  // --- render helpers ---
 
   const renderItem = ({ item }) => {
     const isSel = selected.some(c => c.id === item.id);
     const match = getMatchForContact(item);
-     const statusLabel = match ? 'On MoC' : 'Not on MoC yet';
+    const statusLabel = match ? 'On MoC' : 'Not on MoC yet';
+
     return (
       <TouchableOpacity onPress={() => toggleSelect(item)} style={styles.item}>
         {item.imageAvailable ? (
@@ -427,12 +427,19 @@ export default function ContactPickerScreen() {
             <Icon name="person" size={24} color="#888" />
           </View>
         )}
+
         <View style={styles.itemTextWrapper}>
           <Text style={styles.name}>{item.name}</Text>
-          <Text style={[styles.statusLabel, match ? styles.statusAvailable : styles.statusUnavailable]}>
+          <Text
+            style={[
+              styles.statusLabel,
+              match ? styles.statusAvailable : styles.statusUnavailable,
+            ]}
+          >
             {statusLabel}
           </Text>
         </View>
+
         <View style={styles.itemRight}>
           {match ? (
             isSel && <Icon name="check-circle" size={24} color="#1f6ea7" />
@@ -446,35 +453,6 @@ export default function ContactPickerScreen() {
     );
   };
 
-  const renderSearchResult = contact => {
-    const isSel = selected.some(c => c.id === contact.id);
-    const match = getMatchForContact(contact);
-
-    const primaryNumber = contact?.phoneNumbers?.[0]?.number ?? match?.phone ?? '';
-    const displayName = contact?.name?.trim?.() || primaryNumber || match?.phone || 'Unknown contact';
-
-    const statusText = match
-      ? `${primaryNumber || match.phone} · On MoC`
-      : primaryNumber || 'No phone number';
-
-    return (
-      <TouchableOpacity key={contact.id} style={styles.searchResultItem} onPress={() => toggleSelect(contact)}>
-        {contact.imageAvailable ? (
-          <Image source={{ uri: contact.image.uri }} style={styles.searchResultAvatar} />
-        ) : (
-          <View style={[styles.searchResultAvatar, styles.placeholder]}>
-            <Icon name="person" size={22} color="#888" />
-          </View>
-        )}
-        <View style={styles.searchResultText}>
-          <Text style={styles.searchResultName}>{displayName}</Text>
-          <Text style={styles.searchResultStatus}>{statusText}</Text>
-        </View>
-        {isSel && <Icon name="check-circle" size={22} color="#1f6ea7" />}
-      </TouchableOpacity>
-    );
-  };
-
   const DebugInfo = () => (
     <View style={styles.debugInfo}>
       <Text style={styles.debugText}>
@@ -483,55 +461,69 @@ export default function ContactPickerScreen() {
       <Text style={styles.debugText}>
         {`matches=${matchedContacts.length} | permission=${permissionStatus} | loading=${isLoadingContacts}`}
       </Text>
-      {contactsError ? <Text style={[styles.debugText, styles.debugError]}>{contactsError}</Text> : null}
-      {syncError ? <Text style={[styles.debugText, styles.debugError]}>{syncError}</Text> : null}
-      <Text/>
+      {contactsError ? (
+        <Text style={[styles.debugText, styles.debugError]}>{contactsError}</Text>
+      ) : null}
+      {syncError ? (
+        <Text style={[styles.debugText, styles.debugError]}>{syncError}</Text>
+      ) : null}
     </View>
   );
 
+  // --- UI ---
+
   return (
     <SafeAreaView style={styles.container}>
-      {/* ◀️ Conditional header */}
+      {/* Header: normal vs search */}
       {isSearching ? (
         <View style={[styles.searchHeader, { paddingTop: insets.top }]}>
-    <TouchableOpacity
-      onPress={() => setIsSearching(false)}
-      style={styles.searchBackBtn}
-    >
-      <Icon name="arrow-back" size={24} color="#1f6ea7" />
-    </TouchableOpacity>
-    <TextInput
-      style={styles.searchHeaderInput}
-      placeholder="Search contacts"
-      placeholderTextColor="#999"
-      value={searchInput}
-      onChangeText={setSearchInput}
-      autoFocus
-      underlineColorAndroid="transparent"
-    />
-  </View>
+          <TouchableOpacity
+            onPress={() => {
+              setIsSearching(false);
+              setSearchInput('');
+              setSearchQuery('');
+            }}
+            style={styles.searchBackBtn}
+          >
+            <Icon name="arrow-back" size={24} color="#1f6ea7" />
+          </TouchableOpacity>
+          <TextInput
+            style={styles.searchHeaderInput}
+            placeholder="Search contacts"
+            placeholderTextColor="#999"
+            value={searchInput}
+            onChangeText={setSearchInput}
+            autoFocus
+            underlineColorAndroid="transparent"
+          />
+        </View>
       ) : (
         <View style={[styles.header, { paddingTop: insets.top }]}>
-    <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-      <Icon name="arrow-back" size={24} color="#fff" />
-    </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <Icon name="arrow-back" size={24} color="#fff" />
+          </TouchableOpacity>
 
-    {/* Title + subtitle stacked on the left */}
-    <View style={styles.titleContainer}>
-      <Text style={styles.title}>contacts to send</Text>
-      <Text style={styles.subtitle}>{selected.length} selected</Text>
-    </View>
+          <View style={styles.titleContainer}>
+            <Text style={styles.title}>contacts to send</Text>
+            <Text style={styles.subtitle}>{selected.length} selected</Text>
+          </View>
 
-     <TouchableOpacity onPress={() => { setIsSearching(true); setSearchInput(''); setSearchQuery(''); }} style={styles.searchBtn}>
+          <TouchableOpacity
+            onPress={() => {
+              setIsSearching(true);
+              setSearchInput('');
+              setSearchQuery('');
+            }}
+            style={styles.searchBtn}
+          >
             <Icon name="search" size={24} color="#fff" />
           </TouchableOpacity>
-  </View>
-
-        
+        </View>
       )}
+
       <DebugInfo />
 
-      {/* Selected strip (unchanged) */}
+      {/* Selected contacts strip */}
       {selected.length > 0 && (
         <View style={styles.selectedWrapper}>
           <Text style={styles.sectionTitle}>Selected contacts</Text>
@@ -550,10 +542,7 @@ export default function ContactPickerScreen() {
                     <Icon name="person" size={20} color="#888" />
                   </View>
                 )}
-                <TouchableOpacity
-                  style={styles.removeBtn}
-                  onPress={() => toggleSelect(c)}
-                >
+                <TouchableOpacity style={styles.removeBtn} onPress={() => toggleSelect(c)}>
                   <Icon name="close" size={14} color="#666" />
                 </TouchableOpacity>
                 <Text style={styles.selectedName} numberOfLines={1}>
@@ -565,118 +554,101 @@ export default function ContactPickerScreen() {
         </View>
       )}
 
-{isSearching && searchInput  ? (
-        <View style={styles.searchResultsWrapper}>
-          <View style={styles.searchResultsHeader}>
-            <Text style={styles.searchResultsLabel}>Contacts</Text>
-            <Text style={styles.searchResultsCount}>
-              {searchResults.length ? `${searchResults.length} found` : 'No matches'}
-            </Text>
-          </View>
+      {/* Main list */}
+      <Text style={styles.sectionTitle}>
+        {isSearching ? 'Search results' : 'All contacts'}
+      </Text>
 
-          {searchResults.length ? (
-            <ScrollView keyboardShouldPersistTaps="handled">
-              {searchResults.map(renderSearchResult)}
-            </ScrollView>
-          ) : (
-            <View style={styles.emptySearchWrapper}>
-              <Icon name="search" size={36} color="#999" />
-              <Text style={styles.emptySearchTitle}>No MoC contacts found</Text>
-              <Text style={styles.emptySearchMessage}>
-                Try a different name or number to find people already using MoC.
-              </Text>
-               {isLoadingContacts ? (
-                <Text style={styles.emptySearchHint}>Still loading contacts from your phone…</Text>
-              ) : contactsError ? (
-                <Text style={styles.emptySearchHint}>{contactsError}</Text>
-              ) : syncError ? (
-                <Text style={styles.emptySearchHint}>{syncError}</Text>
-              ) : null}
-            </View>
-          )}
+      <View style={styles.syncStatusWrapper}>
+        {isLoadingContacts ? (
+          <Text style={styles.syncStatusText}>Loading contacts from your phone…</Text>
+        ) : contactsError ? (
+          <Text style={[styles.syncStatusText, styles.syncStatusError]}>{contactsError}</Text>
+        ) : isSyncing ? (
+          <Text style={styles.syncStatusText}>Syncing your contacts…</Text>
+        ) : syncError ? (
+          <Text style={[styles.syncStatusText, styles.syncStatusError]}>{syncError}</Text>
+        ) : matchedContacts.length > 0 ? (
+          <Text style={styles.syncStatusText}>
+            {matchedContacts.length} of your contacts are already on MoC.
+          </Text>
+        ) : (
+          <Text style={styles.syncStatusText}>None of your contacts have joined MoC yet.</Text>
+        )}
+      </View>
+
+      {createError ? (
+        <View style={styles.errorWrapper}>
+          <Text style={styles.errorText}>{createError}</Text>
+        </View>
+      ) : null}
+
+      {permissionStatus !== 'granted' ? (
+        <View style={styles.permissionWrapper}>
+          <Icon name="contacts" size={42} color="#1f6ea7" />
+          <Text style={styles.permissionTitle}>Contacts permission needed</Text>
+          <Text style={styles.permissionMessage}>
+            Allow MoC to access your address book so we can show who is already using the app and who
+            you can invite.
+          </Text>
+          <TouchableOpacity
+            style={styles.permissionButton}
+            onPress={() => {
+              if (permissionStatus === 'denied' && !canAskPermission) {
+                Linking.openSettings();
+              } else {
+                loadContacts();
+              }
+            }}
+          >
+            <Text style={styles.permissionButtonText}>
+              {permissionStatus === 'denied' && !canAskPermission
+                ? 'Open settings'
+                : 'Allow contact access'}
+            </Text>
+          </TouchableOpacity>
         </View>
       ) : (
-         <>
-          {/* All contacts */}
-          <Text style={styles.sectionTitle}>All contacts</Text>
-          <View style={styles.syncStatusWrapper}>
-            {isLoadingContacts ? (
-              <Text style={styles.syncStatusText}>Loading contacts from your phone…</Text>
-            ) : contactsError ? (
-              <Text style={[styles.syncStatusText, styles.syncStatusError]}>{contactsError}</Text>
-            ) : isSyncing ? (
-              <Text style={styles.syncStatusText}>Syncing your contacts…</Text>
-            ) : syncError ? (
-              <Text style={[styles.syncStatusText, styles.syncStatusError]}>{syncError}</Text>
-            ) : matchedContacts.length > 0 ? (
-              <Text style={styles.syncStatusText}>
-                {matchedContacts.length} of your contacts are already on MoC.
-              </Text>
-            ) : (
-              <Text style={styles.syncStatusText}>None of your contacts have joined MoC yet.</Text>
-            )}
-          </View>
-          {createError ? (
-            <View style={styles.errorWrapper}>
-              <Text style={styles.errorText}>{createError}</Text>
-            </View>
-          ) : null}
-          {permissionStatus !== 'granted' ? (
-            <View style={styles.permissionWrapper}>
-              <Icon name="contacts" size={42} color="#1f6ea7" />
-              <Text style={styles.permissionTitle}>Contacts permission needed</Text>
-              <Text style={styles.permissionMessage}>
-                Allow MoC to access your address book so we can show who is already using the app and who you can
-                invite.
-              </Text>
-              <TouchableOpacity
-                style={styles.permissionButton}
-                onPress={() => {
-                  if (permissionStatus === 'denied' && !canAskPermission) {
-                    Linking.openSettings();
-                  } else {
-                    loadContacts();
-                  }
-                }}
-              >
-                <Text style={styles.permissionButtonText}>
-                  {permissionStatus === 'denied' && !canAskPermission ? 'Open settings' : 'Allow contact access'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <SectionList
-              sections={contactSections}
-              keyExtractor={c => c.id}
-              renderItem={renderItem}
-              renderSectionHeader={({ section }) => (
-                <Text style={styles.sectionDivider}>{section.title}</Text>
-              )}
-              stickySectionHeadersEnabled={false}
-              contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
-              ListEmptyComponent={
-                !isLoadingContacts && (
-                  <View style={styles.emptyStateWrapper}>
-                    <Text style={styles.emptyStateText}>No contacts found on this device.</Text>
-                    <TouchableOpacity style={styles.permissionButton} onPress={loadContacts}>
-                      <Text style={styles.permissionButtonText}>Reload contacts</Text>
-                    </TouchableOpacity>
-                  </View>
-                )
-              }
-            />
+        <SectionList
+          sections={contactSections}
+          keyExtractor={c => c.id}
+          renderItem={renderItem}
+          renderSectionHeader={({ section }) => (
+            <Text style={styles.sectionDivider}>{section.title}</Text>
           )}
-          </>
+          stickySectionHeadersEnabled={false}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
+          ListEmptyComponent={
+            !isLoadingContacts && (
+              <View style={styles.emptyStateWrapper}>
+                <Text style={styles.emptyStateText}>
+                  {isSearching
+                    ? 'No contacts match this search.'
+                    : 'No contacts found on this device.'}
+                </Text>
+                {!isSearching && (
+                  <TouchableOpacity style={styles.permissionButton} onPress={loadContacts}>
+                    <Text style={styles.permissionButtonText}>Reload contacts</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )
+          }
+        />
       )}
 
-      {/* Floating Send button */}
+      {/* Floating send button */}
       {selected.length > 0 && (
         <TouchableOpacity
           style={[styles.fab, isCreating && styles.fabDisabled, { bottom: insets.bottom + 16 }]}
           onPress={handleSend}
           disabled={isCreating}
         >
-          {isCreating ? <ActivityIndicator color="#fff" /> : <Icon name="send" size={24} color="#fff" />}
+          {isCreating ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Icon name="send" size={24} color="#fff" />
+          )}
         </TouchableOpacity>
       )}
     </SafeAreaView>
@@ -692,42 +664,25 @@ const styles = StyleSheet.create({
     backgroundColor: '#1f6ea7',
     paddingHorizontal: 8,
     height: 56,
-    // remove fixed height so it can grow with two lines
   },
-
   backBtn: { padding: 8 },
-  sendBtn: { padding: 8 },
+  searchBtn: { padding: 8 },
 
   titleContainer: {
     flex: 1,
     flexDirection: 'column',
     marginLeft: 8,
   },
-
   title: {
     color: '#fff',
     fontSize: 18,
     fontWeight: 'bold',
   },
-
   subtitle: {
     color: '#fff',
     fontSize: 14,
     marginTop: 2,
   },
-  // NORMAL header
-
-  sectionDivider: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#1f6ea7',
-    marginHorizontal: 12,
-    marginTop: 16,
-    marginBottom: 6,
-    textTransform: 'uppercase',
-  },
-  
-  searchBtn: { padding: 8 },
 
   debugInfo: {
     paddingHorizontal: 12,
@@ -741,17 +696,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-
-  // SEARCH header replaces the normal header
-  selectedCount: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    marginLeft: 12,
-    marginTop: 8,
-    marginBottom: 4,
-  },
-
   sectionTitle: {
     fontSize: 14,
     fontWeight: '600',
@@ -759,6 +703,15 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     marginTop: 12,
     marginBottom: 4,
+  },
+  sectionDivider: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1f6ea7',
+    marginHorizontal: 12,
+    marginTop: 16,
+    marginBottom: 6,
+    textTransform: 'uppercase',
   },
 
   selectedWrapper: {
@@ -804,7 +757,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
- itemTextWrapper: {
+  itemTextWrapper: {
     flex: 1,
   },
   name: {
@@ -822,18 +775,6 @@ const styles = StyleSheet.create({
   statusUnavailable: {
     color: '#888',
   },
-
-  fab: {
-    position: 'absolute',
-    right: 16,
-    backgroundColor: '#1f6ea7',
-    borderRadius: 28,
-    padding: 16,
-    elevation: 4,
-  },
-  fabDisabled: {
-    backgroundColor: '#7aa3c3',
-  },
   itemRight: {
     marginLeft: 12,
   },
@@ -850,7 +791,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 13,
   },
-
 
   syncStatusWrapper: {
     marginHorizontal: 16,
@@ -902,6 +842,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
   },
+
   emptyStateWrapper: {
     alignItems: 'center',
     marginTop: 40,
@@ -925,106 +866,33 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 
+  fab: {
+    position: 'absolute',
+    right: 16,
+    backgroundColor: '#1f6ea7',
+    borderRadius: 28,
+    padding: 16,
+    elevation: 4,
+  },
+  fabDisabled: {
+    backgroundColor: '#7aa3c3',
+  },
+
   searchHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
     paddingHorizontal: 8,
-    height: 56,              // standard appbar height
+    height: 56,
   },
-
-  // smaller hit area for the back arrow pill
   searchBackBtn: {
     padding: 8,
   },
-
-  // full‑width, flat input
   searchHeaderInput: {
     flex: 1,
     marginLeft: 8,
     fontSize: 18,
     color: '#333',
     paddingVertical: 8,
-  },
-  searchResultsWrapper: {
-    flex: 1,
-    backgroundColor: '#fff',
-    margin: 16,
-    borderRadius: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
-  },
-  searchResultsHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-    paddingHorizontal: 4,
-  },
-  searchResultsLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1f1f1f',
-  },
-  searchResultsCount: {
-    fontSize: 13,
-    color: '#666',
-  },
-  searchResultItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f1f1',
-  },
-  searchResultAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    marginRight: 12,
-    backgroundColor: '#ddd',
-  },
-  searchResultText: {
-    flex: 1,
-  },
-  searchResultName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#222',
-  },
-  searchResultStatus: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 2,
-  },
-  emptySearchWrapper: {
-    alignItems: 'center',
-    paddingVertical: 40,
-    paddingHorizontal: 16,
-  },
-  emptySearchTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginTop: 12,
-    color: '#1f1f1f',
-  },
-  emptySearchMessage: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-    marginTop: 4,
-    lineHeight: 20,
-  },
-  emptySearchHint: {
-    fontSize: 13,
-    color: '#b3261e',
-    textAlign: 'center',
-    marginTop: 8,
   },
 });
