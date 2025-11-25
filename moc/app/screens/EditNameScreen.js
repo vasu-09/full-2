@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
-import apiClient from '../services/apiClient';
+import displayNameService from '../services/displayNameService';
 
 const MAX_NAME_LENGTH = 25;
 
@@ -39,11 +39,7 @@ export default function EditNameScreen() {
 
     const loadName = async () => {
       try {
-        const { data } = await apiClient.get('/user/me/display-name');
-        const serverName =
-          typeof data?.displayName === 'string' && data.displayName.trim().length
-            ? data.displayName
-            : '';
+        const serverName = await displayNameService.fetchDisplayName();
         if (isMounted) {
           setName(initialNameParam || serverName);
         }
@@ -76,7 +72,7 @@ export default function EditNameScreen() {
 
     try {
       setIsSaving(true);
-      await apiClient.put('/user/me/display-name', { displayName: trimmedName });
+      await displayNameService.updateDisplayName(trimmedName);
       router.replace({
         pathname: '/screens/AccountSettings',
         params: { updatedName: trimmedName },

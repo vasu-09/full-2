@@ -11,7 +11,14 @@ const ISSUED_AT_KEY = 'auth.issuedAt';
 
 type NullableString = string | null | undefined;
 
-const useSecureStore = Platform.OS !== 'web';
+type WebStorage = {
+  getItem: (key: string) => string | null;
+  setItem: (key: string, value: string) => void;
+  removeItem: (key: string) => void;
+};
+
+const isWeb = Platform.OS === 'web';
+const useSecureStore = !isWeb;
 
 type StorageHandler = {
   setItem: (key: string, value: string) => Promise<void>;
@@ -31,7 +38,48 @@ const asyncStorageHandler: StorageHandler = {
   removeItem: (key) => AsyncStorage.removeItem(key),
 };
 
-const storage: StorageHandler = useSecureStore ? secureStoreHandler : asyncStorageHandler;
+const getLocalStorage = (): WebStorage | null => {
+  try {
+    if (typeof window !== 'undefined' && window?.localStorage) {
+      return window.localStorage as WebStorage;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+};
+
+const localStorageHandler: StorageHandler = {
+  setItem: async (key, value) => {
+    const localStorage = getLocalStorage();
+    if (localStorage) {
+      localStorage.setItem(key, value);
+      return;
+    }
+
+    await asyncStorageHandler.setItem(key, value);
+  },
+  getItem: async (key) => {
+    const localStorage = getLocalStorage();
+    if (localStorage) {
+      return localStorage.getItem(key);
+    }
+
+    return asyncStorageHandler.getItem(key);
+  },
+  removeItem: async (key) => {
+    const localStorage = getLocalStorage();
+    if (localStorage) {
+      localStorage.removeItem(key);
+      return;
+    }
+
+    await asyncStorageHandler.removeItem(key);
+  },
+};
+
+const storage: StorageHandler = useSecureStore ? secureStoreHandler : localStorageHandler;
 
 const setItem = async (key: string, value: NullableString) => {
   if (value === undefined) {

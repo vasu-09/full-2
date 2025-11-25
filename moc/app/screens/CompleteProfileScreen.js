@@ -16,8 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
-import apiClient from '../services/apiClient';
-import { getStoredSession } from '../services/authStorage';
+import displayNameService from '../services/displayNameService';
 
 const MAX_NAME_LENGTH = 25;
 
@@ -38,20 +37,7 @@ export default function CompleteProfileScreen() {
     let isMounted = true;
     const loadName = async () => {
       try {
-       const session = await getStoredSession();
-        if (!isMounted) {
-          return;
-        }
-
-        const rawUserId = session?.userId;
-        const userId = typeof rawUserId === 'string' ? rawUserId.trim() : rawUserId;
-        if (!userId) {
-          setName('');
-          return;
-        }
-
-        const { data } = await apiClient.get(`/user/${userId}`);
-        const fetchedName = typeof data?.displayName === 'string' ? data.displayName.trim() : '';
+       const fetchedName = await displayNameService.fetchDisplayName();
         setName(fetchedName);
       } catch (err) {
         console.error('Failed to load display name', err);
@@ -95,7 +81,7 @@ export default function CompleteProfileScreen() {
 
      try {
       setIsSaving(true);
-      await apiClient.put('/user/me/display-name', { displayName: trimmedName });
+       await displayNameService.updateDisplayName(trimmedName);
       router.replace('/screens/MocScreen');
     } catch (err) {
       console.error('Failed to update display name', err);
