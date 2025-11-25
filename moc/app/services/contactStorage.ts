@@ -1,7 +1,12 @@
 import type { ExistingContact } from 'expo-contacts';
 
 import { buildContactIndex, normalizePhoneNumber, syncContacts, type ContactMatch } from './contactService';
-import { getContactsFromDb, replaceContactsInDb, type StoredContactInput } from './database.native';
+import {
+  getContactsFromDb,
+  replaceContactsInDb,
+  searchContactsInDb as searchContactsInNativeDb,
+  type StoredContactInput,
+} from './database.native';
 
 type PhoneEntry = { label?: string | null; number: string };
 
@@ -82,6 +87,38 @@ export const persistContactsToDb = async (
 };
 
 export const readStoredContacts = async (): Promise<StoredContactInput[]> => getContactsFromDb();
+
+// Save the provided contacts into SQLite while keeping match metadata up to date.
+// This is reused anywhere the device contacts are synced so that the local DB
+// remains our source of truth for contact lists.
+export const saveContactsToDb = async (
+  contacts: ExistingContact[],
+  matches?: ContactMatch[],
+): Promise<ContactMatch[]> => {
+  if (!contacts?.length) {
+    return [];
+  }
+
+  const resolvedMatches = matches ?? (await syncContacts(contacts));
+
+  try {
+    await persistContactsToDb(contacts, resolvedMatches);
+  } catch (error) {
+    console.warn('Unable to cache contacts locally', error);
+  }
+
+  return resolvedMatches;
+};
+
+export const getAllContactsFromDb = async (): Promise<StoredContactInput[]> => getContactsFromDb();
+
+export const searchContactsInDb = async (query: string): Promise<StoredContactInput[]> => {
+  if (!query?.trim()) {
+    return getContactsFromDb();
+  }
+
+  return searchContactsInNativeDb(query.trim());
+};
 
 export const syncAndPersistContacts = async (
   contacts: ExistingContact[],

@@ -19,7 +19,11 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useChatRegistry } from '../context/ChatContext';
 import { normalizePhoneNumber } from '../services/contactService';
-import { readStoredContacts, syncAndPersistContacts } from '../services/contactStorage';
+import {
+  getAllContactsFromDb,
+  saveContactsToDb,
+  searchContactsInDb,
+} from '../services/contactStorage';
 import { createDirectRoom } from '../services/roomsService';
 
 
@@ -46,46 +50,50 @@ export default function ContactPickerScreen() {
   const [canAskPermission, setCanAskPermission] = useState(true);
   const [isLoadingContacts, setIsLoadingContacts] = useState(true);
 
-   useEffect(() => {
+  const mapStoredContactToUi = useCallback(
+    stored => ({
+      id: stored.id ?? `db-contact-${Math.random().toString(36).slice(2)}`,
+      name: stored.name ?? 'Unknown contact',
+      phoneNumbers: (stored.phoneNumbers ?? []).map((phone, idx) => ({
+        id: `${stored.id ?? 'unknown'}-${idx}`,
+        label: phone.label ?? undefined,
+        number: phone.number,
+      })),
+      imageAvailable: Boolean(stored.imageUri),
+      image: stored.imageUri ? { uri: stored.imageUri } : undefined,
+    }),
+    [],
+  );
+
+  const extractMatchesFromStored = useCallback(storedContacts => {
+    const dedup = new Map();
+
+    storedContacts.forEach(contact => {
+      if (contact.matchPhone && contact.matchUserId != null) {
+        const key = normalizePhoneNumber(contact.matchPhone) ?? contact.matchPhone;
+        if (key && !dedup.has(key)) {
+          dedup.set(key, { phone: contact.matchPhone, userId: Number(contact.matchUserId) });
+        }
+      }
+    });
+
+    return Array.from(dedup.values());
+  }, []);
+
+  useEffect(() => {
     let isMounted = true;
 
     const restoreCachedContacts = async () => {
       try {
-        const cached = await readStoredContacts();
+        const cached = await getAllContactsFromDb();
 
         if (!isMounted || !cached?.length) {
           return;
         }
 
-        setContacts(curr => (curr?.length ? curr : cached.map(contact => ({
-          id: contact.id,
-          name: contact.name,
-          phoneNumbers: (contact.phoneNumbers ?? []).map((phone, idx) => ({
-            id: `${contact.id}-${idx}`,
-            label: phone.label ?? undefined,
-            number: phone.number,
-          })),
-          imageAvailable: Boolean(contact.imageUri),
-          image: contact.imageUri ? { uri: contact.imageUri } : undefined,
-        }))));
-
-        setMatchedContacts(currMatches => {
-          if (currMatches?.length) {
-            return currMatches;
-          }
-
-          const dedup = new Map();
-          cached.forEach(contact => {
-            if (contact.matchPhone && contact.matchUserId != null) {
-              const key = normalizePhoneNumber(contact.matchPhone) ?? contact.matchPhone;
-              if (key && !dedup.has(key)) {
-                dedup.set(key, { phone: contact.matchPhone, userId: Number(contact.matchUserId) });
-              }
-            }
-          });
-
-          return Array.from(dedup.values());
-        });
+        // Pull existing rows from SQLite so our initial render mirrors disk state.
+        setContacts(curr => (curr?.length ? curr : cached.map(mapStoredContactToUi)));
+        setMatchedContacts(currMatches => (currMatches?.length ? currMatches : extractMatchesFromStored(cached)));
       } catch (error) {
         console.warn('Unable to restore cached contacts', error);
       }
@@ -96,7 +104,7 @@ export default function ContactPickerScreen() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [extractMatchesFromStored, mapStoredContactToUi]);
 
 
   const matchesByPhone = useMemo(() => {
@@ -190,7 +198,20 @@ export default function ContactPickerScreen() {
     [matchesByPhone],
   );
 
- const loadContacts = useCallback(async () => {
+  const refreshContactsFromDb = useCallback(
+    async (queryText = '') => {
+      try {
+        const stored = queryText ? await searchContactsInDb(queryText) : await getAllContactsFromDb();
+        setContacts(stored.map(mapStoredContactToUi));
+        setMatchedContacts(extractMatchesFromStored(stored));
+      } catch (error) {
+        console.warn('Unable to refresh contacts from SQLite', error);
+      }
+    },
+    [extractMatchesFromStored, mapStoredContactToUi],
+  );
+
+  const loadContacts = useCallback(async () => {
     setContactsError('');
     setSyncError('');
     setIsLoadingContacts(true);
@@ -227,12 +248,11 @@ export default function ContactPickerScreen() {
         pageOffset += response.data.length;
       }
 
-      setContacts(loaded);
-
       try {
         setIsSyncing(true);
-        const matches = await syncAndPersistContacts(loaded);
+         const matches = await saveContactsToDb(loaded);
         setMatchedContacts(matches);
+        await refreshContactsFromDb(searchQuery);
       } catch (error) {
         console.error('Failed to sync contacts', error);
         setSyncError('Unable to sync contacts with MoC right now.');
@@ -248,7 +268,7 @@ export default function ContactPickerScreen() {
     } finally {
       setIsLoadingContacts(false);
     }
-  }, []);
+  }, [refreshContactsFromDb, searchQuery]);
 
   useEffect(() => {
     loadContacts();
@@ -311,39 +331,13 @@ export default function ContactPickerScreen() {
     return () => clearTimeout(handler);
   }, [searchInput]);
 
-  const filteredContacts = useMemo(() => {
-    if (!searchQuery) {
-      return contacts;
-    }
-
-    const lower = searchQuery.toLowerCase();
-   const numericQuery = searchQuery.replace(/\D/g, '');
-
-    return contacts.filter(contact => {
-      const name = contact?.name ?? '';
-      const nameMatch = name.toLowerCase().includes(lower);
-
-      const phoneMatch = (contact.phoneNumbers ?? []).some(phone => {
-        const rawNumber = phone?.number ?? '';
-        const normalizedNumber = rawNumber.replace(/\D/g, '');
-
-        if (!rawNumber) {
-          return false;
-        }
-
-        return (
-          rawNumber.toLowerCase().includes(lower) ||
-          (!!numericQuery && normalizedNumber.includes(numericQuery))
-        );
-      });
-
-      return nameMatch || phoneMatch;
-    });
-  }, [contacts, searchQuery]);
-
+  
   useEffect(() => {
-    console.log('searchQuery:', searchQuery, 'filteredContacts:', filteredContacts.length);
-  }, [filteredContacts.length, searchQuery]);
+    // Re-query SQLite whenever the search input stabilizes so new synced rows show up mid-search.
+    refreshContactsFromDb(searchQuery);
+  }, [refreshContactsFromDb, searchQuery]);
+
+  const filteredContacts = useMemo(() => contacts, [contacts]);
   
   const contactSections = useMemo(() => {
     const registered = [];

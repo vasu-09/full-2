@@ -15,11 +15,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
-import {
-  buildContactIndex,
-  normalizePhoneNumber,
-  syncContacts,
-} from '../services/contactService';
+import { getAllContactsFromDb, saveContactsToDb } from '../services/contactStorage';
 
 const initialSelected = [];
 
@@ -64,9 +60,12 @@ export default function LinkListScreen() {
           sort: Contacts.SortTypes.FirstName,
         });
 
-         const contactIndex = buildContactIndex(data);
+         // Persist and re-read from SQLite so this screen always reflects the DB.
+        await saveContactsToDb(data);
 
-        if (!contactIndex.size) {
+        const storedContacts = await getAllContactsFromDb();
+
+        if (!storedContacts.length) {
           if (isMounted) {
             setContacts([]);
             setErrorMessage('No contacts with phone numbers found on your device.');
@@ -74,32 +73,19 @@ export default function LinkListScreen() {
           return;
         }
 
-        const matches = await syncContacts(data);
-
-        const matchedContacts = matches
-          .map((match) => {
-            const normalized = match?.phone ? normalizePhoneNumber(match.phone) : null;
-            const info =
-              (normalized && contactIndex.get(normalized)) ||
-              contactIndex.get(match?.phone ?? '') ||
-              {};
-
-            const id =
-              match?.userId != null
-                ? String(match.userId)
-                : normalized || match?.phone || Math.random().toString();
-
-            return {
-              id,
-              userId: match?.userId,
-              phone: match?.phone,
-              name: info?.name || match?.phone || 'Unknown contact',
-              img: info?.imageUri ?? null,
-            };
-          })
+        const matchedContacts = storedContacts
+          .filter(contact => contact.matchUserId != null)
+          .map(contact => ({
+            id:
+              contact.matchUserId != null
+                ? String(contact.matchUserId)
+                : contact.id ?? `contact-${Math.random().toString(36).slice(2)}`,
+            userId: contact.matchUserId,
+            phone: contact.matchPhone,
+            name: contact.name || contact.matchPhone || 'Unknown contact',
+            img: contact.imageUri ?? null,
+          }))
           .filter((contact, index, arr) => arr.findIndex((c) => c.id === contact.id) === index);
-
-       
 
         if (isMounted) {
           setContacts(matchedContacts);

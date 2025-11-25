@@ -14,8 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import { normalizePhoneNumber } from '../services/contactService';
-import { syncAndPersistContacts } from '../services/contactStorage';
+import { getAllContactsFromDb, saveContactsToDb } from '../services/contactStorage';
 
 
 const INVITE_MESSAGE =
@@ -79,35 +78,24 @@ export default function InviteContactsScreen() {
           return;
         }
 
-        const matches = await syncAndPersistContacts(withNumbers);
-        const matchedNumbers = new Set(
-          matches
-            .map(match => (match?.phone ? normalizePhoneNumber(match.phone) : null))
-            .filter(Boolean),
-        );
+        // Persist synced contacts locally so invite options always read from SQLite.
+        await saveContactsToDb(withNumbers);
 
-        const inviteCandidates = withNumbers
+        const storedContacts = await getAllContactsFromDb();
+
+        const inviteCandidates = storedContacts
+          .filter(contact => (contact.phoneNumbers ?? []).length > 0 && contact.matchUserId == null)
           .map(contact => {
             const phoneNumbers = contact.phoneNumbers ?? [];
-            const hasJoined = phoneNumbers.some(phone => {
-              const normalized = phone?.number ? normalizePhoneNumber(phone.number) : null;
-              return normalized && matchedNumbers.has(normalized);
-            });
-
-            if (hasJoined) {
-              return null;
-            }
-
-            const displayPhone = phoneNumbers[0]?.number ?? '';
+            const displayPhone = phoneNumbers[0]?.number ?? contact.matchPhone ?? '';
 
             return {
               id: contact.id ?? `${contact.name}-${Math.random().toString(36).slice(2)}`,
               name: contact.name?.trim() || displayPhone || 'Unknown contact',
               phone: displayPhone,
-              imageUri: contact.imageAvailable ? contact?.image?.uri ?? null : null,
+               imageUri: contact.imageUri ?? null,
             };
           })
-          .filter(Boolean)
           .sort((a, b) => a.name.localeCompare(b.name));
 
         setContacts(inviteCandidates);

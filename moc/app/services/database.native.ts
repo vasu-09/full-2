@@ -168,6 +168,32 @@ type ContactRow = {
   updated_at: string | null;
 };
 
+const deserializeContactRow = (row: ContactRow): StoredContactInput => {
+  let phoneNumbers: { label?: string | null; number: string }[] | undefined;
+
+  if (row.phone_numbers_json) {
+    try {
+      const parsed = JSON.parse(row.phone_numbers_json);
+      if (Array.isArray(parsed)) {
+        phoneNumbers = parsed
+          .filter((entry) => Boolean(entry?.number))
+          .map((entry) => ({ number: String(entry.number), label: entry?.label ?? null }));
+      }
+    } catch (error) {
+      console.warn('Unable to parse stored phone numbers for contact', row.id, error);
+    }
+  }
+
+  return {
+    id: row.id,
+    name: row.name,
+    phoneNumbers,
+    imageUri: row.image_uri,
+    matchPhone: row.match_phone,
+    matchUserId: row.match_user_id,
+    updatedAt: row.updated_at,
+  } as StoredContactInput;
+};
 
 export const getListsFromDb = async (): Promise<{ id: string; title: string; listType: string | null; pinned: boolean; createdAt: string | null; updatedAt: string | null; createdByUserId: string | null }[]> => {
   const db = await getDatabase();
@@ -426,32 +452,22 @@ export const getContactsFromDb = async (): Promise<StoredContactInput[]> => {
   const db = await getDatabase();
   const rows = await db.getAllAsync<ContactRow>('SELECT * FROM contacts ORDER BY name COLLATE NOCASE ASC');
 
-  return (
-    rows?.map((row) => {
-      let phoneNumbers: { label?: string | null; number: string }[] | undefined;
+   return rows?.map(deserializeContactRow) ?? [];
+};
 
-      if (row.phone_numbers_json) {
-        try {
-          const parsed = JSON.parse(row.phone_numbers_json);
-          if (Array.isArray(parsed)) {
-            phoneNumbers = parsed
-              .filter((entry) => Boolean(entry?.number))
-              .map((entry) => ({ number: String(entry.number), label: entry?.label ?? null }));
-          }
-        } catch (error) {
-          console.warn('Unable to parse stored phone numbers for contact', row.id, error);
-        }
-      }
+      export const searchContactsInDb = async (query: string): Promise<StoredContactInput[]> => {
+  const db = await getDatabase();
+  const like = `%${query}%`;
 
-      return {
-        id: row.id,
-        name: row.name,
-        phoneNumbers,
-        imageUri: row.image_uri,
-        matchPhone: row.match_phone,
-        matchUserId: row.match_user_id,
-        updatedAt: row.updated_at,
-      } as StoredContactInput;
-    }) ?? []
+  const rows = await db.getAllAsync<ContactRow>(
+    `SELECT *
+     FROM contacts
+     WHERE LOWER(name) LIKE LOWER(?)
+        OR phone_numbers_json LIKE ?
+        OR match_phone LIKE ?
+     ORDER BY name COLLATE NOCASE ASC`,
+    [like, like, like],
   );
+
+   return rows?.map(deserializeContactRow) ?? [];
 };
