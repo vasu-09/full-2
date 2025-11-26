@@ -9,6 +9,7 @@ import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusReactiveJwtDecoder;
 import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
 import org.springframework.security.oauth2.jwt.ReactiveJwtDecoders;
+
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.util.StringUtils;
 
@@ -21,7 +22,7 @@ public class GatewaySecurityConfig {
         return http
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .authorizeExchange(ex -> ex
-                        .pathMatchers("/auth/**", "/.well-known/**", "/actuator/**").permitAll()
+                        .pathMatchers("/auth/**", "/.well-known/**", "/actuator/**", "/ws/**", "/rtc/ws/**").permitAll()
                         .anyExchange().authenticated()
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
