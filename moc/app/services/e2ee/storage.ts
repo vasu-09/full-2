@@ -13,9 +13,20 @@ type StorageHandler = {
   set: (key: string, value: string) => Promise<void>;
 };
 
+const normalizeSecureStoreKey = (key: string) => {
+  const trimmed = key.trim();
+  const normalized = trimmed.replace(/[^A-Za-z0-9._-]/g, '_');
+
+  if (!normalized) {
+    throw new Error('Invalid SecureStore key: key is empty after normalization');
+  }
+
+  return normalized;
+};
+
 const secureHandler: StorageHandler = {
-  get: (key) => SecureStore.getItemAsync(key),
-  set: (key, value) => SecureStore.setItemAsync(key, value),
+  get: (key) => SecureStore.getItemAsync(normalizeSecureStoreKey(key)),
+  set: (key, value) => SecureStore.setItemAsync(normalizeSecureStoreKey(key), value),
 };
 
 const asyncHandler: StorageHandler = {

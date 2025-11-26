@@ -26,10 +26,21 @@ type StorageHandler = {
   removeItem: (key: string) => Promise<void>;
 };
 
+const normalizeSecureStoreKey = (key: string) => {
+  const trimmed = key.trim();
+  const normalized = trimmed.replace(/[^A-Za-z0-9._-]/g, '_');
+
+  if (!normalized) {
+    throw new Error('Invalid SecureStore key: key is empty after normalization');
+  }
+
+  return normalized;
+};
+
 const secureStoreHandler: StorageHandler = {
-  setItem: (key, value) => SecureStore.setItemAsync(key, value),
-  getItem: (key) => SecureStore.getItemAsync(key),
-  removeItem: (key) => SecureStore.deleteItemAsync(key),
+  setItem: (key, value) => SecureStore.setItemAsync(normalizeSecureStoreKey(key), value),
+  getItem: (key) => SecureStore.getItemAsync(normalizeSecureStoreKey(key)),
+  removeItem: (key) => SecureStore.deleteItemAsync(normalizeSecureStoreKey(key)),
 };
 
 const asyncStorageHandler: StorageHandler = {
