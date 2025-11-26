@@ -121,6 +121,28 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
             return auth.substring(7).trim();
         }
 
+        // 2) Sec-WebSocket-Protocol: bearer,<token> or "bearer <token>" (best-effort parsing)
+        List<String> protocols = req.getHeaders().getOrEmpty("Sec-WebSocket-Protocol");
+        for (String header : protocols) {
+            String[] parts = header.split(",");
+            for (int i = 0; i < parts.length; i++) {
+                String part = parts[i].trim();
+                if (part.regionMatches(true, 0, "bearer ", 0, 7)) {
+                    String candidate = part.substring(7).trim();
+                    if (!candidate.isBlank()) {
+                        return candidate;
+                    }
+                    continue;
+                }
+                if (part.equalsIgnoreCase("bearer") && i + 1 < parts.length) {
+                    String candidate = parts[i + 1].trim();
+                    if (!candidate.isBlank()) {
+                        return candidate;
+                    }
+                }
+            }
+        }
+
         // 3) Query: ?access_token=... or ?token=...
         if (req instanceof ServletServerHttpRequest sreq) {
             HttpServletRequest httpReq = sreq.getServletRequest();
