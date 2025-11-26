@@ -17,6 +17,7 @@ import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.stereotype.Component;
 
+import java.util.Optional;
 import java.security.Principal;
 import java.util.List;
 
@@ -65,9 +66,7 @@ public class StompSecurityInterceptor implements ChannelInterceptor {
                     String dest = acc.getDestination(); // /topic/room/{roomId}
                     if (dest != null && dest.startsWith("/topic/room/")) {
                         String roomKey = dest.substring("/topic/room/".length()).split("/")[0];
-                        Long roomId = chatRoomRepository.findByRoomId(roomKey)
-                                .map(ChatRoom::getId)
-                                .orElseThrow(() -> new IllegalArgumentException("Unknown room " + roomKey));
+                        Long roomId = resolveRoomId(roomKey);
 
                         // 1) Room ACL (Redis-backed)
                         if (!acl.canSubscribe(userId, roomId)) {
@@ -90,9 +89,7 @@ public class StompSecurityInterceptor implements ChannelInterceptor {
                     String dest = acc.getDestination(); // /topic/room/{roomId}
                     if (dest != null && dest.startsWith("/topic/room/")) {
                         String roomKey = dest.substring("/topic/room/".length()).split("/")[0];
-                        Long roomId = chatRoomRepository.findByRoomId(roomKey)
-                                .map(ChatRoom::getId)
-                                .orElseThrow(() -> new IllegalArgumentException("Unknown room " + roomKey));
+                        Long roomId = resolveRoomId(roomKey);
 
                         // 1) Room ACL
                         if (!acl.canPublish(userId, roomId)) {
@@ -119,6 +116,25 @@ public class StompSecurityInterceptor implements ChannelInterceptor {
 
     private boolean isDirectRoom(Long roomId) {
         return participantRepo.countByRoomId(roomId) == 2L;
+    }
+
+    /** Resolve a room key to the numeric primary key used internally. */
+    private Long resolveRoomId(String roomKey) {
+        // Prefer the public "roomId" stable identifier
+        Optional<Long> byExternalId = chatRoomRepository.findByRoomId(roomKey).map(ChatRoom::getId);
+        if (byExternalId.isPresent()) {
+            return byExternalId.get();
+        }
+
+        // Fallback: allow clients that still reference the numeric id directly
+        try {
+            Long numericId = Long.valueOf(roomKey);
+            return chatRoomRepository.findById(numericId)
+                    .map(ChatRoom::getId)
+                    .orElseThrow(() -> new IllegalArgumentException("Unknown room " + roomKey));
+        } catch (NumberFormatException ignore) {
+            throw new IllegalArgumentException("Unknown room " + roomKey);
+        }
     }
 
     /** Return the other user in a 1:1 room (throws if not exactly two). */
