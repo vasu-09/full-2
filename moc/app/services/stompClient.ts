@@ -71,12 +71,17 @@ class SimpleStompClient {
         const wsUrl = this.token
           ? `${this.url}?access_token=${encodeURIComponent(this.token)}`
           : this.url;
+
+        const protocols = ['v12.stomp'];
+        if (this.token) {
+          protocols.push(`bearer ${this.token}`);
+        }
         const socket: WebSocket =
           Platform.OS === 'web'
-            ? new WebSocket(wsUrl)
+            ? new WebSocket(wsUrl, protocols)
             : new (WebSocket as unknown as RNWebSocketConstructor)(
                 wsUrl,
-                undefined,
+                protocols,
                 { headers },
               );
         this.ws = socket;

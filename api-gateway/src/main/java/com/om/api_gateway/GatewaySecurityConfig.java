@@ -22,7 +22,10 @@ public class GatewaySecurityConfig {
         return http
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .authorizeExchange(ex -> ex
-                        .pathMatchers("/auth/**", "/.well-known/**", "/actuator/**", "/ws/**", "/rtc/ws/**").permitAll()
+                        .pathMatchers("/auth/**", "/.well-known/**", "/actuator/**", "/ws",
+                                "/ws/**",
+                                "/rtc/ws",
+                                "/rtc/ws/**").permitAll()
                         .anyExchange().authenticated()
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
