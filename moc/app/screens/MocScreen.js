@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useChatRegistry } from '../context/ChatContext';
 import { getAllContactsFromDb, searchContactsInDb, syncAndPersistContacts } from '../services/contactStorage';
+import { createDirectRoom } from '../services/roomsService';
 
 const windowHeight = Dimensions.get('window').height;
 
@@ -43,10 +44,12 @@ const MocScreen = () => {
   const [isSyncingContacts, setIsSyncingContacts] = useState(false);
   const [contactsError, setContactsError] = useState('');
   const [menuVisible, setMenuVisible] = useState(false);
+  const [createError, setCreateError] = useState('');
+  const [creatingRoomFor, setCreatingRoomFor] = useState(null);
   const Tab = createMaterialTopTabNavigator();
   const hideMenu = () => setMenuVisible(false);
   const topBarHeight = 50 + insets.top;
-  const { rooms } = useChatRegistry();
+  const { rooms, upsertRoom } = useChatRegistry();
 
   const router = useRouter();
 
@@ -77,6 +80,48 @@ const MocScreen = () => {
     );
   }, []);
 
+   const handleStartDirectChat = useCallback(
+    async (contact) => {
+      const userId = contact?.matchUserId;
+      if (!userId) {
+        return;
+      }
+
+      setCreateError('');
+      const roomTitle = contact?.name || contact?.matchPhone || 'Chat';
+      const roomAvatar = contact?.imageUri ?? null;
+      const tracker = contact?.id ?? contact?.matchPhone ?? String(userId);
+
+      try {
+        setCreatingRoomFor(tracker);
+        const room = await createDirectRoom(Number(userId));
+        upsertRoom({
+          id: room.id,
+          roomKey: room.roomId,
+          title: roomTitle,
+          avatar: roomAvatar,
+          peerId: Number(userId),
+        });
+        router.push({
+          pathname: '/screens/ChatDetailScreen',
+          params: {
+            roomId: String(room.id),
+            roomKey: room.roomId,
+            title: roomTitle,
+            peerId: String(userId),
+          },
+        });
+      } catch (err) {
+        console.warn('Unable to start direct chat', err);
+        setCreateError('Unable to start a conversation right now. Please try again.');
+      } finally {
+        setCreatingRoomFor(null);
+      }
+    },
+    [router, upsertRoom],
+  );
+
+
   const SearchResults = ({ contactResults: results, onInvite }) => {
     const matchedContacts = (results ?? []).filter(contact => contact?.matchUserId);
     const inviteContacts = (results ?? []).filter(contact => !contact?.matchUserId);
@@ -88,18 +133,23 @@ const MocScreen = () => {
     const renderContactRow = (contact, index) => {
       const fallbackName = contact?.name || 'Unknown contact';
       const phoneDisplay = contact?.matchPhone || contact?.phoneNumbers?.[0]?.number;
+      const tracker = contact?.id ?? contact?.matchPhone ?? `contact-${index}`;
+      const isCreating = tracker === creatingRoomFor;
 
       return (
-        <View
-          key={contact?.id ?? contact?.matchPhone ?? `contact-${index}`}
+        <TouchableOpacity
+          key={tracker}
           style={styles.contactResultRow}
+          disabled={isCreating}
+          onPress={() => handleStartDirectChat(contact)}
         >
           {renderAvatar(contact)}
           <View style={styles.contactResultText}>
             <Text style={styles.contactName}>{fallbackName}</Text>
             {phoneDisplay ? <Text style={styles.contactPhone}>{phoneDisplay}</Text> : null}
           </View>
-        </View>
+        {isCreating ? <ActivityIndicator size="small" color="#1f6ea7" /> : null}
+        </TouchableOpacity>
       );
     };
 
@@ -465,6 +515,7 @@ const MocScreen = () => {
           ) : (
             <ScrollView contentContainerStyle={styles.searchResultsContent}>
               <Text style={styles.searchSectionLabel}>Contacts</Text>
+              {createError ? <Text style={styles.errorText}>{createError}</Text> : null}
 
                <SearchResults
                 contactResults={contactResults}
