@@ -20,7 +20,10 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 
 import { useChatRegistry } from '../context/ChatContext';
 import { normalizePhoneNumber } from '../services/contactService';
-import { getAllContactsFromDb, syncAndPersistContacts } from '../services/contactStorage';
+import {
+  getAllContactsFromDb,
+  syncAndPersistContacts,
+} from '../services/contactStorage';
 import { createDirectRoom } from '../services/roomsService';
 
 export default function ContactPickerScreen() {
@@ -33,9 +36,11 @@ export default function ContactPickerScreen() {
   const [contacts, setContacts] = useState([]);
   const [allContacts, setAllContacts] = useState([]);
   const [selected, setSelected] = useState([]);
-  const [isSearching, setIsSearching] = useState(false);
+
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const isSearching = searchQuery.length > 0;
+
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncError, setSyncError] = useState('');
   const [contactsError, setContactsError] = useState('');
@@ -46,7 +51,9 @@ export default function ContactPickerScreen() {
   const [canAskPermission, setCanAskPermission] = useState(true);
   const [isLoadingContacts, setIsLoadingContacts] = useState(false);
 
-  const mapStoredContactToUi = useCallback(stored => {
+  // ---------- helpers ----------
+
+  const mapStoredContactToUi = useCallback((stored) => {
     return {
       id: stored.id ?? `db-contact-${Math.random().toString(36).slice(2)}`,
       name: stored.name ?? 'Unknown contact',
@@ -60,10 +67,10 @@ export default function ContactPickerScreen() {
     };
   }, []);
 
-  const extractMatchesFromStored = useCallback(storedContacts => {
+  const extractMatchesFromStored = useCallback((storedContacts) => {
     const dedup = new Map();
 
-    storedContacts.forEach(contact => {
+    storedContacts.forEach((contact) => {
       if (contact.matchPhone && contact.matchUserId != null) {
         const key = normalizePhoneNumber(contact.matchPhone) ?? contact.matchPhone;
         if (key && !dedup.has(key)) {
@@ -78,24 +85,35 @@ export default function ContactPickerScreen() {
     return Array.from(dedup.values());
   }, []);
 
-  // --- initial restore from SQLite (before fresh sync) ---
+  // ---------- 1. INITIAL LOAD FROM SQLITE ONLY ----------
 
   useEffect(() => {
     let isMounted = true;
 
     const restoreCachedContacts = async () => {
       try {
+        setIsLoadingContacts(true);
         const cached = await getAllContactsFromDb();
-        if (!isMounted || !cached?.length) return;
+        console.log('[CONTACT_PICKER] restoreCachedContacts count=', cached.length);
+
+        if (!isMounted) return;
 
         const uiContacts = cached.map(mapStoredContactToUi);
-
-        setAllContacts(uiContacts); // master list from DB
-        setContacts(uiContacts);    // current view
+        setAllContacts(uiContacts);
+        setContacts(uiContacts);
         setMatchedContacts(extractMatchesFromStored(cached));
-        setIsLoadingContacts(false); 
+        setContactsError('');
       } catch (err) {
         console.warn('Unable to restore cached contacts', err);
+        if (isMounted) {
+          setContacts([]);
+          setMatchedContacts([]);
+          setContactsError('Unable to read contacts from local storage.');
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingContacts(false);
+        }
       }
     };
 
@@ -106,96 +124,7 @@ export default function ContactPickerScreen() {
     };
   }, [extractMatchesFromStored, mapStoredContactToUi]);
 
-  // --- matches map for "on MoC" info ---
-
-  const matchesByPhone = useMemo(() => {
-    const map = new Map();
-
-    const addEntry = (key, match) => {
-      if (key && !map.has(key)) {
-        map.set(key, match);
-      }
-    };
-
-    matchedContacts.forEach(match => {
-      const rawPhone = match?.phone?.trim?.() ?? '';
-      if (!rawPhone) return;
-
-      // store raw
-      addEntry(rawPhone, match);
-
-      const normalized = normalizePhoneNumber(rawPhone);
-      if (normalized) {
-        addEntry(normalized, match);
-
-        const normalizedDigits = normalized.replace(/\D/g, '');
-        addEntry(normalizedDigits, match);
-
-        if (normalizedDigits.startsWith('91') && normalizedDigits.length === 12) {
-          addEntry(normalizedDigits.slice(2), match);
-        }
-      }
-
-      const digitsOnly = rawPhone.replace(/\D/g, '');
-      addEntry(digitsOnly, match);
-      if (digitsOnly.startsWith('91') && digitsOnly.length === 12) {
-        addEntry(digitsOnly.slice(2), match);
-      }
-    });
-
-    return map;
-  }, [matchedContacts]);
-
-  const getMatchForContact = useCallback(
-    contact => {
-      const numbers = contact?.phoneNumbers ?? [];
-
-      for (const phone of numbers) {
-        const rawNumber = phone?.number ?? '';
-        if (!rawNumber) continue;
-
-        const normalized = normalizePhoneNumber(rawNumber);
-        const digitsOnly = rawNumber.replace(/\D/g, '');
-
-        const candidates = [];
-
-        if (normalized) {
-          candidates.push(normalized);
-
-          const normalizedDigits = normalized.replace(/\D/g, '');
-          if (normalizedDigits) {
-            candidates.push(normalizedDigits);
-
-            if (normalizedDigits.startsWith('91') && normalizedDigits.length === 12) {
-              candidates.push(normalizedDigits.slice(2));
-            }
-          }
-        }
-
-        if (digitsOnly) {
-          candidates.push(digitsOnly);
-
-          if (digitsOnly.startsWith('0') && digitsOnly.length === 11) {
-            candidates.push(digitsOnly.slice(1));
-          }
-          if (digitsOnly.startsWith('91') && digitsOnly.length === 12) {
-            candidates.push(digitsOnly.slice(2));
-          }
-        }
-
-        for (const key of candidates) {
-          if (matchesByPhone.has(key)) {
-            return matchesByPhone.get(key);
-          }
-        }
-      }
-
-      return null;
-    },
-    [matchesByPhone],
-  );
-
-  // --- load from device + sync with backend + refill SQLite ---
+  // ---------- 2. OPTIONAL: REFRESH FROM DEVICE & BACKEND (MANUAL) ----------
 
   const loadContacts = useCallback(async () => {
     setContactsError('');
@@ -209,9 +138,8 @@ export default function ContactPickerScreen() {
       setCanAskPermission(Boolean(canAskAgain));
 
       if (!granted) {
-        
         if (status === 'denied') {
-          setContactsError('MoC needs access to your contacts to show them here.');
+          setContactsError('MoC needs access to your contacts to refresh this list.');
         }
         return;
       }
@@ -236,20 +164,18 @@ export default function ContactPickerScreen() {
       try {
         setIsSyncing(true);
 
-        // 1) sync with backend and write into SQLite
         const matches = await syncAndPersistContacts(loaded);
-
-        // 2) read everything back from SQLite
         const stored = await getAllContactsFromDb();
 
-        // 3) push into UI
-        setContacts(stored.map(mapStoredContactToUi));
+        const uiContacts = stored.map(mapStoredContactToUi);
+        setAllContacts(uiContacts);
+        setContacts(uiContacts);
         setMatchedContacts(extractMatchesFromStored(stored));
 
         console.log(
-          '[CONTACT_PICKER] synced contacts:',
+          '[CONTACT_PICKER] synced contacts from device; stored=',
           stored.length,
-          'matches:',
+          'matches=',
           matches.length,
         );
       } catch (err) {
@@ -268,59 +194,134 @@ export default function ContactPickerScreen() {
     }
   }, [extractMatchesFromStored, mapStoredContactToUi]);
 
- 
+  // ---------- 3. BUILD MATCH MAP (for "On MoC") ----------
 
-  // --- search: debounce `searchInput` into `searchQuery` ---
+  const matchesByPhone = useMemo(() => {
+    const map = new Map();
+
+    const addEntry = (key, match) => {
+      if (key && !map.has(key)) {
+        map.set(key, match);
+      }
+    };
+
+    matchedContacts.forEach((match) => {
+      const rawPhone = match?.phone?.trim?.() ?? '';
+      if (!rawPhone) return;
+
+      addEntry(rawPhone, match);
+      const normalized = normalizePhoneNumber(rawPhone);
+      if (normalized) {
+        addEntry(normalized, match);
+        const normalizedDigits = normalized.replace(/\D/g, '');
+        addEntry(normalizedDigits, match);
+        if (normalizedDigits.startsWith('91') && normalizedDigits.length === 12) {
+          addEntry(normalizedDigits.slice(2), match);
+        }
+      }
+      const digitsOnly = rawPhone.replace(/\D/g, '');
+      addEntry(digitsOnly, match);
+      if (digitsOnly.startsWith('91') && digitsOnly.length === 12) {
+        addEntry(digitsOnly.slice(2), match);
+      }
+    });
+
+    return map;
+  }, [matchedContacts]);
+
+  const getMatchForContact = useCallback(
+    (contact) => {
+      const numbers = contact?.phoneNumbers ?? [];
+
+      for (const phone of numbers) {
+        const rawNumber = phone?.number ?? '';
+        if (!rawNumber) continue;
+
+        const normalized = normalizePhoneNumber(rawNumber);
+        const digitsOnly = rawNumber.replace(/\D/g, '');
+
+        const candidates = [];
+
+        if (normalized) {
+          candidates.push(normalized);
+          const normalizedDigits = normalized.replace(/\D/g, '');
+          if (normalizedDigits) {
+            candidates.push(normalizedDigits);
+            if (normalizedDigits.startsWith('91') && normalizedDigits.length === 12) {
+              candidates.push(normalizedDigits.slice(2));
+            }
+          }
+        }
+
+        if (digitsOnly) {
+          candidates.push(digitsOnly);
+          if (digitsOnly.startsWith('0') && digitsOnly.length === 11) {
+            candidates.push(digitsOnly.slice(1));
+          }
+          if (digitsOnly.startsWith('91') && digitsOnly.length === 12) {
+            candidates.push(digitsOnly.slice(2));
+          }
+        }
+
+        for (const key of candidates) {
+          if (matchesByPhone.has(key)) {
+            return matchesByPhone.get(key);
+          }
+        }
+      }
+
+      return null;
+    },
+    [matchesByPhone],
+  );
+
+  // ---------- 4. SEARCH (in-memory over contacts) ----------
 
   useEffect(() => {
     const handler = setTimeout(() => {
       console.log('[CONTACT_PICKER] debounced searchInput -> searchQuery', {
-      searchInput,
-    });
+        searchInput,
+      });
       setSearchQuery(searchInput.trim());
     }, 250);
 
     return () => clearTimeout(handler);
   }, [searchInput]);
 
-  // --- in-memory filter over `contacts` ---
-
   const filteredContacts = useMemo(() => {
     const trimmed = searchQuery.trim().toLowerCase();
     console.log('[CONTACT_PICKER] filtering contacts', {
-    searchQuery,
-    contactsCount: contacts.length,
-  });
+      searchQuery,
+      contactsCount: contacts.length,
+    });
+
     if (!trimmed) return contacts;
 
     const numericQuery = trimmed.replace(/\D/g, '');
 
-    return contacts.filter(contact => {
+    return contacts.filter((contact) => {
       const name = (contact.name ?? '').toLowerCase();
 
-      // match name
       if (name.includes(trimmed)) return true;
 
-      const phones = (contact.phoneNumbers ?? []).map(p => p.number ?? '');
-      const cleanedPhones = phones.map(n => n.replace(/[\s\-+]/g, ''));
+      const phones = (contact.phoneNumbers ?? []).map((p) => p.number ?? '');
+      const cleanedPhones = phones.map((n) => n.replace(/[\s\-+]/g, ''));
 
-      // digits-only match
-      if (numericQuery && cleanedPhones.some(n => n.includes(numericQuery))) {
+      if (numericQuery && cleanedPhones.some((n) => n.includes(numericQuery))) {
         return true;
       }
 
-      // raw substring match
-      return phones.some(n => n.toLowerCase().includes(trimmed));
+      return phones.some((n) => n.toLowerCase().includes(trimmed));
     });
   }, [contacts, searchQuery]);
 
-  // --- split into "On MoC" vs "Invite" sections ---
+  // ---------- 5. SPLIT INTO SECTIONS ----------
 
   const contactSections = useMemo(() => {
     const registered = [];
     const unregistered = [];
 
-    filteredContacts.forEach(contact => {
+    filteredContacts.forEach((contact) => {
       if (getMatchForContact(contact)) registered.push(contact);
       else unregistered.push(contact);
     });
@@ -335,16 +336,16 @@ export default function ContactPickerScreen() {
     return sections;
   }, [filteredContacts, getMatchForContact]);
 
-  // --- selection + send room ---
+  // ---------- 6. SELECTION + SEND ----------
 
-  const toggleSelect = contact => {
+  const toggleSelect = (contact) => {
     setCreateError('');
     const match = getMatchForContact(contact);
     if (!match) {
       setCreateError('Selected contact has not joined MoC yet.');
       return;
     }
-    setSelected(curr => (curr.some(c => c.id === contact.id) ? [] : [contact]));
+    setSelected((curr) => (curr.some((c) => c.id === contact.id) ? [] : [contact]));
   };
 
   const handleSend = async () => {
@@ -387,7 +388,7 @@ export default function ContactPickerScreen() {
     }
   };
 
-  const handleInvite = useCallback(async contact => {
+  const handleInvite = useCallback(async (contact) => {
     const displayName = contact?.name?.trim();
     const inviteMessage = displayName
       ? `Hey ${displayName}, I'm using MoC to stay connected. Download the app and join me!`
@@ -400,10 +401,10 @@ export default function ContactPickerScreen() {
     }
   }, []);
 
-  // --- render helpers ---
+  // ---------- 7. RENDER HELPERS ----------
 
   const renderItem = ({ item }) => {
-    const isSel = selected.some(c => c.id === item.id);
+    const isSel = selected.some((c) => c.id === item.id);
     const match = getMatchForContact(item);
     const statusLabel = match ? 'On MoC' : 'Not on MoC yet';
 
@@ -459,56 +460,25 @@ export default function ContactPickerScreen() {
     </View>
   );
 
-  // --- UI ---
+  // ---------- 8. UI ----------
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header: normal vs search */}
-      {isSearching ? (
-        <View style={[styles.searchHeader, { paddingTop: insets.top }]}>
-          <TouchableOpacity
-            onPress={() => {
-              setIsSearching(false);
-              setSearchInput('');
-              setSearchQuery('');
-            }}
-            style={styles.searchBackBtn}
-          >
-            <Icon name="arrow-back" size={24} color="#1f6ea7" />
-          </TouchableOpacity>
-          <TextInput
-            style={styles.searchHeaderInput}
-            placeholder="Search contacts"
-            placeholderTextColor="#999"
-            value={searchInput}
-            onChangeText={setSearchInput}
-            autoFocus
-            underlineColorAndroid="transparent"
-          />
-        </View>
-      ) : (
-        <View style={[styles.header, { paddingTop: insets.top }]}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Icon name="arrow-back" size={24} color="#fff" />
-          </TouchableOpacity>
-
-          <View style={styles.titleContainer}>
-            <Text style={styles.title}>contacts to send</Text>
-            <Text style={styles.subtitle}>{selected.length} selected</Text>
-          </View>
-
-          <TouchableOpacity
-            onPress={() => {
-              setIsSearching(true);
-              setSearchInput('');
-              setSearchQuery('');
-            }}
-            style={styles.searchBtn}
-          >
-            <Icon name="search" size={24} color="#fff" />
-          </TouchableOpacity>
-        </View>
-      )}
+      {/* search header */}
+      <View style={[styles.searchHeader, { paddingTop: insets.top }]}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.searchBackBtn}>
+          <Icon name="arrow-back" size={24} color="#1f6ea7" />
+        </TouchableOpacity>
+        <TextInput
+          style={styles.searchHeaderInput}
+          placeholder="Search contacts"
+          placeholderTextColor="#999"
+          value={searchInput}
+          onChangeText={setSearchInput}
+          autoFocus
+          underlineColorAndroid="transparent"
+        />
+      </View>
 
       <DebugInfo />
 
@@ -522,7 +492,7 @@ export default function ContactPickerScreen() {
             style={styles.selectedList}
             contentContainerStyle={{ paddingHorizontal: 8 }}
           >
-            {selected.map(c => (
+            {selected.map((c) => (
               <View key={c.id} style={styles.selectedItem}>
                 {c.imageAvailable ? (
                   <Image source={{ uri: c.image.uri }} style={styles.selectedAvatar} />
@@ -550,7 +520,7 @@ export default function ContactPickerScreen() {
 
       <View style={styles.syncStatusWrapper}>
         {isLoadingContacts ? (
-          <Text style={styles.syncStatusText}>Loading contacts from your phone…</Text>
+          <Text style={styles.syncStatusText}>Loading contacts…</Text>
         ) : contactsError ? (
           <Text style={[styles.syncStatusText, styles.syncStatusError]}>{contactsError}</Text>
         ) : isSyncing ? (
@@ -572,18 +542,19 @@ export default function ContactPickerScreen() {
         </View>
       ) : null}
 
-      {permissionStatus !== 'granted' && (
+      {/* Permission / refresh card – manual refresh only */}
+      {permissionStatus === 'denied' && (
         <View style={styles.permissionWrapper}>
           <Icon name="contacts" size={42} color="#1f6ea7" />
           <Text style={styles.permissionTitle}>Contacts permission needed</Text>
           <Text style={styles.permissionMessage}>
-            Allow MoC to access your phone contacts so we can refresh this list.
-            Existing contacts stored in MoC will still be shown below.
+            Allow MoC to access your phone contacts so we can refresh this list. Existing
+            contacts stored in MoC will still be shown below.
           </Text>
           <TouchableOpacity
             style={styles.permissionButton}
             onPress={() => {
-              if (permissionStatus === 'denied' && !canAskPermission) {
+              if (!canAskPermission) {
                 Linking.openSettings();
               } else {
                 loadContacts();
@@ -591,9 +562,7 @@ export default function ContactPickerScreen() {
             }}
           >
             <Text style={styles.permissionButtonText}>
-              {permissionStatus === 'denied' && !canAskPermission
-                ? 'Open settings'
-                : 'Allow contact access'}
+              {canAskPermission ? 'Allow contact access' : 'Open settings'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -601,7 +570,7 @@ export default function ContactPickerScreen() {
 
       <SectionList
         sections={contactSections}
-        keyExtractor={c => c.id}
+        keyExtractor={(c) => c.id}
         renderItem={renderItem}
         renderSectionHeader={({ section }) => (
           <Text style={styles.sectionDivider}>{section.title}</Text>
@@ -626,7 +595,6 @@ export default function ContactPickerScreen() {
         }
       />
 
-
       {/* Floating send button */}
       {selected.length > 0 && (
         <TouchableOpacity
@@ -647,32 +615,6 @@ export default function ContactPickerScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#eef5fa' },
-
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1f6ea7',
-    paddingHorizontal: 8,
-    height: 56,
-  },
-  backBtn: { padding: 8 },
-  searchBtn: { padding: 8 },
-
-  titleContainer: {
-    flex: 1,
-    flexDirection: 'column',
-    marginLeft: 8,
-  },
-  title: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  subtitle: {
-    color: '#fff',
-    fontSize: 14,
-    marginTop: 2,
-  },
 
   debugInfo: {
     paddingHorizontal: 12,
@@ -796,7 +738,8 @@ const styles = StyleSheet.create({
 
   permissionWrapper: {
     marginHorizontal: 16,
-    marginTop: 24,
+    marginTop: 16,
+    marginBottom: 8,
     padding: 20,
     backgroundColor: '#fff',
     borderRadius: 16,

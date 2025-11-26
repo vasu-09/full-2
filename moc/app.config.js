@@ -66,6 +66,19 @@ const normalizeHost = (value) => {
   }
 };
 
+const buildBaseUrlFromHost = (host, port) => {
+  const normalizedHost = normalizeHost(host);
+  if (!normalizedHost) {
+    return null;
+  }
+
+  const normalizedPort = String(port || '').trim();
+  const hasPort = Boolean(normalizedPort);
+  const portSuffix = hasPort ? `:${normalizedPort}` : '';
+
+  return `http://${normalizedHost}${portSuffix}`;
+};
+
 const getExpoDevHost = () => {
   // Expo sets these when running through `expo start`.
   const envCandidates = [process.env.EXPO_DEV_SERVER_HOST, process.env.EXPO_SERVER_HOSTNAME];
@@ -112,6 +125,15 @@ module.exports = () => {
   loadEnvFile();
 
   let apiBaseUrl = process.env.EXPO_PUBLIC_API_URL || expo?.extra?.apiBaseUrl || '';
+
+  if (!apiBaseUrl && process.env.EXPO_PUBLIC_API_HOST) {
+    const built = buildBaseUrlFromHost(process.env.EXPO_PUBLIC_API_HOST, process.env.EXPO_PUBLIC_API_PORT || '8080');
+    if (built) {
+      apiBaseUrl = built;
+      console.log(`[app.config] Using EXPO_PUBLIC_API_HOST for EXPO_PUBLIC_API_URL: ${apiBaseUrl}`);
+    }
+  }
+
   if (!apiBaseUrl) {
     apiBaseUrl = inferDevApiBaseUrl() || '';
   }
@@ -121,6 +143,8 @@ module.exports = () => {
     extra: {
       ...expo?.extra,
       apiBaseUrl,
+      apiHost: process.env.EXPO_PUBLIC_API_HOST || '',
+      apiPort: process.env.EXPO_PUBLIC_API_PORT || '',
     },
   };
 };

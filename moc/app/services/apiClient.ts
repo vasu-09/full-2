@@ -212,6 +212,24 @@ const normalizeBaseUrl = (value?: string | null, { appendDefaultPort = false } =
 const getExplicitBaseUrl = () => {
   const extra = expoConfig?.extra ?? manifest2Config?.extra ?? {};
 
+    const hostOnly =
+    extra?.apiHost ??
+    extra?.apiHostname ??
+    process.env.EXPO_PUBLIC_API_HOST ??
+    undefined;
+
+  if (typeof hostOnly === 'string' && hostOnly.trim()) {
+    const port =
+      (typeof extra?.apiPort === 'string' && extra.apiPort.trim())
+        ? extra.apiPort.trim()
+        : process.env.EXPO_PUBLIC_API_PORT ?? '';
+
+    const withPort = port ? `${hostOnly}:${port}` : hostOnly;
+    const normalized = normalizeBaseUrl(withPort, { appendDefaultPort: true });
+    if (normalized) {
+      return normalized;
+    }
+  }
   const rawBase =
     extra?.apiBaseUrl ??
     extra?.apiBaseURL ??
@@ -222,11 +240,6 @@ const getExplicitBaseUrl = () => {
   const baseFromExtra = normalizeBaseUrl(typeof rawBase === 'string' ? rawBase : undefined);
   if (baseFromExtra) {
     return baseFromExtra;
-  }
-
-  const hostOnly = extra?.apiHost ?? extra?.apiHostname;
-  if (typeof hostOnly === 'string' && hostOnly.trim()) {
-    return normalizeBaseUrl(hostOnly, { appendDefaultPort: true });
   }
 
   return undefined;

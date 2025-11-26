@@ -1,10 +1,24 @@
 import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
+import * as Contacts from 'expo-contacts';
 import { useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
-import { Dimensions, Image, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Dimensions,
+  Image,
+  Pressable,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useChatRegistry } from '../context/ChatContext';
+import { getAllContactsFromDb, searchContactsInDb, syncAndPersistContacts } from '../services/contactStorage';
 
 const windowHeight = Dimensions.get('window').height;
 
@@ -24,6 +38,9 @@ const MocScreen = () => {
   const insets = useSafeAreaInsets();
   const [searchActive, setSearchActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [contactResults, setContactResults] = useState([]);
+  const [isSyncingContacts, setIsSyncingContacts] = useState(false);
+  const [contactsError, setContactsError] = useState('');
   const [menuVisible, setMenuVisible] = useState(false);
   const Tab = createMaterialTopTabNavigator();
   const hideMenu = () => setMenuVisible(false);
@@ -31,6 +48,74 @@ const MocScreen = () => {
   const { rooms } = useChatRegistry();
 
   const router = useRouter();
+
+  const syncContactsToDb = useCallback(async () => {
+    setContactsError('');
+    setIsSyncingContacts(true);
+
+    try {
+      const permission = await Contacts.requestPermissionsAsync();
+
+      if (!permission.granted) {
+        setContactsError('MoC needs access to your contacts to search them.');
+        setContactResults([]);
+        return;
+      }
+
+      const response = await Contacts.getContactsAsync({
+        fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Image],
+        sort: Contacts.SortTypes.FirstName,
+      });
+
+      const contactsWithPhones = (response.data ?? []).filter((contact) => (contact.phoneNumbers ?? []).length > 0);
+
+      await syncAndPersistContacts(contactsWithPhones);
+
+      const storedContacts = await getAllContactsFromDb();
+      setContactResults(storedContacts);
+    } catch (error) {
+      console.warn('Unable to sync contacts from search', error);
+      setContactsError('Unable to sync contacts right now.');
+      setContactResults([]);
+    } finally {
+      setIsSyncingContacts(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (searchActive) {
+      syncContactsToDb();
+    }
+  }, [searchActive, syncContactsToDb]);
+
+  useEffect(() => {
+    if (!searchActive) {
+      return;
+    }
+
+    let isMounted = true;
+
+    const runSearch = async () => {
+      try {
+        const results = await searchContactsInDb(searchQuery);
+
+        if (isMounted) {
+          setContactResults(results);
+        }
+      } catch (error) {
+        console.warn('Unable to search contacts', error);
+        if (isMounted) {
+          setContactsError('Unable to search contacts right now.');
+        }
+      }
+    };
+
+    runSearch();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [searchActive, searchQuery]);
 
   const onMenuSelect = action => {
     hideMenu();
@@ -68,11 +153,11 @@ const MocScreen = () => {
     return rooms.filter(room => room.title?.toLowerCase().includes(q));
   }, [rooms, searchQuery]);
  
- const ChatsScreen = () => {
+  const ChatsScreen = () => {
     const router = useRouter();
     const hasChats = filteredRooms.length > 0;
     
-  return (
+    return (
       <View style={styles.chatsWrapper}>
         <ScrollView contentContainerStyle={hasChats ? styles.chatListContainer : { flexGrow: 1 }}>
           {hasChats ? (
@@ -159,12 +244,12 @@ const MocScreen = () => {
     );
   };
 
-// Calls Screen
-const CallsScreen = () => (
-  <View style={styles.callsContainer}>
-    <Text style={styles.title}>Your call history will appear here</Text>
-  </View>
-);
+  // Calls Screen
+  const CallsScreen = () => (
+    <View style={styles.callsContainer}>
+      <Text style={styles.title}>Your call history will appear here</Text>
+    </View>
+  );
 
   const TopBar = () => {
     // header height (50) + safe‐area top
@@ -178,8 +263,16 @@ const CallsScreen = () => (
         ]}
       >
         {searchActive ? (
-           <>
-          <TouchableOpacity onPress={() => { setSearchActive(false); setSearchQuery(''); hideMenu(); }}>
+          <>
+          <TouchableOpacity
+            onPress={() => {
+              setSearchActive(false);
+              setSearchQuery('');
+              setContactResults([]);
+              setContactsError('');
+              hideMenu();
+            }}
+          >
             <Icon name="arrow-back" size={22} color="#1f6ea7" />
           </TouchableOpacity>
           <TextInput
@@ -198,6 +291,8 @@ const CallsScreen = () => (
               <TouchableOpacity
                 onPress={() => {
                   setSearchActive(true);
+                  setSearchQuery('');
+                  setContactsError('');
                   hideMenu();
                 }}
               >
@@ -208,9 +303,7 @@ const CallsScreen = () => (
               </TouchableOpacity>
             </View>
           </>
-        )}
-
-        
+        )}  
       </View>
     );
   };
@@ -221,7 +314,7 @@ const CallsScreen = () => (
   
  
   return (
-  <View style={{ flex: 1 }}>
+    <View style={{ flex: 1 }}>
       <StatusBar
         backgroundColor={searchActive ? '#fff' : '#1f6ea7'}
         barStyle={searchActive ? 'dark-content' : 'light-content'}
@@ -230,30 +323,71 @@ const CallsScreen = () => (
       <TopBar />
 
      {menuVisible && !searchActive && (
-          <>
-             <Pressable
+        <>
+          <Pressable
             style={styles.menuOverlay}
             onPress={hideMenu}
           />
+          <TouchableOpacity
+            style={styles.menuOverlay}
+            activeOpacity={1}
+            onPress={hideMenu}
+          />
+          <View style={[styles.menuContainer, { top: menuTop }]}>
             <TouchableOpacity
-              style={styles.menuOverlay}
-              activeOpacity={1}
-              onPress={hideMenu}
-            />
-            <View style={[styles.menuContainer, { top: menuTop }]}>
-              
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => onMenuSelect('settings')}
-              >
-                <Text style={styles.menuLabel}>Settings</Text>
-              </TouchableOpacity>
-            </View>
-          </>
-        )}
+              style={styles.menuItem}
+              onPress={() => onMenuSelect('settings')}
+            >
+              <Text style={styles.menuLabel}>Settings</Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
       
 
-      {!searchActive && (
+      {searchActive ? (
+        <View style={styles.searchContainer}>
+          {isSyncingContacts ? (
+            <View style={styles.loaderWrapper}>
+              <ActivityIndicator size="large" color="#1f6ea7" />
+              <Text style={styles.loaderText}>Syncing contacts…</Text>
+            </View>
+          ) : contactsError ? (
+            <View style={styles.loaderWrapper}>
+              <Text style={styles.errorText}>{contactsError}</Text>
+            </View>
+          ) : (
+            <ScrollView contentContainerStyle={styles.searchResultsContent}>
+              <Text style={styles.searchSectionLabel}>Contacts</Text>
+
+              {contactResults.length > 0 ? (
+                contactResults.map((contact, index) => {
+                  const fallbackName = contact.name || 'Unknown contact';
+                  const phoneDisplay = contact.phoneNumbers?.[0]?.number;
+                  const avatar = contact.imageUri
+                    ? { uri: contact.imageUri }
+                    : { uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(fallbackName)}` };
+
+                  return (
+                    <View
+                      key={contact.id ?? contact.matchPhone ?? `contact-${index}`}
+                      style={styles.contactResultRow}
+                    >
+                      <Image source={avatar} style={styles.contactAvatar} />
+                      <View style={styles.contactResultText}>
+                        <Text style={styles.contactName}>{fallbackName}</Text>
+                        {phoneDisplay ? <Text style={styles.contactPhone}>{phoneDisplay}</Text> : null}
+                      </View>
+                    </View>
+                  );
+                })
+              ) : (
+                <Text style={styles.emptyState}>No contacts found.</Text>
+              )}
+            </ScrollView>
+          )}
+        </View>
+      ) : (
         <Tab.Navigator
           screenOptions={{
             tabBarStyle: { backgroundColor: '#1f6ea7', elevation: 0 },
@@ -268,7 +402,8 @@ const CallsScreen = () => (
         </Tab.Navigator>
       )}
     </View>
-  );};
+  );
+};
 
 export default MocScreen;
 
@@ -294,6 +429,43 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#000',
   },
+
+  searchContainer: { flex: 1, backgroundColor: '#f6f6f6' },
+  loaderWrapper: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  loaderText: { marginTop: 12, color: '#1f6ea7', fontWeight: '600' },
+  errorText: { color: '#c00', textAlign: 'center', fontWeight: '500' },
+  searchResultsContent: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  searchSectionLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 8,
+    color: '#1f6ea7',
+  },
+  contactResultRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomColor: '#ddd',
+    borderBottomWidth: 1,
+  },
+  contactAvatar: { width: 48, height: 48, borderRadius: 24, marginRight: 12 },
+  contactResultText: { flex: 1 },
+  contactName: { fontWeight: 'bold', fontSize: 16, color: '#111' },
+  contactPhone: { color: '#555', marginTop: 2 },
+  emptyState: {
+    textAlign: 'center',
+    marginTop: 16,
+    color: '#777',
+  },
+
 
   // Chats wrapper
   chatsWrapper: { flex: 1, backgroundColor: '#f6f6f6' },
