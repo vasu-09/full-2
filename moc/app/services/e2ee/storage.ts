@@ -2,7 +2,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
-const STORAGE_KEY = 'e2ee:device-state:v1';
+// Expo SecureStore only accepts alphanumeric characters plus ".", "-" and "_" in keys.
+// Colon was causing `Invalid key provided to SecureStore` on native platforms, so
+// replace it with a compatible separator. Keep a legacy key for web-only migration.
+const STORAGE_KEY = 'e2ee.device-state.v1';
+const LEGACY_STORAGE_KEY = 'e2ee:device-state:v1';
 
 type StorageHandler = {
   get: (key: string) => Promise<string | null>;
@@ -53,11 +57,28 @@ export type DeviceState = {
 };
 
 export const loadDeviceState = async (): Promise<DeviceState | null> => {
-  try {
-    const raw = await storage.get(STORAGE_KEY);
-    if (!raw) {
+  const safeGet = async (key: string) => {
+    try {
+      return await storage.get(key);
+    } catch {
       return null;
     }
+    };
+
+  // Read from the new key first; fall back to legacy key on web (AsyncStorage) only.
+  const rawFromNewKey = await safeGet(STORAGE_KEY);
+  const raw = rawFromNewKey ?? (Platform.OS === 'web' ? await asyncHandler.get(LEGACY_STORAGE_KEY) : null);
+
+  if (!raw) {
+    return null;
+  }
+
+  if (!rawFromNewKey && Platform.OS === 'web') {
+    // Migrate legacy value to the new key for future reads.
+    await storage.set(STORAGE_KEY, raw);
+  }
+
+  try {
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') {
       return null;
