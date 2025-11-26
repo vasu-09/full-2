@@ -259,19 +259,22 @@ class StompManager {
   private desired = false;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private idCounter = 0;
+  private lastToken: string | null = null;
 
-  private async initClient(): Promise<SimpleStompClient> {
+  private async initClient(explicitToken?: string | null): Promise<SimpleStompClient> {
     if (this.initPromise) {
       return this.initPromise;
     }
 
     this.initPromise = (async () => {
-      const token = await getAccessToken();
+      const token = explicitToken ?? (await getAccessToken());
       const url = buildWsUrl();
       const client = new SimpleStompClient(url, token ?? undefined);
+      this.lastToken = token ?? null;
       client.onDisconnect = () => {
         this.client = null;
         this.initPromise = null;
+        this.lastToken = null;
         if (this.desired) {
           this.scheduleReconnect();
         }
@@ -318,10 +321,19 @@ class StompManager {
 
   async ensureConnected(): Promise<SimpleStompClient> {
     this.desired = true;
-    if (this.client && this.client.isConnected()) {
+    const latestToken = await getAccessToken();
+    if (this.client && this.client.isConnected() && this.lastToken === (latestToken ?? null)) {
       return this.client;
     }
-    return this.initClient();
+
+    if (this.client) {
+      this.client.disconnect();
+      this.client = null;
+      this.initPromise = null;
+      this.lastToken = null;
+    }
+    
+    return this.initClient(latestToken);
   }
 
   async disconnect(): Promise<void> {
