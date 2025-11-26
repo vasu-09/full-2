@@ -8,6 +8,7 @@ import {
   Image,
   Pressable,
   ScrollView,
+  Share,
   StatusBar,
   StyleSheet,
   Text,
@@ -48,6 +49,100 @@ const MocScreen = () => {
   const { rooms } = useChatRegistry();
 
   const router = useRouter();
+
+  const hasSearchQuery = searchQuery.trim().length > 0;
+
+  const handleInvite = useCallback(async (contact) => {
+    const displayName = contact?.name?.trim();
+    const inviteMessage = displayName
+      ? `Hey ${displayName}, I'm using MoC to stay connected. Download the app and join me!`
+      : "I'm using MoC to stay connected. Download the app and join me!";
+
+    try {
+      await Share.share({ message: inviteMessage });
+    } catch (err) {
+      console.warn('Unable to open invite share sheet', err);
+    }
+  }, []);
+
+  const renderAvatar = useCallback((contact) => {
+    if (contact?.imageUri) {
+      return <Image source={{ uri: contact.imageUri }} style={styles.contactAvatar} />;
+    }
+
+    return (
+      <View style={[styles.contactAvatar, styles.avatarPlaceholder]}>
+        <Icon name="person" size={24} color="#888" />
+      </View>
+    );
+  }, []);
+
+  const SearchResults = ({ contactResults: results, onInvite }) => {
+    const matchedContacts = (results ?? []).filter(contact => contact?.matchUserId);
+    const inviteContacts = (results ?? []).filter(contact => !contact?.matchUserId);
+
+    if (!matchedContacts.length && !inviteContacts.length) {
+      return <Text style={styles.emptyState}>No contacts found.</Text>;
+    }
+
+    const renderContactRow = (contact, index) => {
+      const fallbackName = contact?.name || 'Unknown contact';
+      const phoneDisplay = contact?.matchPhone || contact?.phoneNumbers?.[0]?.number;
+
+      return (
+        <View
+          key={contact?.id ?? contact?.matchPhone ?? `contact-${index}`}
+          style={styles.contactResultRow}
+        >
+          {renderAvatar(contact)}
+          <View style={styles.contactResultText}>
+            <Text style={styles.contactName}>{fallbackName}</Text>
+            {phoneDisplay ? <Text style={styles.contactPhone}>{phoneDisplay}</Text> : null}
+          </View>
+        </View>
+      );
+    };
+
+    const renderInviteRow = (contact, index) => {
+      const fallbackName = contact?.name || 'Unknown contact';
+      const phoneDisplay = contact?.phoneNumbers?.[0]?.number;
+
+      return (
+        <View
+          key={contact?.id ?? contact?.matchPhone ?? `invite-${index}`}
+          style={[styles.contactResultRow, styles.inviteRow]}
+        >
+          {renderAvatar(contact)}
+          <View style={styles.contactResultText}>
+            <Text style={styles.contactName}>{fallbackName}</Text>
+            {phoneDisplay ? <Text style={styles.contactPhone}>{phoneDisplay}</Text> : null}
+          </View>
+
+          <TouchableOpacity style={styles.inviteBadge} onPress={() => onInvite?.(contact)}>
+            <Text style={styles.inviteBadgeText}>Invite</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    };
+
+    return (
+      <>
+        {matchedContacts.length ? (
+          <>
+            <Text style={styles.resultGroupLabel}>On MoC</Text>
+            {matchedContacts.map(renderContactRow)}
+          </>
+        ) : null}
+
+        {inviteContacts.length ? (
+          <>
+            <Text style={[styles.resultGroupLabel, styles.inviteLabel]}>Invite to MOC</Text>
+            {inviteContacts.map(renderInviteRow)}
+          </>
+        ) : null}
+      </>
+    );
+  };
 
   const syncContactsToDb = useCallback(async () => {
     setContactsError('');
@@ -96,8 +191,15 @@ const MocScreen = () => {
     let isMounted = true;
 
     const runSearch = async () => {
+       const trimmed = searchQuery.trim();
+
+      if (!trimmed) {
+        setContactResults([]);
+        setContactsError('');
+        return;
+      }
       try {
-        const results = await searchContactsInDb(searchQuery);
+        const results = await searchContactsInDb(trimmed);
 
         if (isMounted) {
           setContactResults(results);
@@ -356,34 +458,18 @@ const MocScreen = () => {
             <View style={styles.loaderWrapper}>
               <Text style={styles.errorText}>{contactsError}</Text>
             </View>
+          ) : !hasSearchQuery ? (
+            <View style={styles.loaderWrapper}>
+              <Text style={styles.emptyState}>Start typing to search your contacts.</Text>
+            </View>
           ) : (
             <ScrollView contentContainerStyle={styles.searchResultsContent}>
               <Text style={styles.searchSectionLabel}>Contacts</Text>
 
-              {contactResults.length > 0 ? (
-                contactResults.map((contact, index) => {
-                  const fallbackName = contact.name || 'Unknown contact';
-                  const phoneDisplay = contact.phoneNumbers?.[0]?.number;
-                  const avatar = contact.imageUri
-                    ? { uri: contact.imageUri }
-                    : { uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(fallbackName)}` };
-
-                  return (
-                    <View
-                      key={contact.id ?? contact.matchPhone ?? `contact-${index}`}
-                      style={styles.contactResultRow}
-                    >
-                      <Image source={avatar} style={styles.contactAvatar} />
-                      <View style={styles.contactResultText}>
-                        <Text style={styles.contactName}>{fallbackName}</Text>
-                        {phoneDisplay ? <Text style={styles.contactPhone}>{phoneDisplay}</Text> : null}
-                      </View>
-                    </View>
-                  );
-                })
-              ) : (
-                <Text style={styles.emptyState}>No contacts found.</Text>
-              )}
+               <SearchResults
+                contactResults={contactResults}
+                onInvite={handleInvite}
+              />
             </ScrollView>
           )}
         </View>
@@ -457,9 +543,39 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   contactAvatar: { width: 48, height: 48, borderRadius: 24, marginRight: 12 },
+  avatarPlaceholder: {
+    backgroundColor: '#e6e6e6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   contactResultText: { flex: 1 },
   contactName: { fontWeight: 'bold', fontSize: 16, color: '#111' },
   contactPhone: { color: '#555', marginTop: 2 },
+   resultGroupLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1f6ea7',
+    marginTop: 4,
+    marginBottom: 6,
+  },
+  inviteLabel: {
+    marginTop: 16,
+  },
+  inviteRow: {
+    alignItems: 'center',
+  },
+  inviteBadge: {
+    borderWidth: 1,
+    borderColor: '#1f6ea7',
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+  },
+  inviteBadgeText: {
+    color: '#1f6ea7',
+    fontWeight: '700',
+    fontSize: 13,
+  },
   emptyState: {
     textAlign: 'center',
     marginTop: 16,
