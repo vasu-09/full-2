@@ -212,7 +212,7 @@ const normalizeBaseUrl = (value?: string | null, { appendDefaultPort = false } =
 const getExplicitBaseUrl = () => {
   const extra = expoConfig?.extra ?? manifest2Config?.extra ?? {};
 
-    const hostOnly =
+  const hostOnly =
     extra?.apiHost ??
     extra?.apiHostname ??
     process.env.EXPO_PUBLIC_API_HOST ??
@@ -244,6 +244,53 @@ const getExplicitBaseUrl = () => {
 
   return undefined;
 };
+
+const getExplicitWsUrl = () => {
+  const extra = expoConfig?.extra ?? manifest2Config?.extra ?? {};
+
+  const hostOnly =
+    extra?.wsHost ??
+    extra?.wsHostname ??
+    extra?.rtcHost ??
+    extra?.realtimeHost ??
+    process.env.EXPO_PUBLIC_WS_HOST ??
+    process.env.EXPO_PUBLIC_REALTIME_HOST ??
+    undefined;
+
+  if (typeof hostOnly === 'string' && hostOnly.trim()) {
+    const port =
+      (typeof extra?.wsPort === 'string' && extra.wsPort.trim())
+        ? extra.wsPort.trim()
+        : process.env.EXPO_PUBLIC_WS_PORT ?? process.env.EXPO_PUBLIC_REALTIME_PORT ?? '';
+
+    const withPort = port ? `${hostOnly}:${port}` : hostOnly;
+    const normalized = normalizeBaseUrl(withPort, { appendDefaultPort: true });
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  const rawBase =
+    extra?.wsBaseUrl ??
+    extra?.wsBaseURL ??
+    extra?.wsUrl ??
+    extra?.wsURL ??
+    extra?.rtcUrl ??
+    extra?.rtcURL ??
+    extra?.realtimeUrl ??
+    extra?.realtimeURL ??
+    process.env.EXPO_PUBLIC_WS_URL ??
+    process.env.EXPO_PUBLIC_REALTIME_URL ??
+    undefined;
+
+  const baseFromExtra = normalizeBaseUrl(typeof rawBase === 'string' ? rawBase : undefined);
+  if (baseFromExtra) {
+    return baseFromExtra;
+  }
+
+  return undefined;
+};
+
 
 const isLoopbackHost = (host?: string | null) => {
   if (!host) {
@@ -318,7 +365,7 @@ const buildHostBaseUrl = (host: string) => {
   return `http://${parsedHost}:8080`;
 };
 
-const warnIfLikelyUnreachableBaseUrl = (baseUrl: string) => {
+const warnIfLikelyUnreachableBaseUrl = (baseUrl: string, label = 'API base URL') => {
   if (Platform.OS === 'web' || !baseUrl) {
     return;
   }
@@ -328,7 +375,7 @@ const warnIfLikelyUnreachableBaseUrl = (baseUrl: string) => {
 
   if (isLoopback && !isAndroidEmulator()) {
     console.warn(
-      `[apiClient] The API base URL (${baseUrl}) points to a loopback address. ` +
+      `[apiClient] The ${label} (${baseUrl}) points to a loopback address. ` +
         'Set EXPO_PUBLIC_API_URL to a LAN/IP reachable from your device when using Expo Go or tunnels.',
     );
   }
@@ -354,9 +401,14 @@ const getBaseURL = () => {
 };
 
 export const apiBaseURL = getBaseURL();
-warnIfLikelyUnreachableBaseUrl(apiBaseURL);
+warnIfLikelyUnreachableBaseUrl(apiBaseURL, 'API base URL');
 
-export const buildWsUrl = (baseUrl: string = apiBaseURL) => {
+const getWsBaseURL = () => getExplicitWsUrl() ?? apiBaseURL;
+
+export const wsBaseURL = getWsBaseURL();
+warnIfLikelyUnreachableBaseUrl(wsBaseURL, 'WebSocket base URL');
+
+export const buildWsUrl = (baseUrl: string = wsBaseURL) => {
   try {
     const parsed = new URL(baseUrl);
     const protocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
