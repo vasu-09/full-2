@@ -26,14 +26,12 @@ public interface ChatRoomParticipantRepository extends JpaRepository<ChatRoomPar
     void deleteByUserIdAndChatRoom(@Param("userId") Long userId, @Param("roomId") Long roomId);
 
 
-    @Query(value = """
-   select exists(
-     select 1
-       from chat_room_participants p
-      where p.chat_room_id = :roomId
-        and p.user_id = :userId
-   )
-""", nativeQuery = true)
+    @Query("""
+        select case when count(p) > 0 then true else false end
+          from ChatRoomParticipant p
+         where p.chatRoom.id = :roomId
+           and p.userId      = :userId
+    """)
     boolean existsByRoomIdAndUserId(@Param("roomId") Long roomId,
                                     @Param("userId") Long userId);
 
