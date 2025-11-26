@@ -49,8 +49,18 @@ public class WebSocketAuthFilter implements GlobalFilter, Ordered {
             }
         }
 
+        if (token == null || token.isBlank()) {
+            token = request.getQueryParams().getFirst("access_token");
+        }
+        if (token == null || token.isBlank()) {
+            token = request.getQueryParams().getFirst("token");
+        }
+
         ServerHttpRequest.Builder mutated = request.mutate();
-        if (token != null && !request.getHeaders().containsKey(HttpHeaders.AUTHORIZATION)) {
+        if (token != null) {
+            token = token.trim();
+        }
+        if (token != null && !token.isBlank() && !request.getHeaders().containsKey(HttpHeaders.AUTHORIZATION)) {
             mutated.header(HttpHeaders.AUTHORIZATION, "Bearer " + token);
         }
         if (remaining.isEmpty()) {
