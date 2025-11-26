@@ -59,8 +59,8 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
         try {
             final String token = extractBearerOrQueryToken(req);
             if (token == null) {
-                setStatus(resp, HttpStatus.UNAUTHORIZED);
-                return false;
+                log.warn("WS handshake proceeding without token; expecting STOMP CONNECT auth");
+                return true;
             }
 
             // Validate & map claims → identity (userId, roles, tenant, etc.)
