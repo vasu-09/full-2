@@ -44,16 +44,7 @@ export default function ContactPickerScreen() {
   const [isCreating, setIsCreating] = useState(false);
   const [permissionStatus, setPermissionStatus] = useState('undetermined');
   const [canAskPermission, setCanAskPermission] = useState(true);
-  const [isLoadingContacts, setIsLoadingContacts] = useState(true);
-
-  // --- helpers to map DB rows to UI shape ---
-
-  console.log(
-    '[CONTACT_PICKER] synced contacts:',
-    stored.length,
-    'matches:',
-    matches.length,
-  );  
+  const [isLoadingContacts, setIsLoadingContacts] = useState(false);
 
   const mapStoredContactToUi = useCallback(stored => {
     return {
@@ -102,6 +93,7 @@ export default function ContactPickerScreen() {
         setAllContacts(uiContacts); // master list from DB
         setContacts(uiContacts);    // current view
         setMatchedContacts(extractMatchesFromStored(cached));
+        setIsLoadingContacts(false); 
       } catch (err) {
         console.warn('Unable to restore cached contacts', err);
       }
@@ -217,8 +209,7 @@ export default function ContactPickerScreen() {
       setCanAskPermission(Boolean(canAskAgain));
 
       if (!granted) {
-        setContacts([]);
-        setMatchedContacts([]);
+        
         if (status === 'denied') {
           setContactsError('MoC needs access to your contacts to show them here.');
         }
@@ -277,9 +268,7 @@ export default function ContactPickerScreen() {
     }
   }, [extractMatchesFromStored, mapStoredContactToUi]);
 
-  useEffect(() => {
-    loadContacts();
-  }, [loadContacts]);
+ 
 
   // --- search: debounce `searchInput` into `searchQuery` ---
 
@@ -583,13 +572,13 @@ export default function ContactPickerScreen() {
         </View>
       ) : null}
 
-      {permissionStatus !== 'granted' ? (
+      {permissionStatus !== 'granted' && (
         <View style={styles.permissionWrapper}>
           <Icon name="contacts" size={42} color="#1f6ea7" />
           <Text style={styles.permissionTitle}>Contacts permission needed</Text>
           <Text style={styles.permissionMessage}>
-            Allow MoC to access your address book so we can show who is already using the app and who
-            you can invite.
+            Allow MoC to access your phone contacts so we can refresh this list.
+            Existing contacts stored in MoC will still be shown below.
           </Text>
           <TouchableOpacity
             style={styles.permissionButton}
@@ -608,34 +597,35 @@ export default function ContactPickerScreen() {
             </Text>
           </TouchableOpacity>
         </View>
-      ) : (
-        <SectionList
-          sections={contactSections}
-          keyExtractor={c => c.id}
-          renderItem={renderItem}
-          renderSectionHeader={({ section }) => (
-            <Text style={styles.sectionDivider}>{section.title}</Text>
-          )}
-          stickySectionHeadersEnabled={false}
-          contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
-          ListEmptyComponent={
-            !isLoadingContacts && (
-              <View style={styles.emptyStateWrapper}>
-                <Text style={styles.emptyStateText}>
-                  {isSearching
-                    ? 'No contacts match this search.'
-                    : 'No contacts found on this device.'}
-                </Text>
-                {!isSearching && (
-                  <TouchableOpacity style={styles.permissionButton} onPress={loadContacts}>
-                    <Text style={styles.permissionButtonText}>Reload contacts</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            )
-          }
-        />
       )}
+
+      <SectionList
+        sections={contactSections}
+        keyExtractor={c => c.id}
+        renderItem={renderItem}
+        renderSectionHeader={({ section }) => (
+          <Text style={styles.sectionDivider}>{section.title}</Text>
+        )}
+        stickySectionHeadersEnabled={false}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
+        ListEmptyComponent={
+          !isLoadingContacts && (
+            <View style={styles.emptyStateWrapper}>
+              <Text style={styles.emptyStateText}>
+                {isSearching
+                  ? 'No contacts match this search.'
+                  : 'No contacts stored in MoC yet.'}
+              </Text>
+              {!isSearching && (
+                <TouchableOpacity style={styles.permissionButton} onPress={loadContacts}>
+                  <Text style={styles.permissionButtonText}>Refresh from phone</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )
+        }
+      />
+
 
       {/* Floating send button */}
       {selected.length > 0 && (
