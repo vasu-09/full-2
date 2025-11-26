@@ -1,21 +1,23 @@
 package com.om.Real_Time_Communication.config;
 
-import com.auth0.jwt.JWT;
-import com.auth0.jwt.algorithms.Algorithm;
+
 import com.om.Real_Time_Communication.Repository.ChatRoomParticipantRepository;
 import com.om.Real_Time_Communication.Repository.ChatRoomRepository;
 import com.om.Real_Time_Communication.models.ChatRoom;
 import com.om.Real_Time_Communication.service.BlockService;
 import com.om.Real_Time_Communication.utility.AclService;
+import com.om.Real_Time_Communication.security.JwtService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.stereotype.Component;
+
 
 import java.util.Optional;
 import java.security.Principal;
@@ -31,7 +33,8 @@ public class StompSecurityInterceptor implements ChannelInterceptor {
 
     // If your API-Gateway signs an internal header instead of passing Authorization,
     // verify that here instead. For simplicity we reuse the same secret as the handshake.
-    private static final String SECRET = "f93c9b55c8d00c302bc7aee3c87b707cb96b0465d64ac3bc85955d4396e1e3de";
+    @Autowired
+    private JwtService jwtService;
 
     @Autowired
     private  BlockService blockService;
@@ -61,6 +64,31 @@ public class StompSecurityInterceptor implements ChannelInterceptor {
             Long userId = acc.getUser() != null ? Long.valueOf(acc.getUser().getName()) : null;
 
             switch (cmd) {
+                case CONNECT: {
+                    // If the WebSocket handshake did not attach a Principal (e.g. token missing from headers),
+                    // fall back to validating the STOMP CONNECT headers.
+                    if (acc.getUser() == null) {
+                        String token = headerFirst(acc, HttpHeaders.AUTHORIZATION);
+                        if (token == null) {
+                            token = headerFirst(acc, "authorization"); // tolerate lowercase from some clients
+                        }
+                        if (token == null) {
+                            token = headerFirst(acc, "access_token");
+                        }
+                        if (token == null) {
+                            token = headerFirst(acc, "token");
+                        }
+
+                        if (token != null && !token.isBlank()) {
+                            JwtService.JwtIdentity id = jwtService.parse(token);
+                            WsUserPrincipal principal = new WsUserPrincipal(id.getUserId());
+                            acc.setUser(principal);
+                            acc.getSessionAttributes().put("userId", id.getUserId());
+                            userId = id.getUserId();
+                        }
+                    }
+                    break;
+                }
                 case SUBSCRIBE: {
                     requireUser(acc); // throws if null
                     String dest = acc.getDestination(); // /topic/room/{roomId}
@@ -152,16 +180,6 @@ public class StompSecurityInterceptor implements ChannelInterceptor {
         Principal p = acc.getUser();
         if (p == null) throw new IllegalArgumentException("No Principal on frame");
         return Long.valueOf(p.getName());
-    }
-
-    private static Long parseUserId(String bearerOrToken) {
-        String token = bearerOrToken.startsWith("Bearer ") ? bearerOrToken.substring(7) : bearerOrToken;
-        var verifier = JWT.require(Algorithm.HMAC256(SECRET)).build();
-        var jwt = verifier.verify(token);
-        // subject or claim—match what you issue in your auth service
-        String sub = jwt.getSubject();
-        if (sub == null) throw new IllegalArgumentException("Token has no subject");
-        return Long.valueOf(sub);
     }
 
     /**

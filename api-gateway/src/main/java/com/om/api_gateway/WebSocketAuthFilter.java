@@ -25,18 +25,32 @@ public class WebSocketAuthFilter implements GlobalFilter, Ordered {
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         ServerHttpRequest request = exchange.getRequest();
-        if (!"websocket".equalsIgnoreCase(request.getHeaders().getUpgrade())) {
+        boolean isWebSocketUpgrade = "websocket".equalsIgnoreCase(request.getHeaders().getUpgrade());
+        boolean isWebSocketPath = request.getURI().getPath() != null &&
+                (request.getURI().getPath().startsWith("/ws") || request.getURI().getPath().startsWith("/rtc/ws"));
+
+        // Some clients (or intermediaries) drop/omit the Upgrade header on the first
+        // hop. If we only looked at the header we would skip adding the Authorization
+        // header when the client supplies the token as a query param or websocket
+        // subprotocol. Treat known websocket paths as websocket intents so the token
+        // is still promoted to the Authorization header.
+        if (!isWebSocketUpgrade && !isWebSocketPath) {
             return chain.filter(exchange);
         }
 
         List<String> protocols = new ArrayList<>();
-        for (String header : request.getHeaders().getOrEmpty(WS_PROTOCOL_HEADER)) {
-            for (String part : header.split(",")) {
-                protocols.add(part.trim());
+        if (isWebSocketUpgrade) {
+            for (String header : request.getHeaders().getOrEmpty(WS_PROTOCOL_HEADER)) {
+                for (String part : header.split(",")) {
+                    protocols.add(part.trim());
+                }
             }
         }
 
-        String token = null;
+        String token = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+        if (token != null && token.regionMatches(true, 0, "bearer ", 0, 7)) {
+            token = token.substring(7).trim();
+        }
         List<String> remaining = new ArrayList<>();
         for (int i = 0; i < protocols.size(); i++) {
             String p = protocols.get(i);
@@ -60,13 +74,17 @@ public class WebSocketAuthFilter implements GlobalFilter, Ordered {
         if (token != null) {
             token = token.trim();
         }
-        if (token != null && !token.isBlank() && !request.getHeaders().containsKey(HttpHeaders.AUTHORIZATION)) {
-            mutated.header(HttpHeaders.AUTHORIZATION, "Bearer " + token);
+        if (token != null && !token.isBlank()) {
+            mutated.header(HttpHeaders.AUTHORIZATION, token.regionMatches(true, 0, "bearer ", 0, 7)
+                    ? token
+                    : "Bearer " + token);
         }
-        if (remaining.isEmpty()) {
-            mutated.headers(h -> h.remove(WS_PROTOCOL_HEADER));
-        } else {
-            mutated.headers(h -> h.set(WS_PROTOCOL_HEADER, String.join(",", remaining)));
+        if (isWebSocketUpgrade) {
+            if (remaining.isEmpty()) {
+                mutated.headers(h -> h.remove(WS_PROTOCOL_HEADER));
+            } else {
+                mutated.headers(h -> h.set(WS_PROTOCOL_HEADER, String.join(",", remaining)));
+            }
         }
         return chain.filter(exchange.mutate().request(mutated.build()).build());
     }
