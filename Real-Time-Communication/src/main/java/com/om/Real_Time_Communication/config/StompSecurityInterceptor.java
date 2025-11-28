@@ -68,6 +68,19 @@ public class StompSecurityInterceptor implements ChannelInterceptor {
                     // If the WebSocket handshake did not attach a Principal (e.g. token missing from headers),
                     // fall back to validating the STOMP CONNECT headers.
                     if (acc.getUser() == null) {
+                        // 1) Prefer the authenticated userId attached during the WebSocket handshake
+                        //    (JwtHandshakeInterceptor stores it in the session attributes). This covers
+                        //    cases where intermediaries strip the CONNECT headers but the initial HTTP
+                        //    handshake was already authenticated.
+                        Object attrUserId = acc.getSessionAttributes().get("userId");
+                        if (attrUserId instanceof Long uid) {
+                            WsUserPrincipal principal = new WsUserPrincipal(uid);
+                            acc.setUser(principal);
+                            userId = uid;
+                        }
+                    }
+
+                    if (acc.getUser() == null) {
                         String token = headerFirst(acc, HttpHeaders.AUTHORIZATION);
                         if (token == null) {
                             token = headerFirst(acc, "authorization"); // tolerate lowercase from some clients
@@ -80,7 +93,7 @@ public class StompSecurityInterceptor implements ChannelInterceptor {
                         }
 
                         if (token != null && !token.isBlank()) {
-                            JwtService.JwtIdentity id = jwtService.parse(token);
+                            JwtService.JwtIdentity id = jwtService.parse(normalizeToken(token));
                             WsUserPrincipal principal = new WsUserPrincipal(id.getUserId());
                             acc.setUser(principal);
                             acc.getSessionAttributes().put("userId", id.getUserId());
@@ -180,6 +193,16 @@ public class StompSecurityInterceptor implements ChannelInterceptor {
         Principal p = acc.getUser();
         if (p == null) throw new IllegalArgumentException("No Principal on frame");
         return Long.valueOf(p.getName());
+    }
+
+    private static String normalizeToken(String token) {
+        if (token == null) {
+            return null;
+        }
+        String trimmed = token.trim();
+        return trimmed.regionMatches(true, 0, "bearer ", 0, 7)
+                ? trimmed.substring(7).trim()
+                : trimmed;
     }
 
     /**

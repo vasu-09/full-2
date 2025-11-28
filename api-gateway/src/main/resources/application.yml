@@ -10,8 +10,6 @@ spring:
     import: "optional:configserver:"
 
 
-
-
   cloud:
     gateway:
       routes:
@@ -28,10 +26,15 @@ spring:
             - Path=/notifications/**
 
 
-        - id: rtc-service
-          uri: ${RTC_WS_URI:lb:ws://REAL-TIME-COMMUNICATION}  # websocket route; env overrideable
+        - id: rtc-http
+          uri: lb://REAL-TIME-COMMUNICATION   # or http://192.168.31.6:8091
           predicates:
-            - Path=/rtc/**,/ws/**,/api/search/**,/api/blocks/**,/api/calls/**,/api/dm/**,/api/e2ee/**,/api/media/**,/api/message/**,/api/messages/**,/api/readmodel/**,/api/rooms/**
+            - Path=/api/search/**,/api/blocks/**,/api/calls/**,/api/dm/**,/api/e2ee/**,/api/media/**,/api/message/**,/api/messages/**,/api/readmodel/**,/api/rooms/**
+
+        - id: rtc-ws
+          uri: lb:ws://REAL-TIME-COMMUNICATION  # or ws://192.168.31.6:8091
+          predicates:
+            - Path=/ws/**,/rtc/**
 
 
         - id: todo-service
@@ -93,3 +96,6 @@ gateway:
   custom-jwt:
     enabled: false
 
+logging:
+  level:
+    com.yourpackage.gateway: DEBUG

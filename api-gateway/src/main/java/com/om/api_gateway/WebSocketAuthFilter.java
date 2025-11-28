@@ -11,6 +11,9 @@ import reactor.core.publisher.Mono;
 
 import java.util.ArrayList;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 
 /**
  * Extracts a bearer token from the {@code Sec-WebSocket-Protocol} header and forwards it
@@ -19,6 +22,8 @@ import java.util.List;
  */
 @Component
 public class WebSocketAuthFilter implements GlobalFilter, Ordered {
+
+    private static final Logger log = LoggerFactory.getLogger(WebSocketAuthFilter.class);
 
     private static final String WS_PROTOCOL_HEADER = "Sec-WebSocket-Protocol";
 
@@ -47,6 +52,9 @@ public class WebSocketAuthFilter implements GlobalFilter, Ordered {
             }
         }
 
+        log.info("[GATEWAY][WS-FILTER] Sec-WebSocket-Protocol raw="
+                + request.getHeaders().getFirst(WS_PROTOCOL_HEADER));
+
         String token = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
         if (token != null && token.regionMatches(true, 0, "bearer ", 0, 7)) {
             token = token.substring(7).trim();
@@ -56,8 +64,10 @@ public class WebSocketAuthFilter implements GlobalFilter, Ordered {
             String p = protocols.get(i);
             if (p.regionMatches(true, 0, "bearer ", 0, 7)) {
                 token = p.substring(7).trim();
+                log.info("[GATEWAY][WS-FILTER] Found bearer token in subprotocol (single): " + token);
             } else if (p.equalsIgnoreCase("bearer") && i + 1 < protocols.size()) {
                 token = protocols.get(++i);
+                log.info("[GATEWAY][WS-FILTER] Found bearer token in subprotocol (pair): " + token);
             } else {
                 remaining.add(p);
             }
@@ -65,9 +75,11 @@ public class WebSocketAuthFilter implements GlobalFilter, Ordered {
 
         if (token == null || token.isBlank()) {
             token = request.getQueryParams().getFirst("access_token");
+            log.info("[GATEWAY][WS-FILTER] Found token in access_token query param");
         }
         if (token == null || token.isBlank()) {
             token = request.getQueryParams().getFirst("token");
+            log.info("[GATEWAY][WS-FILTER] Found token in token query param");
         }
 
         ServerHttpRequest.Builder mutated = request.mutate();
@@ -81,8 +93,10 @@ public class WebSocketAuthFilter implements GlobalFilter, Ordered {
         }
         if (isWebSocketUpgrade) {
             if (remaining.isEmpty()) {
+
                 mutated.headers(h -> h.remove(WS_PROTOCOL_HEADER));
             } else {
+                log.info("[GATEWAY][WS-FILTER] No token found for /ws request");
                 mutated.headers(h -> h.set(WS_PROTOCOL_HEADER, String.join(",", remaining)));
             }
         }
