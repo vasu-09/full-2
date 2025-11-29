@@ -22,8 +22,6 @@ public class GatewaySecurityConfig {
                 .securityMatcher(ServerWebExchangeMatchers.pathMatchers("/ws", "/ws/**", "/rtc/ws", "/rtc/ws/**"))
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .authorizeExchange(ex -> ex.anyExchange().permitAll())
-                // Let the RTC service validate tokens during the websocket handshake
-                .oauth2ResourceServer(ServerHttpSecurity.OAuth2ResourceServerSpec::disable)
                 .build();
     }
 
