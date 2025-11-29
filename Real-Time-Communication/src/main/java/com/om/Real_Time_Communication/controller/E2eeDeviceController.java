@@ -1,6 +1,6 @@
 package com.om.Real_Time_Communication.controller;
 
-
+import com.om.Real_Time_Communication.dto.ClaimPrekeyRequest;
 import com.om.Real_Time_Communication.dto.DeviceBundleDto;
 import com.om.Real_Time_Communication.dto.RegisterDto;
 import com.om.Real_Time_Communication.service.E2eeDeviceService;
@@ -46,9 +46,19 @@ public class E2eeDeviceController {
 
     /** Claim (consume) one OTK for a target device and return the bundle. */
     @PostMapping("/claim-prekey")
-    public DeviceBundleDto claimPrekey(@RequestParam Long userId, @RequestParam String deviceId) {
-        // NOTE: authorize caller appropriately (must be a valid authenticated user).
-        return svc.claimOneTimePrekey(userId, deviceId);
+    public DeviceBundleDto claimPrekey(@RequestParam(value = "userId", required = false) Long userId,
+                                       @RequestParam(value = "targetUserId", required = false) Long targetUserId,
+                                       @RequestParam(value = "deviceId", required = false) String deviceId,
+                                       @RequestBody(required = false) ClaimPrekeyRequest body) {
+        // Support both query-param callers (old clients) and JSON body (MoC frontend)
+        Long resolvedUserId = userId != null ? userId
+                : (targetUserId != null ? targetUserId : body != null ? body.getTargetUserId() : null);
+        String resolvedDeviceId = deviceId != null ? deviceId : body != null ? body.getDeviceId() : null;
+
+        if (resolvedUserId == null || resolvedDeviceId == null || resolvedDeviceId.isBlank()) {
+            throw new IllegalArgumentException("userId/targetUserId and deviceId are required");
+        }
+        return svc.claimOneTimePrekey(resolvedUserId, resolvedDeviceId);
     }
 
     /** Get remaining OTK stock for your own device (UX prompt to replenish). */

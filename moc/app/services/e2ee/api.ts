@@ -38,10 +38,16 @@ export const listDeviceBundles = async (targetUserId: number): Promise<DeviceBun
 };
 
 export const claimPrekey = async (targetUserId: number, deviceId: string): Promise<DeviceBundleResponse> => {
-  const { data } = await apiClient.post<DeviceBundleResponse>('/api/e2ee/claim-prekey', {
-    targetUserId,
-    deviceId,
-  });
+  const { data } = await apiClient.post<DeviceBundleResponse>(
+    '/api/e2ee/claim-prekey',
+    null,
+    {
+      params: {
+        userId: targetUserId,
+        deviceId,
+      },
+    },
+  );
   return data;
 };
 
