@@ -34,7 +34,7 @@ spring:
         - id: rtc-ws
           uri: lb:ws://REAL-TIME-COMMUNICATION  # or ws://192.168.31.6:8091
           predicates:
-            - Path=/ws/**,/rtc/**
+            - Path=/ws,/ws/**,/rtc/**
 
 
         - id: todo-service
