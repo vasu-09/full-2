@@ -36,6 +36,19 @@ const manifest2Config = manifest2?.extra?.expoClient ?? manifest2?.extra?.expoGo
 
 const expoConfig: ExpoConfig | null = (Constants.expoConfig ?? Constants.manifest ?? manifest2Config ?? null) as ExpoConfig | null;
 
+const getApiPort = () => {
+  const extra = expoConfig?.extra ?? manifest2Config?.extra ?? {};
+
+  const candidates = [process.env.EXPO_PUBLIC_API_PORT, extra?.apiPort, extra?.apiPort?.toString?.()];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+
+  return '8080';
+};
+
 const extractHost = (value?: string | null) => {
   if (!value) {
     return undefined;
@@ -172,18 +185,22 @@ const isAndroidEmulator = () => {
 };
 
 const resolveLocalhost = () => {
+  const port = getApiPort();
   if (Platform.OS === 'android') {
-     return isAndroidEmulator() ? 'http://10.0.2.2:8080' : 'http://127.0.0.1:8080';
+    return isAndroidEmulator() ? `http://10.0.2.2:${port}` : `http://127.0.0.1:${port}`;
   }
 
   if (Platform.OS === 'ios') {
-    return 'http://127.0.0.1:8080';
+    return `http://127.0.0.1:${port}`;
   }
 
-  return 'http://localhost:8080';
+  return `http://localhost:${port}`;
 };
 
-const normalizeBaseUrl = (value?: string | null, { appendDefaultPort = false } = {}) => {
+const normalizeBaseUrl = (
+  value?: string | null,
+  { appendDefaultPort = false, defaultPort = getApiPort() } = {},
+) => {
   if (!value) {
     return undefined;
   }
@@ -198,7 +215,7 @@ const normalizeBaseUrl = (value?: string | null, { appendDefaultPort = false } =
   try {
     const parsed = new URL(prefixed);
     if (appendDefaultPort && !parsed.port) {
-      parsed.port = '8080';
+      parsed.port = defaultPort;
     }
     parsed.pathname = parsed.pathname.replace(/\/$/, '');
     parsed.search = '';
@@ -362,7 +379,7 @@ const getLocalNetworkHost = () => {
 
 const buildHostBaseUrl = (host: string) => {
   const parsedHost = extractHost(host) ?? host;
-  return `http://${parsedHost}:8080`;
+ return `http://${parsedHost}:${getApiPort()}`;
 };
 
 const warnIfLikelyUnreachableBaseUrl = (baseUrl: string, label = 'API base URL') => {
