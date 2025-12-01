@@ -29,7 +29,7 @@ public class JwtFilter extends OncePerRequestFilter {
     @Autowired
     private JWTService jwtService;
 
-    private static final Logger log = LoggerFactory.getLogger(OtpService.class);
+    private static final Logger log = LoggerFactory.getLogger(JwtFilter.class);
 
 
     @Override
@@ -39,7 +39,8 @@ public class JwtFilter extends OncePerRequestFilter {
         String token = resolveToken(request);
         String sub = null; // holds the JWT subject (user id)
 
-        log.info("authorization token resolved from headers/query={}", token == null ? "<missing>" : "<present>");
+        log.info("authorization token resolved from headers/query={} for {} {}",
+                token == null ? "<missing>" : "<present>", request.getMethod(), request.getRequestURI());
         if (token != null) {
             sub = jwtService.extractPhonenumber(token); // subject = userId
 
@@ -63,8 +64,20 @@ public class JwtFilter extends OncePerRequestFilter {
     private static String resolveToken(HttpServletRequest request) {
         // 1) Authorization: Bearer <token>
         String authHeader = request.getHeader("Authorization");
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            return authHeader.substring(7).trim();
+        if (authHeader != null) {
+            String trimmed = authHeader.trim();
+            if (trimmed.regionMatches(true, 0, "bearer ", 0, 7)) {
+                return trimmed.substring(7).trim();
+            }
+            String[] parts = trimmed.split(",");
+            for (int i = 0; i < parts.length - 1; i++) {
+                if (parts[i].trim().equalsIgnoreCase("bearer")) {
+                    String candidate = parts[i + 1].trim();
+                    if (!candidate.isBlank()) {
+                        return candidate;
+                    }
+                }
+            }
         }
 
         // 2) Sec-WebSocket-Protocol: bearer <token> or bearer,<token>
