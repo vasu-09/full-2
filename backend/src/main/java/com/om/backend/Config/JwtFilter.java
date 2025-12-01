@@ -35,13 +35,12 @@ public class JwtFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
-        String authHeader = request.getHeader("Authorization");
-        String token = null;
+
+        String token = resolveToken(request);
         String sub = null; // holds the JWT subject (user id)
 
-        log.info("autorization token: authorizatio={}", authHeader);
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            token = authHeader.substring(7);
+        log.info("authorization token resolved from headers/query={}", token == null ? "<missing>" : "<present>");
+        if (token != null) {
             sub = jwtService.extractPhonenumber(token); // subject = userId
 
         }
@@ -59,5 +58,45 @@ public class JwtFilter extends OncePerRequestFilter {
             }
         }
         filterChain.doFilter(request, response);
+    }
+
+    private static String resolveToken(HttpServletRequest request) {
+        // 1) Authorization: Bearer <token>
+        String authHeader = request.getHeader("Authorization");
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            return authHeader.substring(7).trim();
+        }
+
+        // 2) Sec-WebSocket-Protocol: bearer <token> or bearer,<token>
+        var protocols = request.getHeaders("Sec-WebSocket-Protocol");
+        while (protocols.hasMoreElements()) {
+            String header = protocols.nextElement();
+            for (String part : header.split(",")) {
+                String trimmed = part.trim();
+                if (trimmed.regionMatches(true, 0, "bearer ", 0, 7)) {
+                    String candidate = trimmed.substring(7).trim();
+                    if (!candidate.isBlank()) {
+                        return candidate;
+                    }
+                }
+            }
+            // look for the "bearer,<token>" pattern
+            String[] parts = header.split(",");
+            for (int i = 0; i < parts.length - 1; i++) {
+                if (parts[i].trim().equalsIgnoreCase("bearer")) {
+                    String candidate = parts[i + 1].trim();
+                    if (!candidate.isBlank()) {
+                        return candidate;
+                    }
+                }
+            }
+        }
+
+        // 3) Query string: access_token or token
+        String queryToken = request.getParameter("access_token");
+        if (queryToken == null || queryToken.isBlank()) {
+            queryToken = request.getParameter("token");
+        }
+        return queryToken != null && !queryToken.isBlank() ? queryToken.trim() : null;
     }
 }
