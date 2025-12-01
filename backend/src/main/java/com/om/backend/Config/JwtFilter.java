@@ -31,6 +31,12 @@ public class JwtFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(JwtFilter.class);
 
+    private static final List<String> PUBLIC_PATHS = List.of(
+            "/.well-known/jwks.json",
+            "/.well-known/openid-configuration",
+            "/auth/otp/send",
+            "/auth/otp/verify"
+    );
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
@@ -59,6 +65,12 @@ public class JwtFilter extends OncePerRequestFilter {
             }
         }
         filterChain.doFilter(request, response);
+    }
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = request.getServletPath();
+        return PUBLIC_PATHS.contains(path);
     }
 
     private static String resolveToken(HttpServletRequest request) {
