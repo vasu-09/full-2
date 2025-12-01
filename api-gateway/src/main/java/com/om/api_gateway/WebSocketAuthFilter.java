@@ -56,16 +56,20 @@ public class WebSocketAuthFilter implements GlobalFilter, Ordered {
                 + request.getHeaders().getFirst(WS_PROTOCOL_HEADER));
 
         String token = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+        String tokenSource = null;
         if (token != null && token.regionMatches(true, 0, "bearer ", 0, 7)) {
+            tokenSource = "Authorization header";
             token = token.substring(7).trim();
         }
         List<String> remaining = new ArrayList<>();
         for (int i = 0; i < protocols.size(); i++) {
             String p = protocols.get(i);
             if (p.regionMatches(true, 0, "bearer ", 0, 7)) {
+                tokenSource = "Sec-WebSocket-Protocol (single)";
                 token = p.substring(7).trim();
                 log.info("[GATEWAY][WS-FILTER] Found bearer token in subprotocol (single): " + token);
             } else if (p.equalsIgnoreCase("bearer") && i + 1 < protocols.size()) {
+                tokenSource = "Sec-WebSocket-Protocol (pair)";
                 token = protocols.get(++i);
                 log.info("[GATEWAY][WS-FILTER] Found bearer token in subprotocol (pair): " + token);
             } else {
@@ -75,11 +79,17 @@ public class WebSocketAuthFilter implements GlobalFilter, Ordered {
 
         if (token == null || token.isBlank()) {
             token = request.getQueryParams().getFirst("access_token");
-            log.info("[GATEWAY][WS-FILTER] Found token in access_token query param");
+            if (token != null && !token.isBlank()) {
+                tokenSource = "access_token query param";
+                log.info("[GATEWAY][WS-FILTER] Found token in access_token query param");
+            }
         }
         if (token == null || token.isBlank()) {
             token = request.getQueryParams().getFirst("token");
-            log.info("[GATEWAY][WS-FILTER] Found token in token query param");
+            if (token != null && !token.isBlank()) {
+                tokenSource = "token query param";
+                log.info("[GATEWAY][WS-FILTER] Found token in token query param");
+            }
         }
 
         ServerHttpRequest.Builder mutated = request.mutate();
@@ -93,12 +103,16 @@ public class WebSocketAuthFilter implements GlobalFilter, Ordered {
         }
         if (isWebSocketUpgrade) {
             if (remaining.isEmpty()) {
-
                 mutated.headers(h -> h.remove(WS_PROTOCOL_HEADER));
             } else {
-                log.info("[GATEWAY][WS-FILTER] No token found for /ws request");
                 mutated.headers(h -> h.set(WS_PROTOCOL_HEADER, String.join(",", remaining)));
             }
+        }
+        if (token == null || token.isBlank()) {
+            log.info("[GATEWAY][WS-FILTER] No token found for /ws request" +
+                    (protocols.isEmpty() ? "" : "; forwarding subprotocols=" + String.join(",", remaining)));
+        } else if (tokenSource != null) {
+            log.info("[GATEWAY][WS-FILTER] Using token from " + tokenSource);
         }
         return chain.filter(exchange.mutate().request(mutated.build()).build());
     }
