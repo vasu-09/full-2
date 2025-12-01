@@ -5,6 +5,9 @@
         </encoder>
     </appender>
 
+    <!-- Trace STOMP handshake/CONNECT handling to debug client auth headers -->
+    <logger name="org.springframework.messaging.simp" level="TRACE" />
+
     <root level="INFO">
         <appender-ref ref="JSON"/>
     </root>

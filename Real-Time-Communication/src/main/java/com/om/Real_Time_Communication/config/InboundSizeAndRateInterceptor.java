@@ -40,8 +40,12 @@ public class InboundSizeAndRateInterceptor implements ChannelInterceptor {
         StompCommand cmd = acc.getCommand();
 
         if (StompCommand.CONNECT.equals(cmd)) {
-            // 10 CONNECTs / 10s per IP (if your gateway forwards X-Forwarded-For)
-            limiter.checkOrThrow("ip:" + headerFirst(acc, "X-Forwarded-For") + ":connect", 10, 10_000);
+            // Allow more generous burst during reconnect storms; key on IP when available, session otherwise.
+            String connectKey = headerFirst(acc, "X-Forwarded-For");
+            if (connectKey == null || connectKey.isBlank()) {
+                connectKey = acc.getSessionId() != null ? acc.getSessionId() : "unknown";
+            }
+            limiter.checkOrThrow("conn:" + connectKey + ":connect", 30, 10_000);
         } else if (StompCommand.SUBSCRIBE.equals(cmd)) {
             // 10 joins / 10s per user
             limiter.checkOrThrow("u:" + user + ":joins", 10, 10_000);

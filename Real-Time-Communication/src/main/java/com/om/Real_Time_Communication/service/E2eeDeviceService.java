@@ -31,7 +31,7 @@ public class E2eeDeviceService {
 
     /** Register/refresh a device bundle and upload optional batch of OTKs. */
     @Transactional
-    public void register(Long userId, RegisterDto dto) {
+    public boolean register(Long userId, RegisterDto dto) {
         require(dto.getDeviceId() != null && !dto.getDeviceId().isBlank(), "deviceId required");
         require(dto.getIdentityKeyPub()!=null && dto.getIdentityKeyPub().length==32, "identityKeyPub invalid");
         require(dto.getSignedPrekeyPub()!=null && dto.getSignedPrekeyPub().length==32, "signedPrekeyPub invalid");
@@ -40,7 +40,8 @@ public class E2eeDeviceService {
         // Verify signedPrekeySig = Ed25519_sign(identityKeyPriv, signedPrekeyPub)
         boolean ok = Ed25519Verifier.verify(dto.getIdentityKeyPub(), dto.getSignedPrekeyPub(), dto.getSignedPrekeySig());
         if (!ok) {
-            log.warn("signedPrekeySig verification failed for user {} device {} — persisting bundle anyway", userId, dto.getDeviceId());
+            log.warn("signedPrekeySig verification failed for user {} device {} — rejecting bundle", userId, dto.getDeviceId());
+            return false;;
         }
 
         E2eeDevice dev = deviceRepo.findByUserIdAndDeviceId(userId, dto.getDeviceId()).orElseGet(E2eeDevice::new);
@@ -62,6 +63,7 @@ public class E2eeDeviceService {
                 prekeyRepo.save(p);
             }
         }
+        return true;
     }
 
     /** Claim one OTK for a target device (consumes it); returns bundle+OTK (or null otk). */

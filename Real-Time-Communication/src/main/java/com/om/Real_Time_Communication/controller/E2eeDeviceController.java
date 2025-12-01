@@ -3,8 +3,10 @@ package com.om.Real_Time_Communication.controller;
 import com.om.Real_Time_Communication.dto.ClaimPrekeyRequest;
 import com.om.Real_Time_Communication.dto.DeviceBundleDto;
 import com.om.Real_Time_Communication.dto.RegisterDto;
+import com.om.Real_Time_Communication.dto.RegisterResponse;
 import com.om.Real_Time_Communication.service.E2eeDeviceService;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.http.ResponseEntity;
 
 import java.security.Principal;
 import java.util.List;
@@ -20,9 +22,13 @@ public class E2eeDeviceController {
 
     /** Register or refresh device bundle + (optional) batch of OTKs. */
     @PostMapping("/devices/register")
-    public void register(Principal principal, @RequestBody RegisterDto dto) {
+    public ResponseEntity<RegisterResponse> register(Principal principal, @RequestBody RegisterDto dto) {
         Long userId = Long.valueOf(principal.getName()); // or @RequestHeader("X-User-Id")
-        svc.register(userId, dto);
+        boolean valid = svc.register(userId, dto);
+        if (!valid) {
+            return ResponseEntity.badRequest().body(new RegisterResponse(false, "invalid_signature"));
+        }
+        return ResponseEntity.ok(new RegisterResponse(true, null));
     }
 
     /** Upload more OTKs for an existing device. */

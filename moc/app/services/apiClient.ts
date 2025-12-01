@@ -414,7 +414,7 @@ const getBaseURL = () => {
     return resolveLocalhost();
   }
 
-  return `http://${host}:8080`;
+  return `http://${host}:${getApiPort()}`;
 };
 
 export const apiBaseURL = getBaseURL();

@@ -9,6 +9,8 @@ import com.om.Real_Time_Communication.utility.AclService;
 import com.om.Real_Time_Communication.security.JwtService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.MDC;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.messaging.Message;
@@ -31,6 +33,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class StompSecurityInterceptor implements ChannelInterceptor {
 
+    private static final Logger log = LoggerFactory.getLogger(StompSecurityInterceptor.class);
     // If your API-Gateway signs an internal header instead of passing Authorization,
     // verify that here instead. For simplicity we reuse the same secret as the handshake.
     @Autowired
@@ -91,6 +94,10 @@ public class StompSecurityInterceptor implements ChannelInterceptor {
                         if (token == null) {
                             token = headerFirst(acc, "token");
                         }
+                        if (token == null) {
+                            // Some STOMP clients send login/passcode instead of Authorization; honor that too.
+                            token = headerFirst(acc, "login");
+                        }
 
                         if (token != null && !token.isBlank()) {
                             JwtService.JwtIdentity id = jwtService.parse(normalizeToken(token));
@@ -98,6 +105,9 @@ public class StompSecurityInterceptor implements ChannelInterceptor {
                             acc.setUser(principal);
                             acc.getSessionAttributes().put("userId", id.getUserId());
                             userId = id.getUserId();
+                        }else {
+                            log.warn("STOMP CONNECT missing Authorization/login token; rejecting session {}", acc.getSessionId());
+                            throw new IllegalArgumentException("Missing auth token in CONNECT (Authorization: Bearer <jwt> or login header)");
                         }
                     }
                     break;

@@ -2,39 +2,30 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
+import { createIntegrityStorage, normalizeSecureStoreKey } from '../secureStorage';
+
 // Expo SecureStore only accepts alphanumeric characters plus ".", "-" and "_" in keys.
 // Colon was causing `Invalid key provided to SecureStore` on native platforms, so
 // replace it with a compatible separator. Keep a legacy key for web-only migration.
 const STORAGE_KEY = 'e2ee.device-state.v1';
 const LEGACY_STORAGE_KEY = 'e2ee:device-state:v1';
 
-type StorageHandler = {
-  get: (key: string) => Promise<string | null>;
-  set: (key: string, value: string) => Promise<void>;
-};
+const secureHandler = createIntegrityStorage(
+  {
+    getItem: key => SecureStore.getItemAsync(key),
+    setItem: (key, value) => SecureStore.setItemAsync(key, value),
+    deleteItem: key => SecureStore.deleteItemAsync(key),
+  },
+  { normalizeKey: normalizeSecureStoreKey },
+);
 
-const normalizeSecureStoreKey = (key: string) => {
-  const trimmed = key.trim();
-  const normalized = trimmed.replace(/[^A-Za-z0-9._-]/g, '_');
+ const asyncHandler = createIntegrityStorage({
+  getItem: key => AsyncStorage.getItem(key),
+  setItem: (key, value) => AsyncStorage.setItem(key, value),
+  deleteItem: key => AsyncStorage.removeItem(key),
+}, { chunkSize: 0 });
 
-  if (!normalized) {
-    throw new Error('Invalid SecureStore key: key is empty after normalization');
-  }
 
-  return normalized;
-};
-
-const secureHandler: StorageHandler = {
-  get: (key) => SecureStore.getItemAsync(normalizeSecureStoreKey(key)),
-  set: (key, value) => SecureStore.setItemAsync(normalizeSecureStoreKey(key), value),
-};
-
-const asyncHandler: StorageHandler = {
-  get: (key) => AsyncStorage.getItem(key),
-  set: (key, value) => AsyncStorage.setItem(key, value),
-};
-
-const storage: StorageHandler = Platform.OS === 'web' ? asyncHandler : secureHandler;
 
 export type StoredPrekey = {
   publicKey: string;
@@ -70,7 +61,7 @@ export type DeviceState = {
 export const loadDeviceState = async (): Promise<DeviceState | null> => {
   const safeGet = async (key: string) => {
     try {
-      return await storage.get(key);
+      return await storage.getItem(key);
     } catch {
       return null;
     }
@@ -78,7 +69,8 @@ export const loadDeviceState = async (): Promise<DeviceState | null> => {
 
   // Read from the new key first; fall back to legacy key on web (AsyncStorage) only.
   const rawFromNewKey = await safeGet(STORAGE_KEY);
-  const raw = rawFromNewKey ?? (Platform.OS === 'web' ? await asyncHandler.get(LEGACY_STORAGE_KEY) : null);
+  const raw =
+    rawFromNewKey ?? (Platform.OS === 'web' ? await asyncHandler.getItem(LEGACY_STORAGE_KEY) : null);
 
   if (!raw) {
     return null;
@@ -86,16 +78,18 @@ export const loadDeviceState = async (): Promise<DeviceState | null> => {
 
   if (!rawFromNewKey && Platform.OS === 'web') {
     // Migrate legacy value to the new key for future reads.
-    await storage.set(STORAGE_KEY, raw);
+    await storage.setItem(STORAGE_KEY, raw);
   }
 
   try {
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') {
+      await storage.removeItem(STORAGE_KEY);
       return null;
     }
     return parsed as DeviceState;
   } catch {
+    await storage.removeItem(STORAGE_KEY);
     return null;
   }
 };

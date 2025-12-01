@@ -87,10 +87,28 @@ class SimpleStompClient {
         this.ws = socket;
 
         socket.onopen = () => {
-          this.sendFrame('CONNECT', {
+          const connectHeaders: Record<string, string> = {
             'accept-version': '1.2',
             'heart-beat': HEARTBEAT,
+            };
+          if (this.token) {
+            // Mirror headers the server expects during CONNECT for transparency.
+            connectHeaders.Authorization = `Bearer ${this.token}`;
+            connectHeaders.login = this.token;
+          }
+
+          const tokenPreview = this.token ? `${this.token.slice(0, 10)}...` : null;
+          console.log('STOMP CONNECT outbound', {
+            url: wsUrl,
+            headers: {
+              ...connectHeaders,
+              Authorization: tokenPreview ? `Bearer ${tokenPreview}` : undefined,
+              login: tokenPreview ?? undefined,
+            },
+            protocols,
           });
+
+           this.sendFrame('CONNECT', connectHeaders);
         };
 
         socket.onmessage = event => {

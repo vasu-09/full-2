@@ -2,6 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
+import { createIntegrityStorage, normalizeSecureStoreKey, type StorageHandler } from './secureStorage';
+
 const ACCESS_TOKEN_KEY = 'auth.accessToken';
 const REFRESH_TOKEN_KEY = 'auth.refreshToken';
 const SESSION_ID_KEY = 'auth.sessionId';
@@ -20,28 +22,14 @@ type WebStorage = {
 const isWeb = Platform.OS === 'web';
 const useSecureStore = !isWeb;
 
-type StorageHandler = {
-  setItem: (key: string, value: string) => Promise<void>;
-  getItem: (key: string) => Promise<string | null>;
-  removeItem: (key: string) => Promise<void>;
-};
-
-const normalizeSecureStoreKey = (key: string) => {
-  const trimmed = key.trim();
-  const normalized = trimmed.replace(/[^A-Za-z0-9._-]/g, '_');
-
-  if (!normalized) {
-    throw new Error('Invalid SecureStore key: key is empty after normalization');
-  }
-
-  return normalized;
-};
-
-const secureStoreHandler: StorageHandler = {
-  setItem: (key, value) => SecureStore.setItemAsync(normalizeSecureStoreKey(key), value),
-  getItem: (key) => SecureStore.getItemAsync(normalizeSecureStoreKey(key)),
-  removeItem: (key) => SecureStore.deleteItemAsync(normalizeSecureStoreKey(key)),
-};
+const secureStoreHandler: StorageHandler = createIntegrityStorage(
+  {
+    setItem: (key, value) => SecureStore.setItemAsync(key, value),
+    getItem: key => SecureStore.getItemAsync(key),
+    deleteItem: key => SecureStore.deleteItemAsync(key),
+  },
+  { normalizeKey: normalizeSecureStoreKey },
+);
 
 const asyncStorageHandler: StorageHandler = {
   setItem: (key, value) => AsyncStorage.setItem(key, value),
