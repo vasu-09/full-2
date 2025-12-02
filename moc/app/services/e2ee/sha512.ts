@@ -1,3 +1,4 @@
+const BLOCK_SIZE = 128;
 const IV = [
   0x6a09e667f3bcc908n,
   0xbb67ae8584caa73bn,
@@ -59,10 +60,11 @@ const fromBigEndian64 = (view: DataView, offset: number): bigint => {
 export const sha512 = (message: Uint8Array): Uint8Array => {
   const length = message.length;
   const bitLenHi = Math.floor(length / 0x20000000) >>> 0;
+  const totalLen = length + 1 + 16;
   const bitLenLo = (length << 3) >>> 0;
 
-  const withPadding = ((length + 17) >> 6) + 1;
-  const buffer = new ArrayBuffer(withPadding * 64);
+  const withPadding = Math.floor((totalLen + BLOCK_SIZE - 1) / BLOCK_SIZE);
+  const buffer = new ArrayBuffer(withPadding * BLOCK_SIZE);
   const data = new Uint8Array(buffer);
   data.set(message);
   data[length] = 0x80;
@@ -73,7 +75,7 @@ export const sha512 = (message: Uint8Array): Uint8Array => {
   const state = [...IV];
   const w = new Array<bigint>(80).fill(0n);
 
-  for (let offset = 0; offset < data.length; offset += 64) {
+  for (let offset = 0; offset < data.length; offset += BLOCK_SIZE) {
     for (let i = 0; i < 16; i += 1) {
       w[i] = fromBigEndian64(view, offset + i * 8);
     }
