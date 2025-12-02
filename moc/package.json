@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "scripts": {
     "start": "expo start",
-     "start:tunnel": "node ./scripts/start-tunnel.js",
+    "start:tunnel": "node ./scripts/start-tunnel.js",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo run:android",
     "ios": "expo run:ios",
@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
+    "@noble/ed25519": "^3.0.0",
     "@react-native-async-storage/async-storage": "^2.1.2",
     "@react-native-community/datetimepicker": "8.4.4",
     "@react-native-picker/picker": "2.11.1",
@@ -39,6 +40,7 @@
     "expo-linking": "~8.0.0",
     "expo-location": "~19.0.0",
     "expo-media-library": "~18.2.0",
+    "expo-random": "^14.0.1",
     "expo-router": "~6.0.14",
     "expo-secure-store": "^15.0.0",
     "expo-splash-screen": "~31.0.10",

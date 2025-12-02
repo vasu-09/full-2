@@ -2,7 +2,11 @@ import { Platform } from 'react-native';
 
 import { claimPrekey, getPrekeyStock, listDeviceBundles, registerDevice, uploadPrekeys } from './api';
 import { computeFromEphemeral, deriveEphemeral, generateDhKeyPair } from './dh';
-import { generateKeyPair as generateEd25519KeyPair, sign as signEd25519 } from './ed25519';
+import {
+  generateKeyPair as generateEd25519KeyPair,
+  sign as signEd25519,
+} from './ed25519';
+
 import { base64ToBytes, bytesToBase64, bytesToUtf8, concatBytes, utf8ToBytes } from './encoding';
 import { randomBytes, randomId } from './random';
 import { sha256 } from './sha256';
@@ -77,16 +81,23 @@ const isMissingSignature = (sig?: string | null): boolean => {
   return bytes.every(b => b === 0);
 };
 
-const signPrekey = (identityPrivB64: string, prekeyPubB64: string): string => {
+const signPrekey = async (
+  identityPrivB64: string,
+  prekeyPubB64: string
+): Promise<string> => {
   const message = base64ToBytes(prekeyPubB64);
   const priv = base64ToBytes(identityPrivB64);
-  const signature = signEd25519(message, priv);
+
+  // ed25519.sign is async
+  const signature = await signEd25519(message, priv);
+
   return bytesToBase64(signature);
 };
 
+
 const createDeviceState = async (): Promise<DeviceState> => {
   const deviceId = `dev-${randomId(20)}`;
-  const identity = generateEd25519KeyPair();
+  const identity = await generateEd25519KeyPair();
   const signedPrekey = generateDhKeyPair();
   const base: DeviceState = {
     version: DEVICE_VERSION,
@@ -104,7 +115,7 @@ const createDeviceState = async (): Promise<DeviceState> => {
     sentMessageKeys: [],
   };
    const withPrekeys = ensurePrekeysAvailable(base, INITIAL_PREKEY_BATCH);
-  const signature = signPrekey(withPrekeys.identity.privateKey, withPrekeys.signedPrekey.publicKey);
+  const signature = await signPrekey(withPrekeys.identity.privateKey, withPrekeys.signedPrekey.publicKey);
   const withSignature: DeviceState = {
     ...withPrekeys,
     signedPrekey: { ...withPrekeys.signedPrekey, signature },
@@ -113,19 +124,34 @@ const createDeviceState = async (): Promise<DeviceState> => {
   return withSignature;
 };
 
-const ensureSignedPrekeySignature = async (state: DeviceState): Promise<DeviceState> => {
+const ensureSignedPrekeySignature = async (
+  state: DeviceState
+): Promise<DeviceState> => {
   try {
     if (!isMissingSignature(state.signedPrekey.signature)) {
       return state;
     }
-    const signature = signPrekey(state.identity.privateKey, state.signedPrekey.publicKey);
-    const updated: DeviceState = { ...state, signedPrekey: { ...state.signedPrekey, signature } };
-    await saveDeviceState(updated);
+
+    const signature = await signPrekey(
+      state.identity.privateKey,
+      state.signedPrekey.publicKey
+    );
+
+    const updated: DeviceState = {
+      ...state,
+      signedPrekey: {
+        ...state.signedPrekey,
+        signature,
+      },
+    };
+
     return updated;
-  } catch {
-    return createDeviceState();
+  } catch (e) {
+    console.warn('[E2EE] Failed to (re)sign signedPrekey', e);
+    return state;
   }
 };
+
 
 const ensureDeviceState = async (): Promise<DeviceState> => {
   const current = await loadDeviceState();
