@@ -1,14 +1,27 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import {
+  ackQueue,
+  dmReceiptQueue,
+  dmTypingQueue,
+  roomReadTopic,
+  roomTopic,
+  roomTypingTopic,
+  sendDirectRead,
+  sendDirectTyping,
+  sendRoomMessage,
+  sendRoomRead,
+  sendRoomTyping,
+} from '../constants/stompEndpoints';
 import { useChatRegistry } from '../context/ChatContext';
 import { getStoredUserId } from '../services/authStorage';
+import { E2EEClient, E2EEEnvelope, getE2EEClient } from '../services/e2ee';
 import {
   ChatMessageDto,
   fetchRoomMessages,
   markRoomRead,
 } from '../services/roomsService';
 import stompClient, { StompFrame } from '../services/stompClient';
-import { getE2EEClient, E2EEClient, E2EEEnvelope } from '../services/e2ee';
 
 type InternalMessage = {
   messageId: string;
@@ -313,7 +326,7 @@ export const useChatSession = ({
         }
       });
 
-    const messageSub = stompClient.subscribe(`/topic/room/${roomKey}`, frame => {
+     const messageSub = stompClient.subscribe(roomTopic(roomKey), frame => {
       const payload = parseFrameBody(frame);
       if (!payload) {
         return;
@@ -386,7 +399,7 @@ export const useChatSession = ({
       finalize(payload.body ?? null);
     });
 
-    const ackSub = stompClient.subscribe('/user/queue/ack', frame => {
+    const ackSub = stompClient.subscribe(ackQueue, frame => {
       const payload = parseFrameBody(frame);
       if (!payload || payload.roomId !== roomKey) {
         return;
@@ -402,7 +415,7 @@ export const useChatSession = ({
       });
     });
 
-    const typingSub = stompClient.subscribe(`/topic/room/${roomId}/typing`, frame => {
+    const typingSub = stompClient.subscribe(roomTypingTopic(roomId), frame => {
       const payload = parseFrameBody(frame);
       if (!payload || typeof payload.userId !== 'number') {
         return;
@@ -420,7 +433,7 @@ export const useChatSession = ({
       });
     });
 
-    const readSub = stompClient.subscribe(`/topic/room/${roomId}/reads`, frame => {
+    const readSub = stompClient.subscribe(roomReadTopic(roomId), frame => {
       const payload = parseFrameBody(frame);
       if (!payload || payload.userId == null) {
         return;
@@ -433,7 +446,7 @@ export const useChatSession = ({
     const subs: (() => void)[] = [messageSub, ackSub, typingSub, readSub];
 
     if (peerId != null) {
-      const dmTypingSub = stompClient.subscribe('/user/queue/typing', frame => {
+      const dmTypingSub = stompClient.subscribe(dmTypingQueue, frame => {
         const payload = parseFrameBody(frame);
         if (!payload || payload.senderId == null) {
           return;
@@ -449,7 +462,7 @@ export const useChatSession = ({
         });
       });
 
-      const dmReadSub = stompClient.subscribe('/user/queue/receipts', frame => {
+      const dmReadSub = stompClient.subscribe(dmReceiptQueue, frame => {
         const payload = parseFrameBody(frame);
         if (!payload) {
           return;
@@ -550,12 +563,12 @@ export const useChatSession = ({
       if (!roomId) {
         return;
       }
-      stompClient.publish(`/app/room/${roomId}/typing`, {
+      stompClient.publish(sendRoomTyping(roomId), {
         typing: isTyping,
         deviceId: 'mobile',
       });
       if (peerId != null) {
-        stompClient.publish(`/app/dm/${peerId}/typing`, {
+        stompClient.publish(sendDirectTyping(peerId), {
           roomId,
           typing: isTyping,
         });
@@ -653,7 +666,7 @@ export const useChatSession = ({
             e2ee: false,
           };
         }
-        await stompClient.publish(`/app/rooms/${roomKey}/send`, payload);
+        await stompClient.publish(sendRoomMessage(roomKey), payload);
       } catch (err) {
         console.warn('Failed to send message', err);
         mergeMessage({
@@ -676,11 +689,11 @@ export const useChatSession = ({
     }
     try {
       await markRoomRead(roomId, lastMessageId);
-      await stompClient.publish(`/app/room/${roomId}/read`, {
+      await stompClient.publish(sendRoomRead(roomId), {
         lastReadMessageId: lastMessageId,
       });
       if (peerId != null) {
-        await stompClient.publish(`/app/dm/${peerId}/read`, {
+        await stompClient.publish(sendDirectRead(peerId), {
           roomId,
           messageId: lastMessageId,
         });
