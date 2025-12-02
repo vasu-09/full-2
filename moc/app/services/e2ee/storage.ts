@@ -25,6 +25,8 @@ const secureHandler = createIntegrityStorage(
   deleteItem: key => AsyncStorage.removeItem(key),
 }, { chunkSize: 0 });
 
+const deviceStorage = Platform.OS === 'web' ? asyncHandler : secureHandler;
+
 
 
 export type StoredPrekey = {
@@ -61,7 +63,7 @@ export type DeviceState = {
 export const loadDeviceState = async (): Promise<DeviceState | null> => {
   const safeGet = async (key: string) => {
     try {
-      return await storage.getItem(key);
+      return await deviceStorage.getItem(key);
     } catch {
       return null;
     }
@@ -78,25 +80,25 @@ export const loadDeviceState = async (): Promise<DeviceState | null> => {
 
   if (!rawFromNewKey && Platform.OS === 'web') {
     // Migrate legacy value to the new key for future reads.
-    await storage.setItem(STORAGE_KEY, raw);
+    await deviceStorage.setItem(STORAGE_KEY, raw);
   }
 
   try {
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') {
-      await storage.removeItem(STORAGE_KEY);
+      await deviceStorage.removeItem(STORAGE_KEY);
       return null;
     }
     return parsed as DeviceState;
   } catch {
-    await storage.removeItem(STORAGE_KEY);
+    await deviceStorage.removeItem(STORAGE_KEY);
     return null;
   }
 };
 
 export const saveDeviceState = async (state: DeviceState): Promise<void> => {
   const payload = JSON.stringify(state);
-  await storage.set(STORAGE_KEY, payload);
+  await deviceStorage.setItem(STORAGE_KEY, payload)
 };
 
 export const updateDeviceState = async (updater: (current: DeviceState | null) => DeviceState): Promise<DeviceState> => {

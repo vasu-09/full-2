@@ -1,8 +1,9 @@
 import { Platform } from 'react-native';
 
-import { listDeviceBundles, claimPrekey, getPrekeyStock, registerDevice, uploadPrekeys } from './api';
-import { deriveEphemeral, computeFromEphemeral, generateDhKeyPair } from './dh';
-import { bytesToBase64, base64ToBytes, concatBytes, utf8ToBytes, bytesToUtf8 } from './encoding';
+import { claimPrekey, getPrekeyStock, listDeviceBundles, registerDevice, uploadPrekeys } from './api';
+import { computeFromEphemeral, deriveEphemeral, generateDhKeyPair } from './dh';
+import { generateKeyPair as generateEd25519KeyPair, sign as signEd25519 } from './ed25519';
+import { base64ToBytes, bytesToBase64, bytesToUtf8, concatBytes, utf8ToBytes } from './encoding';
 import { randomBytes, randomId } from './random';
 import { sha256 } from './sha256';
 import {
@@ -33,7 +34,7 @@ type EncryptResult = {
   sharedKey: string; // base64
 };
 
-const DEVICE_VERSION = 1;
+const DEVICE_VERSION = 2;
 const INITIAL_PREKEY_BATCH = 10;
 const MIN_SERVER_STOCK = 5;
 
@@ -67,34 +68,71 @@ const rememberSentKey = (state: DeviceState, entry: SentMessageKey): DeviceState
   };
 };
 
-const signaturePlaceholder = () => bytesToBase64(new Uint8Array(64));
+const SIGNATURE_LENGTH = 64;
 
-const ensureDeviceState = async (): Promise<DeviceState> => {
-  let current = await loadDeviceState();
-  if (current) {
-    return current;
-  }
+const isMissingSignature = (sig?: string | null): boolean => {
+  if (!sig) return true;
+  const bytes = base64ToBytes(sig);
+  if (bytes.length !== SIGNATURE_LENGTH) return true;
+  return bytes.every(b => b === 0);
+};
+
+const signPrekey = (identityPrivB64: string, prekeyPubB64: string): string => {
+  const message = base64ToBytes(prekeyPubB64);
+  const priv = base64ToBytes(identityPrivB64);
+  const signature = signEd25519(message, priv);
+  return bytesToBase64(signature);
+};
+
+const createDeviceState = async (): Promise<DeviceState> => {
   const deviceId = `dev-${randomId(20)}`;
-  const identity = generateDhKeyPair();
+  const identity = generateEd25519KeyPair();
   const signedPrekey = generateDhKeyPair();
   const base: DeviceState = {
     version: DEVICE_VERSION,
     deviceId,
     identity: {
-      publicKey: identity.publicKey,
-      privateKey: identity.privateKey,
+      publicKey:  bytesToBase64(identity.publicKey),
+      privateKey: bytesToBase64(identity.privateKey),
     },
     signedPrekey: {
       publicKey: signedPrekey.publicKey,
       privateKey: signedPrekey.privateKey,
-      signature: signaturePlaceholder(),
+      signature: null,
     },
     oneTimePrekeys: [],
     sentMessageKeys: [],
   };
-  current = ensurePrekeysAvailable(base, INITIAL_PREKEY_BATCH);
-  await saveDeviceState(current);
-  return current;
+   const withPrekeys = ensurePrekeysAvailable(base, INITIAL_PREKEY_BATCH);
+  const signature = signPrekey(withPrekeys.identity.privateKey, withPrekeys.signedPrekey.publicKey);
+  const withSignature: DeviceState = {
+    ...withPrekeys,
+    signedPrekey: { ...withPrekeys.signedPrekey, signature },
+  };
+  await saveDeviceState(withSignature);
+  return withSignature;
+};
+
+const ensureSignedPrekeySignature = async (state: DeviceState): Promise<DeviceState> => {
+  try {
+    if (!isMissingSignature(state.signedPrekey.signature)) {
+      return state;
+    }
+    const signature = signPrekey(state.identity.privateKey, state.signedPrekey.publicKey);
+    const updated: DeviceState = { ...state, signedPrekey: { ...state.signedPrekey, signature } };
+    await saveDeviceState(updated);
+    return updated;
+  } catch {
+    return createDeviceState();
+  }
+};
+
+const ensureDeviceState = async (): Promise<DeviceState> => {
+  const current = await loadDeviceState();
+  if (!current || current.version !== DEVICE_VERSION) {
+    return createDeviceState();
+  }
+  return ensureSignedPrekeySignature(current);
 };
 
 const toUploadablePrekeys = (prekeys: StoredPrekey[]) => prekeys.map(k => k.publicKey);
@@ -343,3 +381,4 @@ export const getE2EEClient = async (): Promise<E2EEClient> => {
 };
 
 export type { Envelope as E2EEEnvelope };
+

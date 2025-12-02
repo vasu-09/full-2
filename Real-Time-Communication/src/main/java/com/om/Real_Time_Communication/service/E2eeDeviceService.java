@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.ArrayList;
 import org.slf4j.Logger;
+import java.util.HexFormat;
 import org.slf4j.LoggerFactory;
 import java.util.List;
 
@@ -37,11 +38,18 @@ public class E2eeDeviceService {
         require(dto.getSignedPrekeyPub()!=null && dto.getSignedPrekeyPub().length==32, "signedPrekeyPub invalid");
         require(dto.getSignedPrekeySig()!=null && dto.getSignedPrekeySig().length==64, "signedPrekeySig invalid");
 
+        log.info("E2EE register user={} device={} identityPub={} signedPrekeyPub={} sig={}",
+                userId,
+                dto.getDeviceId(),
+                HexFormat.of().formatHex(dto.getIdentityKeyPub()),
+                HexFormat.of().formatHex(dto.getSignedPrekeyPub()),
+                HexFormat.of().formatHex(dto.getSignedPrekeySig()));
+
         // Verify signedPrekeySig = Ed25519_sign(identityKeyPriv, signedPrekeyPub)
         boolean ok = Ed25519Verifier.verify(dto.getIdentityKeyPub(), dto.getSignedPrekeyPub(), dto.getSignedPrekeySig());
         if (!ok) {
             log.warn("signedPrekeySig verification failed for user {} device {} — rejecting bundle", userId, dto.getDeviceId());
-            return false;;
+            return false;
         }
 
         E2eeDevice dev = deviceRepo.findByUserIdAndDeviceId(userId, dto.getDeviceId()).orElseGet(E2eeDevice::new);
