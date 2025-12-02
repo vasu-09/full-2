@@ -1,54 +1,69 @@
 // app/services/e2ee/ed25519.ts
 
-import { getPublicKey, sign as nobleSign } from '@noble/ed25519';
 import * as Random from 'expo-random';
+import nacl from 'tweetnacl';
 
-export type Ed25519KeyPair = {
-  privateKey: Uint8Array; // 32 bytes
-  publicKey: Uint8Array;  // 32 bytes
+export type Bytes = Uint8Array;
+
+export interface Ed25519KeyPair {
+  publicKey: Bytes;   // 32 bytes
+  privateKey: Bytes;  // 32-byte seed
+}
+
+/**
+ * Crypto-secure random bytes using Expo Random.
+ */
+export const randomBytes = (length: number): Bytes => {
+  // expo-random getRandomBytes is synchronous and returns a Uint8Array
+  return Random.getRandomBytes(length);
 };
 
 /**
- * Generate a new Ed25519 keypair using expo-random for entropy.
+ * Generate a new Ed25519 key pair.
+ * We store only the 32-byte seed as "privateKey".
  */
-export const generateKeyPair = async (): Promise<Ed25519KeyPair> => {
-  // 32 random bytes for private key
-  const privBytes = Random.getRandomBytes(32);
-  const privateKey = new Uint8Array(privBytes);
+export const generateKeyPair = (): Ed25519KeyPair => {
+  const seed = randomBytes(32);                  // 32-byte seed
+  const keyPair = nacl.sign.keyPair.fromSeed(seed);
 
-  if (privateKey.length !== 32) {
-    throw new Error(`Ed25519 private key must be 32 bytes, got ${privateKey.length}`);
-  }
-
-  const publicKey = await getPublicKey(privateKey); // 32-byte public key
-
-  return { privateKey, publicKey };
+  return {
+    publicKey: keyPair.publicKey,               // 32 bytes
+    privateKey: seed,                           // 32-byte seed
+  };
 };
 
 /**
- * Derive public key from an existing 32-byte private key.
+ * Derive public key from a 32-byte private seed.
  */
-export const getPublicKeyFromPrivate = async (
-  privateKey: Uint8Array
-): Promise<Uint8Array> => {
+export const getPublicKey = (privateKey: Bytes): Bytes => {
   if (privateKey.length !== 32) {
-    throw new Error(`Ed25519 private key must be 32 bytes, got ${privateKey.length}`);
+    throw new Error(
+      `Ed25519 private key seed must be 32 bytes, got ${privateKey.length}`,
+    );
   }
-  return getPublicKey(privateKey);
+  return nacl.sign.keyPair.fromSeed(privateKey).publicKey;
 };
 
 /**
- * Sign a message with Ed25519.
- * message: raw bytes to sign (your server should verify exactly the same bytes).
+ * Sign message with Ed25519 using a 32-byte private seed.
  */
-export const sign = async (
-  message: Uint8Array,
-  privateKey: Uint8Array
-): Promise<Uint8Array> => {
+export const sign = (message: Bytes, privateKey: Bytes): Bytes => {
   if (privateKey.length !== 32) {
-    throw new Error(`Ed25519 private key must be 32 bytes, got ${privateKey.length}`);
+    throw new Error(
+      `Ed25519 private key seed must be 32 bytes, got ${privateKey.length}`,
+    );
   }
+  const { secretKey } = nacl.sign.keyPair.fromSeed(privateKey);
+  return nacl.sign.detached(message, secretKey); // 64-byte signature
+};
 
-  const signature = await nobleSign(message, privateKey); // 64-byte signature
-  return signature;
+/**
+ * Verify an Ed25519 signature.
+ */
+export const verify = (
+  message: Bytes,
+  signature: Bytes,
+  publicKey: Bytes,
+): boolean => {
+  return nacl.sign.detached.verify(message, signature, publicKey);
 };

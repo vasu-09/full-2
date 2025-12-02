@@ -5,6 +5,7 @@ import { computeFromEphemeral, deriveEphemeral, generateDhKeyPair } from './dh';
 import {
   generateKeyPair as generateEd25519KeyPair,
   sign as signEd25519,
+  verify as verifyEd25519,
 } from './ed25519';
 
 import { base64ToBytes, bytesToBase64, bytesToUtf8, concatBytes, utf8ToBytes } from './encoding';
@@ -38,7 +39,7 @@ type EncryptResult = {
   sharedKey: string; // base64
 };
 
-const DEVICE_VERSION = 2;
+const DEVICE_VERSION = 9;
 const INITIAL_PREKEY_BATCH = 10;
 const MIN_SERVER_STOCK = 5;
 
@@ -73,12 +74,23 @@ const rememberSentKey = (state: DeviceState, entry: SentMessageKey): DeviceState
 };
 
 const SIGNATURE_LENGTH = 64;
+const KEY_LENGTH = 32;
 
-const isMissingSignature = (sig?: string | null): boolean => {
-  if (!sig) return true;
-  const bytes = base64ToBytes(sig);
-  if (bytes.length !== SIGNATURE_LENGTH) return true;
-  return bytes.every(b => b === 0);
+const hasValidPrekeySignature = async (
+  identityPubB64: string,
+  prekeyPubB64: string,
+  sigB64?: string | null
+): Promise<boolean> => {
+  if (!sigB64) return false;
+
+  const sigBytes = base64ToBytes(sigB64);
+  if (sigBytes.length !== SIGNATURE_LENGTH) return false;
+
+  const pubBytes = base64ToBytes(identityPubB64);
+  if (pubBytes.length !== KEY_LENGTH) return false;
+
+  const message = base64ToBytes(prekeyPubB64);
+  return verifyEd25519(sigBytes, message, pubBytes);
 };
 
 const signPrekey = async (
@@ -128,7 +140,13 @@ const ensureSignedPrekeySignature = async (
   state: DeviceState
 ): Promise<DeviceState> => {
   try {
-    if (!isMissingSignature(state.signedPrekey.signature)) {
+    const valid = await hasValidPrekeySignature(
+      state.identity.publicKey,
+      state.signedPrekey.publicKey,
+      state.signedPrekey.signature
+    );
+
+    if (valid) {
       return state;
     }
 
