@@ -1,7 +1,7 @@
-// app/services/e2ee/ed25519.ts
+// app/services/e2ee/ed25519.ts   :contentReference[oaicite:0]{index=0}
 
-import * as Random from 'expo-random';
-import nacl from 'tweetnacl';
+import * as Crypto from 'expo-crypto';
+import nacl from "tweetnacl";
 
 export type Bytes = Uint8Array;
 
@@ -14,8 +14,7 @@ export interface Ed25519KeyPair {
  * Crypto-secure random bytes using Expo Random.
  */
 export const randomBytes = (length: number): Bytes => {
-  // expo-random getRandomBytes is synchronous and returns a Uint8Array
-  return Random.getRandomBytes(length);
+  return Crypto.getRandomBytes(length);
 };
 
 /**
@@ -23,23 +22,21 @@ export const randomBytes = (length: number): Bytes => {
  * We store only the 32-byte seed as "privateKey".
  */
 export const generateKeyPair = (): Ed25519KeyPair => {
-  const seed = randomBytes(32);                  // 32-byte seed
+  const seed = randomBytes(32); // 32-byte seed
   const keyPair = nacl.sign.keyPair.fromSeed(seed);
 
   return {
-    publicKey: keyPair.publicKey,               // 32 bytes
-    privateKey: seed,                           // 32-byte seed
+    publicKey: keyPair.publicKey, // 32 bytes
+    privateKey: seed,             // 32-byte seed
   };
 };
 
 /**
- * Derive public key from a 32-byte private seed.
+ * Derive public key from seed.
  */
 export const getPublicKey = (privateKey: Bytes): Bytes => {
   if (privateKey.length !== 32) {
-    throw new Error(
-      `Ed25519 private key seed must be 32 bytes, got ${privateKey.length}`,
-    );
+    throw new Error("Private key must be a 32-byte seed");
   }
   return nacl.sign.keyPair.fromSeed(privateKey).publicKey;
 };
@@ -49,21 +46,19 @@ export const getPublicKey = (privateKey: Bytes): Bytes => {
  */
 export const sign = (message: Bytes, privateKey: Bytes): Bytes => {
   if (privateKey.length !== 32) {
-    throw new Error(
-      `Ed25519 private key seed must be 32 bytes, got ${privateKey.length}`,
-    );
+    throw new Error("Private key must be 32-byte seed");
   }
   const { secretKey } = nacl.sign.keyPair.fromSeed(privateKey);
-  return nacl.sign.detached(message, secretKey); // 64-byte signature
+  return nacl.sign.detached(message, secretKey);
 };
 
 /**
- * Verify an Ed25519 signature.
+ * Verify signature.
  */
 export const verify = (
   message: Bytes,
   signature: Bytes,
-  publicKey: Bytes,
+  publicKey: Bytes
 ): boolean => {
   return nacl.sign.detached.verify(message, signature, publicKey);
 };

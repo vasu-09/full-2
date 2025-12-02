@@ -39,7 +39,7 @@ type EncryptResult = {
   sharedKey: string; // base64
 };
 
-const DEVICE_VERSION = 9;
+const DEVICE_VERSION = 7;
 const INITIAL_PREKEY_BATCH = 10;
 const MIN_SERVER_STOCK = 5;
 
@@ -90,7 +90,7 @@ const hasValidPrekeySignature = async (
   if (pubBytes.length !== KEY_LENGTH) return false;
 
   const message = base64ToBytes(prekeyPubB64);
-  return verifyEd25519(sigBytes, message, pubBytes);
+  return verifyEd25519(message, sigBytes, pubBytes);
 };
 
 const signPrekey = async (
