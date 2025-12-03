@@ -9,6 +9,15 @@ import { Platform } from 'react-native';
 import { buildWsUrl } from './apiClient';
 import { getAccessToken } from './authStorage';
 
+const wsDebugEnabled =
+  process.env.EXPO_PUBLIC_WS_DEBUG === 'true' || (typeof __DEV__ !== 'undefined' && __DEV__);
+
+const debugLog = (...args: unknown[]) => {
+  if (wsDebugEnabled) {
+    console.log('[WS]', ...args);
+  }
+};
+
 type RNWebSocketConstructor = new (
   url: string,
   protocols?: string | string[],
@@ -98,7 +107,7 @@ class SimpleStompClient {
           }
 
           const tokenPreview = this.token ? `${this.token.slice(0, 10)}...` : null;
-          console.log('STOMP CONNECT outbound', {
+          debugLog('STOMP CONNECT outbound', {
             url: wsUrl,
             headers: {
               ...connectHeaders,
@@ -125,12 +134,14 @@ class SimpleStompClient {
         socket.onclose = () => {
           this.connected = false;
           this.connectPromise = null;
+          debugLog('WebSocket closed');
           if (this.onDisconnect) {
             this.onDisconnect();
           }
         };
 
         socket.onerror = err => {
+          debugLog('WebSocket error', err);
           if (this.rejectConnect) {
             this.rejectConnect(err);
           }
@@ -237,7 +248,7 @@ class SimpleStompClient {
 
   private sendFrame(command: string, headers: Record<string, unknown>, body = '') {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      return;
+       throw new Error('WebSocket is not open – unable to send STOMP frame');
     }
     let frame = `${command}\n`;
     Object.entries(headers).forEach(([key, value]) => {
@@ -252,6 +263,7 @@ class SimpleStompClient {
     }
     frame += '\u0000';
     this.ws.send(frame);
+    debugLog('SEND FRAME', { command, headers, body });
   }
 
   send(destination: string, body: string, headers: Record<string, unknown> = {}) {
@@ -375,6 +387,7 @@ class StompManager {
   async publish(destination: string, payload: unknown, headers: Record<string, unknown> = {}) {
     const client = await this.ensureConnected();
     const body = typeof payload === 'string' ? payload : JSON.stringify(payload);
+    debugLog('publish', { destination, payload });
     client.send(destination, body, {
       'content-type': 'application/json',
       ...headers,

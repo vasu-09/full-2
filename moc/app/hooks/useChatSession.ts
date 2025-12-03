@@ -125,6 +125,10 @@ export const useChatSession = ({
   const [e2eeClient, setE2eeClient] = useState<E2EEClient | null>(null);
   const [e2eeReady, setE2eeReady] = useState(false);
   const latestMessageIdRef = useRef<string | null>(null);
+   const resolvedRoomKey = useMemo(
+    () => roomKey ?? (roomId != null ? String(roomId) : null),
+    [roomId, roomKey],
+  );
   const typingSentRef = useRef(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const subscriptionsRef = useRef<(() => void)[]>([]);
@@ -166,11 +170,16 @@ export const useChatSession = ({
   }, []);
 
   useEffect(() => {
-    if (!roomId || !roomKey) {
+    if (!roomId || !resolvedRoomKey) {
       return;
     }
-    upsertRoom({ id: roomId, roomKey, title: title ?? roomKey, peerId: peerId ?? null });
-  }, [roomId, roomKey, title, peerId, upsertRoom]);
+     upsertRoom({
+      id: roomId,
+      roomKey: resolvedRoomKey,
+      title: title ?? resolvedRoomKey,
+      peerId: peerId ?? null,
+    });
+  }, [roomId, resolvedRoomKey, title, peerId, upsertRoom]);
 
   const mergeMessage = useCallback((incoming: InternalMessage) => {
     setRawMessages(prev => {
@@ -237,23 +246,25 @@ export const useChatSession = ({
       );
       setRawMessages(processed);
       const last = ordered[ordered.length - 1];
-      if (last) {
+      if (last && resolvedRoomKey) {
         latestMessageIdRef.current = last.messageId;
-        updateRoomActivity(roomKey ?? String(roomId), {
+        updateRoomActivity(resolvedRoomKey, {
           messageId: last.messageId,
           text: last.body ?? 'Encrypted message',
           at: last.serverTs ?? new Date().toISOString(),
           senderId: last.senderId,
         });
       }
-      resetUnread(roomKey ?? String(roomId));
+      if (resolvedRoomKey) {
+        resetUnread(resolvedRoomKey);
+      }
     } catch (err) {
       console.warn('Failed to load room history', err);
       setError('Unable to load conversation');
     } finally {
       setIsLoading(false);
     }
-  }, [roomId, roomKey, updateRoomActivity, resetUnread, e2eeClient, currentUserId]);
+  }, [roomId, resolvedRoomKey, updateRoomActivity, resetUnread, e2eeClient, currentUserId]);
 
   useEffect(() => {
     if (!userLoaded) {
@@ -306,7 +317,7 @@ export const useChatSession = ({
 
 
   useEffect(() => {
-    if (!roomId || !roomKey) {
+    if (!roomId || !resolvedRoomKey) {
       return;
     }
 
@@ -326,7 +337,7 @@ export const useChatSession = ({
         }
       });
 
-     const messageSub = stompClient.subscribe(roomTopic(roomKey), frame => {
+     const messageSub = stompClient.subscribe(roomTopic(resolvedRoomKey), frame => {
       const payload = parseFrameBody(frame);
       if (!payload) {
         return;
@@ -348,14 +359,14 @@ export const useChatSession = ({
           decryptionFailed: failed,
         });
         latestMessageIdRef.current = base.messageId;
-        updateRoomActivity(roomKey, {
+        updateRoomActivity(resolvedRoomKey, {
           messageId: base.messageId,
           text: text ?? 'Encrypted message',
           at: base.serverTs ?? new Date().toISOString(),
           senderId: base.senderId ?? null,
         });
         if (base.senderId != null && currentUserId != null && base.senderId !== currentUserId) {
-          incrementUnread(roomKey);
+          incrementUnread(resolvedRoomKey);
           const ackId = Number(payload.messageId);
           if (!Number.isNaN(ackId)) {
             stompClient
@@ -401,7 +412,7 @@ export const useChatSession = ({
 
     const ackSub = stompClient.subscribe(ackQueue, frame => {
       const payload = parseFrameBody(frame);
-      if (!payload || payload.roomId !== roomKey) {
+      if (!payload || payload.roomId !== resolvedRoomKey) {
         return;
       }
       mergeMessage({
@@ -439,7 +450,9 @@ export const useChatSession = ({
         return;
       }
       if (currentUserId != null && payload.userId === currentUserId) {
-        resetUnread(roomKey);
+        if (resolvedRoomKey) {
+          resetUnread(resolvedRoomKey);
+        }
       }
     });
 
@@ -502,7 +515,7 @@ export const useChatSession = ({
     };
  }, [
     roomId,
-    roomKey,
+    resolvedRoomKey,
     mergeMessage,
     updateRoomActivity,
     incrementUnread,
@@ -609,7 +622,7 @@ export const useChatSession = ({
 
   const sendTextMessage = useCallback(
     async (text: string) => {
-      if (!roomId || !roomKey || !text.trim()) {
+      if (!roomId || !resolvedRoomKey  || !text.trim()) {
         return;
       }
       const body = text.trim();
@@ -629,13 +642,13 @@ export const useChatSession = ({
       };
       mergeMessage(optimistic);
       latestMessageIdRef.current = messageId;
-      updateRoomActivity(roomKey, {
+      updateRoomActivity(resolvedRoomKey, {
         messageId,
         text: body,
         at: nowIso,
         senderId: currentUserId ?? undefined,
       });
-      resetUnread(roomKey);
+      resetUnread(resolvedRoomKey );
       try {
         let payload: Record<string, unknown> | null = null;
         if (peerId && e2eeClient) {
@@ -666,7 +679,7 @@ export const useChatSession = ({
             e2ee: false,
           };
         }
-        await stompClient.publish(sendRoomMessage(roomKey), payload);
+        await stompClient.publish(sendRoomMessage(resolvedRoomKey ), payload);
       } catch (err) {
         console.warn('Failed to send message', err);
         mergeMessage({
@@ -676,11 +689,11 @@ export const useChatSession = ({
         });
       }
     },
-    [roomId, roomKey, currentUserId, mergeMessage, updateRoomActivity, resetUnread, peerId, e2eeClient],
+    [roomId, resolvedRoomKey, currentUserId, mergeMessage, updateRoomActivity, resetUnread, peerId, e2eeClient],
   );
 
   const markLatestRead = useCallback(async () => {
-    if (!roomId || !roomKey) {
+    if (!roomId || !resolvedRoomKey ) {
       return;
     }
     const lastMessageId = latestMessageIdRef.current;
@@ -698,11 +711,11 @@ export const useChatSession = ({
           messageId: lastMessageId,
         });
       }
-      resetUnread(roomKey);
+      resetUnread(resolvedRoomKey );
     } catch (err) {
       console.warn('Failed to mark messages as read', err);
     }
-  }, [roomId, roomKey, resetUnread, peerId]);
+  }, [roomId, resolvedRoomKey, resetUnread, peerId]);
 
   const typingUsers = useMemo(() => typing.map(entry => entry.userId), [typing]);
 

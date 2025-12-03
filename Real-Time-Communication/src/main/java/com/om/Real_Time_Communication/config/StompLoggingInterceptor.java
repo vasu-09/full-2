@@ -27,17 +27,21 @@ public class StompLoggingInterceptor implements ChannelInterceptor {
             return message;
         }
 
-        if (log.isDebugEnabled()) {
-            String sessionId = acc.getSessionId();
-            String user = acc.getUser() != null ? acc.getUser().getName() : "anon";
-            StompCommand cmd = acc.getCommand();
-            String dest = acc.getDestination();
-            String preview = extractPreview(message.getPayload());
-            int size = payloadSize(message.getPayload());
+        String sessionId = acc.getSessionId();
+        String user = acc.getUser() != null ? acc.getUser().getName() : "anon";
+        StompCommand cmd = acc.getCommand();
+        String dest = acc.getDestination();
+        String preview = extractPreview(message.getPayload());
+        int size = payloadSize(message.getPayload());
 
-            log.debug("[STOMP][INBOUND] sid={} user={} cmd={} dest={} size={}B preview={}",
-                    sessionId, user, cmd, dest, size, preview);
-        }
+        log.info("[STOMP][INBOUND] sid={} user={} cmd={} dest={} size={}B preview={} headers={}",
+                sessionId,
+                user,
+                cmd,
+                dest,
+                size,
+                preview,
+                acc.toNativeHeaderMap());
         return message;
     }
 

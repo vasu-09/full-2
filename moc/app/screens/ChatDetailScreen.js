@@ -157,7 +157,7 @@ export default function ChatDetailScreen() {
   const avatarUri = params?.image
     ? String(params.image)
     : `https://ui-avatars.com/api/?name=${encodeURIComponent(chatTitle)}`;
-  const isRoomReady = Boolean(roomId && roomKey);
+  const isRoomReady = Boolean(roomId && (roomKey || roomId));
 
   const recordingRef = useRef(null);
   const previewSoundRef = useRef(null);
