@@ -37,7 +37,11 @@ public class OrderedMessageService {
     public void saveAndBroadcastOrdered(String roomId, Long senderId, ChatSendDto dto) throws Exception {
         log.info("Received message {} for room {} from sender {}", dto.getMessageId(), roomId, senderId);
         ChatRoom room = chatRoomRepository.findByRoomId(roomId)
-                .orElseThrow(() -> new IllegalArgumentException("Room not found"));
+                .orElseGet(() -> tryResolveByNumericId(roomId));
+
+        if (room == null) {
+            throw new IllegalArgumentException("Room not found: " + roomId);
+        }
         Long internalId = room.getId();
         dispatcher.executeAndWait(internalId, () -> {
             // Keep the real work transactional
@@ -58,5 +62,14 @@ public class OrderedMessageService {
 
             return null; // required by Callable
         });
+    }
+
+    private ChatRoom tryResolveByNumericId(String roomId) {
+        try {
+            Long numericId = Long.valueOf(roomId);
+            return chatRoomRepository.findById(numericId).orElse(null);
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 }

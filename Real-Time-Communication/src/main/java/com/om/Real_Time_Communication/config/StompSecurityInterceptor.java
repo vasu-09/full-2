@@ -137,9 +137,22 @@ public class StompSecurityInterceptor implements ChannelInterceptor {
                 }
                 case SEND: {
                     requireUser(acc);
-                    String dest = acc.getDestination(); // /topic/room/{roomId}
-                    if (dest != null && dest.startsWith("/topic/room/")) {
-                        String roomKey = dest.substring("/topic/room/".length()).split("/")[0];
+                    String dest = acc.getDestination();
+
+                    // Clients send to application destinations (/app/rooms/{roomKey}/send).
+                    // Accept both the legacy broker prefix (/topic/room/{roomKey}) and the
+                    // newer application prefix so ACL checks still run and errors are surfaced
+                    // instead of silently dropping the frame.
+                    String roomKey = null;
+                    if (dest != null) {
+                        if (dest.startsWith("/app/rooms/")) {
+                            roomKey = dest.substring("/app/rooms/".length()).split("/")[0];
+                        } else if (dest.startsWith("/topic/room/")) {
+                            roomKey = dest.substring("/topic/room/".length()).split("/")[0];
+                        }
+                    }
+
+                    if (roomKey != null) {
                         Long roomId = resolveRoomId(roomKey);
 
                         // 1) Room ACL

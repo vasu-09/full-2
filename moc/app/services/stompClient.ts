@@ -131,9 +131,16 @@ class SimpleStompClient {
           this.handleRawData(payload);
         };
 
-        socket.onclose = () => {
+        socket.onclose = event => {
+          const wasPending = Boolean(this.connectPromise) && !this.connected;
           this.connected = false;
           this.connectPromise = null;
+          if (wasPending && this.rejectConnect) {
+            const reason = event?.reason || `WebSocket closed (code ${event?.code ?? 'unknown'})`;
+            this.rejectConnect(new Error(reason));
+          }
+          this.resolveConnect = undefined;
+          this.rejectConnect = undefined;
           debugLog('WebSocket closed');
           if (this.onDisconnect) {
             this.onDisconnect();
