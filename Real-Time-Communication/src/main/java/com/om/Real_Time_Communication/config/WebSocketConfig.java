@@ -2,7 +2,6 @@ package com.om.Real_Time_Communication.config;
 
 import com.om.Real_Time_Communication.security.SessionRegistry;
 import com.om.Real_Time_Communication.service.PendingMessageService;
-import lombok.RequiredArgsConstructor;
 import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
@@ -23,6 +22,7 @@ import java.util.Map;
 @EnableWebSocketMessageBroker
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
+    private final StompLoggingInterceptor stompLoggingInterceptor;
     private final JwtHandshakeInterceptor jwtHandshakeInterceptor;
     private final StompSecurityInterceptor stompSecurityInterceptor;
     private final InboundSizeAndRateInterceptor inboundSizeAndRateInterceptor;
@@ -30,8 +30,16 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     private final SessionRegistry sessionRegistry;
     private final PendingMessageService pendingMessages;
 
-    public WebSocketConfig(JwtHandshakeInterceptor jwtHandshakeInterceptor, StompSecurityInterceptor stompSecurityInterceptor, InboundSizeAndRateInterceptor inboundSizeAndRateInterceptor, OutboundFloodGuardInterceptor outboundFloodGuardInterceptor, SessionRegistry sessionRegistry, @Lazy PendingMessageService pendingMessages) {        this.jwtHandshakeInterceptor = jwtHandshakeInterceptor;
+    public WebSocketConfig(JwtHandshakeInterceptor jwtHandshakeInterceptor,
+                           StompSecurityInterceptor stompSecurityInterceptor,
+                           StompLoggingInterceptor stompLoggingInterceptor,
+                           InboundSizeAndRateInterceptor inboundSizeAndRateInterceptor,
+                           OutboundFloodGuardInterceptor outboundFloodGuardInterceptor,
+                           SessionRegistry sessionRegistry,
+                           @Lazy PendingMessageService pendingMessages) {
+        this.jwtHandshakeInterceptor = jwtHandshakeInterceptor;
         this.stompSecurityInterceptor = stompSecurityInterceptor;
+        this.stompLoggingInterceptor = stompLoggingInterceptor;
         this.inboundSizeAndRateInterceptor = inboundSizeAndRateInterceptor;
         this.outboundFloodGuardInterceptor = outboundFloodGuardInterceptor;
         this.sessionRegistry = sessionRegistry;
@@ -66,7 +74,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
         // Security/ACLs first, then size/rate guard
-        registration.interceptors(stompSecurityInterceptor, inboundSizeAndRateInterceptor);
+        registration.interceptors(stompSecurityInterceptor, inboundSizeAndRateInterceptor, stompLoggingInterceptor);
     }
 
     @Override
