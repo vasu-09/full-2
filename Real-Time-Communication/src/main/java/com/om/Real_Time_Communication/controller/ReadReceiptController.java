@@ -9,6 +9,8 @@ import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.security.Principal;
 import java.time.Instant;
 import java.util.HashMap;
@@ -18,6 +20,7 @@ import java.util.Map;
 public class ReadReceiptController {
 
     private final ReadReceiptService service;
+    private static final Logger log = LoggerFactory.getLogger(ReadReceiptController.class);
 
     public ReadReceiptController(ReadReceiptService service, SimpMessagingTemplate messaging) {
         this.service = service;
@@ -42,6 +45,7 @@ public class ReadReceiptController {
     @MessageMapping("/room/{roomId}/read")
     public void read(@DestinationVariable Long roomId, ReadDto dto, Principal principal) {
         Long userId = Long.valueOf(principal.getName());
+        log.info("[RTC][READ] /room/{}/read user={} lastReadMessageId={}", roomId, userId, dto.getLastReadMessageId());
         UserRoomState state = service.updateLastRead(userId, roomId, dto.getLastReadMessageId());
 
         // (optional) broadcast to room so others can show read markers
@@ -52,5 +56,10 @@ public class ReadReceiptController {
         ev.put("lastReadMessageId", state.getLastReadMessageId());
         ev.put("lastReadAt", state.getLastReadAt());
         messaging.convertAndSend("/topic/room/"+roomId+"/reads", ev);
+        log.info("[RTC][READ][OK] broadcast read receipt for user={} room={} lastReadMessageId={} lastReadAt={}",
+                userId,
+                roomId,
+                state.getLastReadMessageId(),
+                state.getLastReadAt());
     }
 }

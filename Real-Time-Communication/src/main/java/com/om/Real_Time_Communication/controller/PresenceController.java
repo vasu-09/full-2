@@ -14,6 +14,8 @@ import java.security.Principal;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Controller
 
@@ -21,6 +23,7 @@ public class PresenceController {
 
     private final PresenceRegistry registry;
     private final SimpMessagingTemplate messaging;
+    private static final Logger log = LoggerFactory.getLogger(PresenceController.class);
 
     public PresenceController(PresenceRegistry registry, SimpMessagingTemplate messaging) {
         this.registry = registry;
@@ -74,6 +77,12 @@ public class PresenceController {
         String deviceId = dto.getDeviceId() != null ? dto.getDeviceId() : "default";
         PresenceRegistry.Presence p = registry.touch(userId, deviceId);
 
+        log.info("[RTC][PRESENCE] /room/{}/ping user={} deviceId={} online={} lastSeen={} ",
+                roomId,
+                userId,
+                deviceId,
+                true,
+                p.getLastSeen());
         // Broadcast presence (room-scoped)
         Map<String,Object> ev = new HashMap<String,Object>();
         ev.put("type", "presence");
@@ -82,6 +91,7 @@ public class PresenceController {
         ev.put("online", true);
         ev.put("lastSeen", Instant.now());
         messaging.convertAndSend("/topic/room/"+roomId+"/presence", ev);
+        log.info("[RTC][PRESENCE][OK] broadcast presence for user={} room={} deviceId={}", userId, roomId, deviceId);
     }
 
 
@@ -101,12 +111,19 @@ public class PresenceController {
             Instant expiresAt = typing.start(roomId, userId, deviceId, TTL_MS);
             ev.put("typing", true);
             ev.put("expiresAt", expiresAt);
+            log.info("[RTC][TYPING] /room/{}/typing user={} deviceId={} typing=true expiresAt={}", roomId, userId, deviceId, expiresAt);
         } else {
             typing.stop(roomId, userId, deviceId);
             ev.put("typing", false);
+            log.info("[RTC][TYPING] /room/{}/typing user={} deviceId={} typing=false", roomId, userId, deviceId);
         }
 
         // Broadcast to room subscribers only
         messaging.convertAndSend("/topic/room/"+roomId+"/typing", ev);
+        log.info("[RTC][TYPING][OK] broadcast typing for user={} room={} deviceId={} typing={} ",
+                userId,
+                roomId,
+                deviceId,
+                dto.isTyping());
     }
 }

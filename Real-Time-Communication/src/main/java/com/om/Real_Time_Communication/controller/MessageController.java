@@ -23,6 +23,8 @@ import org.springframework.web.bind.annotation.*;
 import java.nio.file.AccessDeniedException;
 import java.security.Principal;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.util.List;
 import java.util.Map;
 
@@ -39,7 +41,7 @@ public class MessageController {
     @Qualifier("messageTaskExecutor")
     private TaskExecutor messageTaskExecutor;
 
-
+    private static final Logger log = LoggerFactory.getLogger(MessageController.class);
     /**
      * Unified persistent message path.
      * Works for both 1:1 (room with two members) and group rooms.
@@ -56,9 +58,17 @@ public class MessageController {
         Long senderId = Long.valueOf(principal.getName());
 
         try {
+            log.info("[RTC][SEND] /rooms/{}/send by user={} corrId={} type={} metadata={}",
+                    roomId,
+                    senderId,
+                    corrId,
+                    dto.getType(),
+                    dto.getBody());
             // Persist, ACK to sender and broadcast to room in FIFO order
             orderedMessageService.saveAndBroadcastOrdered(roomId, senderId, dto);
+            log.info("[RTC][SEND][OK] roomId={} sender={} messageId={}", roomId, senderId, dto.getMessageId());
         } catch (Exception e) {
+            log.error("[RTC][SEND][FAIL] roomId={} sender={} messageId={} err={}", roomId, senderId, dto.getMessageId(), e.getMessage(), e);
             throw new RuntimeException(e);
         }
     }
@@ -74,12 +84,14 @@ public class MessageController {
     public void typingToUser(@DestinationVariable Long userId,
                              Principal principal) {
         Long senderId = Long.valueOf(principal.getName());
+        log.info("[RTC][TYPING] /dm/{}/typing from sender={} -> user={} ", userId, senderId, userId);
         // Minimal payload – clients can show "senderId is typing..."
         messagingTemplate.convertAndSendToUser(
                 String.valueOf(userId),
                 "/queue/typing",
                 Map.of("senderId", senderId, "type", "typing")
         );
+        log.info("[RTC][TYPING][OK] sent typing signal from sender={} to user={}", senderId, userId);
     }
 
     /**
@@ -93,6 +105,12 @@ public class MessageController {
                                   @Payload Map<String, Object> receipt,
                                   Principal principal) {
         Long senderId = Long.valueOf(principal.getName());
+        log.info("[RTC][READ] /dm/{}/read sender={} -> user={} roomId={} messageId={}",
+                userId,
+                senderId,
+                userId,
+                receipt.get("roomId"),
+                receipt.get("messageId"));
         messagingTemplate.convertAndSendToUser(
                 String.valueOf(userId),
                 "/queue/receipts",
@@ -103,6 +121,11 @@ public class MessageController {
                         "messageId", receipt.get("messageId")
                 )
         );
+        log.info("[RTC][READ][OK] delivered read receipt from sender={} to user={} roomId={} messageId={}",
+                senderId,
+                userId,
+                receipt.get("roomId"),
+                receipt.get("messageId"));
     }
 
 
