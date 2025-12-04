@@ -49,6 +49,12 @@ spring:
       httpclient:
         connect-timeout: ${GATEWAY_CONNECT_TIMEOUT_MS:5000}
         response-timeout: ${GATEWAY_RESPONSE_TIMEOUT:10s}
+        websocket:
+          max-frame-payload-length: ${GATEWAY_WS_MAX_FRAME_BYTES:262144}
+
+      httpserver:
+        websocket:
+          max-frame-payload-length: ${GATEWAY_WS_MAX_FRAME_BYTES:262144}
 
       globalcors:
         add-to-simple-url-handler-mapping: true

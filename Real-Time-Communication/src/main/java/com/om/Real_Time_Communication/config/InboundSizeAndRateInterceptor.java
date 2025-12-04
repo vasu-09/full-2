@@ -16,7 +16,8 @@ import java.util.List;
 @Component
 @RequiredArgsConstructor
 public class InboundSizeAndRateInterceptor implements ChannelInterceptor {
-    private static final int MAX_PAYLOAD_BYTES = 64 * 1024; // 64KB cap
+    private static final int CONNECT_MAX_BYTES = 256 * 1024; // allow fatter CONNECT headers (Authorization + E2EE)
+    private static final int DEFAULT_MAX_PAYLOAD_BYTES = 64 * 1024; // 64KB cap for regular traffic
 
     @Autowired
     private  SlidingWindowRateLimiter limiter;
@@ -31,7 +32,8 @@ public class InboundSizeAndRateInterceptor implements ChannelInterceptor {
         int size = 0;
         if (payload instanceof byte[]) size = ((byte[]) payload).length;
         else if (payload instanceof String) size = ((String) payload).getBytes(StandardCharsets.UTF_8).length;
-        if (size > MAX_PAYLOAD_BYTES) {
+        int maxBytes = StompCommand.CONNECT.equals(acc.getCommand()) ? CONNECT_MAX_BYTES : DEFAULT_MAX_PAYLOAD_BYTES;
+        if (size > maxBytes) {
             throw new IllegalArgumentException("Payload too large: " + size + " bytes");
         }
 

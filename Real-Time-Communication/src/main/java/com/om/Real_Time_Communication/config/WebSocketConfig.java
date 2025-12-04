@@ -87,9 +87,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void configureWebSocketTransport(WebSocketTransportRegistration reg) {
         // Transport-level caps
-        reg.setMessageSizeLimit(64 * 1024);      // 64KB per inbound STOMP frame
-        reg.setSendBufferSizeLimit(512 * 1024);  // 512KB per-session send buffer
-        reg.setSendTimeLimit(10_000);            // 10s per send
+        reg.setMessageSizeLimit(256 * 1024);      // 256KB per inbound STOMP frame
+        reg.setSendBufferSizeLimit(512 * 1024);   // 512KB per-session send buffer
+        reg.setSendTimeLimit(10_000);           // 10s per send
 
         // Track opens/closes for duplicate-login policy & server-side kick
         reg.addDecoratorFactory(new WebSocketHandlerDecoratorFactory() {
