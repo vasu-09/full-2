@@ -42,10 +42,14 @@ public class WebSocketAuthFilter implements GlobalFilter, Ordered {
 
 
         List<String> protocols = new ArrayList<>();
+        List<String> sanitizedProtocols = new ArrayList<>();
         if (inspectWsProtocols) {
             for (String header : request.getHeaders().getOrEmpty(WS_PROTOCOL_HEADER)) {
                 for (String part : header.split(",")) {
-                    protocols.add(part.trim());
+                    String trimmed = part.trim();
+                    if (!trimmed.isBlank()) {
+                        protocols.add(trimmed);
+                    }
                 }
             }
             log.info("[GATEWAY][WS-FILTER] Sec-WebSocket-Protocol raw="
@@ -68,12 +72,16 @@ public class WebSocketAuthFilter implements GlobalFilter, Ordered {
                     token = p.substring(7).trim();
                     foundTokenInProtocol = true;
                     log.info("[GATEWAY][WS-FILTER] Found bearer token in subprotocol (single): " + token);
-                } else if (p.equalsIgnoreCase("bearer") && i + 1 < protocols.size()) {
+                    continue; // drop token from forwarded subprotocols
+                }
+                if (p.equalsIgnoreCase("bearer") && i + 1 < protocols.size()) {
                     tokenSource = "Sec-WebSocket-Protocol (pair)";
                     token = protocols.get(++i);
                     foundTokenInProtocol = true;
                     log.info("[GATEWAY][WS-FILTER] Found bearer token in subprotocol (pair): " + token);
+                    continue;
                 }
+                sanitizedProtocols.add(p);
             }
         }
 
@@ -101,8 +109,12 @@ public class WebSocketAuthFilter implements GlobalFilter, Ordered {
                     ? token
                     : "Bearer " + token);
         }
-        if (inspectWsProtocols && !foundTokenInProtocol && !protocols.isEmpty()) {
-            mutated.headers(h -> h.set(WS_PROTOCOL_HEADER, String.join(",", protocols)));
+        if (inspectWsProtocols) {
+            if (!sanitizedProtocols.isEmpty()) {
+                mutated.headers(h -> h.set(WS_PROTOCOL_HEADER, String.join(",", sanitizedProtocols)));
+            } else {
+                mutated.headers(h -> h.remove(WS_PROTOCOL_HEADER));
+            }
         }
         if (inspectWsProtocols) {
             if (token == null || token.isBlank()) {
