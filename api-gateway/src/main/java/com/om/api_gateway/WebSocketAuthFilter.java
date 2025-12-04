@@ -30,7 +30,11 @@ public class WebSocketAuthFilter implements GlobalFilter, Ordered {
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         ServerHttpRequest request = exchange.getRequest();
-        boolean isWebSocketUpgrade = "websocket".equalsIgnoreCase(request.getHeaders().getUpgrade());
+        boolean hasUpgradeHeader = "websocket".equalsIgnoreCase(request.getHeaders().getUpgrade());
+        boolean hasWsKey = request.getHeaders().containsKey("Sec-WebSocket-Key");
+        boolean hasUpgradeConnection = request.getHeaders().getOrEmpty(HttpHeaders.CONNECTION).stream()
+                .anyMatch(v -> v.toLowerCase().contains("upgrade"));
+        boolean isWebSocketUpgrade = hasUpgradeHeader || (hasWsKey && hasUpgradeConnection);
         boolean isWebSocketPath = request.getURI().getPath() != null &&
                 (request.getURI().getPath().startsWith("/ws") || request.getURI().getPath().startsWith("/rtc/ws"));
         boolean inspectWsProtocols = isWebSocketUpgrade || isWebSocketPath;

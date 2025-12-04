@@ -125,7 +125,7 @@ export const useChatSession = ({
   const [e2eeClient, setE2eeClient] = useState<E2EEClient | null>(null);
   const [e2eeReady, setE2eeReady] = useState(false);
   const latestMessageIdRef = useRef<string | null>(null);
-   const resolvedRoomKey = useMemo(
+  const resolvedRoomKey = useMemo(
     () => roomKey ?? (roomId != null ? String(roomId) : null),
     [roomId, roomKey],
   );
@@ -173,7 +173,7 @@ export const useChatSession = ({
     if (!roomId || !resolvedRoomKey) {
       return;
     }
-     upsertRoom({
+    upsertRoom({
       id: roomId,
       roomKey: resolvedRoomKey,
       title: title ?? resolvedRoomKey,
@@ -622,7 +622,7 @@ export const useChatSession = ({
 
   const sendTextMessage = useCallback(
     async (text: string) => {
-      if (!roomId || !resolvedRoomKey  || !text.trim()) {
+      if (!roomId || !resolvedRoomKey || !text.trim()) {
         return;
       }
       const body = text.trim();
@@ -648,7 +648,7 @@ export const useChatSession = ({
         at: nowIso,
         senderId: currentUserId ?? undefined,
       });
-      resetUnread(resolvedRoomKey );
+      resetUnread(resolvedRoomKey);
       try {
         let payload: Record<string, unknown> | null = null;
         if (peerId && e2eeClient) {
@@ -679,7 +679,17 @@ export const useChatSession = ({
             e2ee: false,
           };
         }
-        await stompClient.publish(sendRoomMessage(resolvedRoomKey ), payload);
+        
+        console.log('[CHAT] sending text via STOMP', {
+          roomId,
+          roomKey: resolvedRoomKey,
+          destination: sendRoomMessage(resolvedRoomKey),
+          payload,
+        });
+
+        await stompClient.publish(sendRoomMessage(resolvedRoomKey), payload);
+
+        console.log('[CHAT] STOMP publish resolved for', messageId);
       } catch (err) {
         console.warn('Failed to send message', err);
         mergeMessage({
@@ -693,7 +703,7 @@ export const useChatSession = ({
   );
 
   const markLatestRead = useCallback(async () => {
-    if (!roomId || !resolvedRoomKey ) {
+    if (!roomId || !resolvedRoomKey) {
       return;
     }
     const lastMessageId = latestMessageIdRef.current;
@@ -711,7 +721,7 @@ export const useChatSession = ({
           messageId: lastMessageId,
         });
       }
-      resetUnread(resolvedRoomKey );
+      resetUnread(resolvedRoomKey);
     } catch (err) {
       console.warn('Failed to mark messages as read', err);
     }

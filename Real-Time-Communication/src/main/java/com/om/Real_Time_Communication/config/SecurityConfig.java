@@ -33,7 +33,7 @@ public class SecurityConfig {
         DefaultBearerTokenResolver resolver = new DefaultBearerTokenResolver();
         BearerTokenResolver skippingResolver = request -> {
             String uri = request.getRequestURI();
-            if (uri != null && uri.startsWith("/ws")) {
+            if (uri != null && (uri.startsWith("/ws") || uri.startsWith("/rtc/ws"))) {
                 // Let JwtHandshakeInterceptor handle authentication for WebSockets
                 return null;
             }
@@ -42,7 +42,7 @@ public class SecurityConfig {
         http
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/.well-known/jwks.json", "/ws", "/ws/**").permitAll()
+                        .requestMatchers("/.well-known/jwks.json", "/ws", "/ws/**", "/rtc/ws", "/rtc/ws/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2

@@ -426,23 +426,31 @@ export const wsBaseURL = getWsBaseURL();
 warnIfLikelyUnreachableBaseUrl(wsBaseURL, 'WebSocket base URL');
 
 export const buildWsUrl = (baseUrl: string = wsBaseURL) => {
+  const appendWs = (pathname: string) => {
+    const sanitized = pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
+    if (sanitized.endsWith('/ws')) {
+      return sanitized; // avoid double /ws when caller already provided it
+    }
+    return `${sanitized}/ws`;
+  };
+
   try {
     const parsed = new URL(baseUrl);
     const protocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
     parsed.protocol = protocol;
-    parsed.pathname = parsed.pathname.replace(/\/$/, '') + '/ws';
+    parsed.pathname = appendWs(parsed.pathname || '/');
     parsed.search = '';
     parsed.hash = '';
     return parsed.toString();
   } catch {
     const normalized = baseUrl.replace(/\/$/, '');
     if (normalized.startsWith('https://')) {
-      return `${normalized.replace(/^https:\/\//, 'wss://')}/ws`;
+      return appendWs(normalized.replace(/^https:\/\//, 'wss://'));
     }
     if (normalized.startsWith('http://')) {
-      return `${normalized.replace(/^http:\/\//, 'ws://')}/ws`;
+      return appendWs(normalized.replace(/^http:\/\//, 'ws://'));
     }
-    return `ws://${normalized}/ws`;
+    return appendWs(`ws://${normalized}`);
   }
 };
 

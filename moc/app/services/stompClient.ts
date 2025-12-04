@@ -99,7 +99,16 @@ class SimpleStompClient {
           const connectHeaders: Record<string, string> = {
             'accept-version': '1.2',
             'heart-beat': HEARTBEAT,
-            };
+        };
+
+          try {
+            const parsed = new URL(wsUrl);
+            if (parsed.host) {
+              connectHeaders.host = parsed.host;
+            }
+          } catch {
+            connectHeaders.host = connectHeaders.host ?? 'localhost';
+          }
           if (this.token) {
             // Mirror headers the server expects during CONNECT for transparency.
             connectHeaders.Authorization = `Bearer ${this.token}`;
@@ -117,7 +126,7 @@ class SimpleStompClient {
             protocols,
           });
 
-           this.sendFrame('CONNECT', connectHeaders);
+          this.sendFrame('CONNECT', connectHeaders);
         };
 
         socket.onmessage = event => {
@@ -125,6 +134,7 @@ class SimpleStompClient {
             return;
           }
           const payload = event.data;
+          debugLog('WS raw INBOUND', JSON.stringify(payload));
           if (payload === '\n' || payload === '\r\n') {
             return; // heartbeat
           }
@@ -186,6 +196,12 @@ class SimpleStompClient {
       if (!frame) {
         return;
       }
+
+      debugLog('STOMP INBOUND FRAME', {
+        command: frame.command,
+        headers: frame.headers,
+        bodyPreview: frame.body ? frame.body.slice(0, 200) : '',
+      });
 
       if (frame.command === 'CONNECTED') {
         this.connected = true;
@@ -255,7 +271,7 @@ class SimpleStompClient {
 
   private sendFrame(command: string, headers: Record<string, unknown>, body = '') {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-       throw new Error('WebSocket is not open – unable to send STOMP frame');
+      throw new Error('WebSocket is not open – unable to send STOMP frame');
     }
     let frame = `${command}\n`;
     Object.entries(headers).forEach(([key, value]) => {
@@ -394,7 +410,7 @@ class StompManager {
   async publish(destination: string, payload: unknown, headers: Record<string, unknown> = {}) {
     const client = await this.ensureConnected();
     const body = typeof payload === 'string' ? payload : JSON.stringify(payload);
-    debugLog('publish', { destination, payload });
+    debugLog('publish', { destination, payload, body });
     client.send(destination, body, {
       'content-type': 'application/json',
       ...headers,
