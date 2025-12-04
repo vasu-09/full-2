@@ -82,9 +82,6 @@ class SimpleStompClient {
           : this.url;
 
         const protocols = ['v12.stomp'];
-        if (this.token) {
-          protocols.push(`bearer ${this.token}`);
-        }
         const socket: WebSocket =
           Platform.OS === 'web'
             ? new WebSocket(wsUrl, protocols)
@@ -99,7 +96,7 @@ class SimpleStompClient {
           const connectHeaders: Record<string, string> = {
             'accept-version': '1.2',
             'heart-beat': HEARTBEAT,
-        };
+          };
 
           try {
             const parsed = new URL(wsUrl);
@@ -134,7 +131,7 @@ class SimpleStompClient {
             return;
           }
           const payload = event.data;
-          debugLog('WS raw INBOUND', JSON.stringify(payload));
+          debugLog('RAW INBOUND FRAME', JSON.stringify(payload));
           if (payload === '\n' || payload === '\r\n') {
             return; // heartbeat
           }
@@ -197,17 +194,21 @@ class SimpleStompClient {
         return;
       }
 
-      debugLog('STOMP INBOUND FRAME', {
+      debugLog('INBOUND FRAME', {
         command: frame.command,
         headers: frame.headers,
         bodyPreview: frame.body ? frame.body.slice(0, 200) : '',
       });
 
+       debugLog('RAW INBOUND FRAME', JSON.stringify(raw));
+
       if (frame.command === 'CONNECTED') {
+        debugLog('STOMP CONNECTED', frame.headers);
         this.connected = true;
         if (this.resolveConnect) {
           this.resolveConnect();
         }
+        
         if (this.onConnectCallback) {
           this.onConnectCallback();
         }
@@ -230,6 +231,7 @@ class SimpleStompClient {
 
       if (frame.command === 'ERROR') {
         console.warn('STOMP error frame', frame.body || frame.headers['message']);
+        debugLog('STOMP ERROR FRAME', frame);
         return;
       }
     });
@@ -284,7 +286,8 @@ class SimpleStompClient {
     if (body) {
       frame += body;
     }
-    frame += '\u0000';
+    frame += '\0';
+    debugLog('RAW OUTBOUND FRAME', JSON.stringify(frame));
     this.ws.send(frame);
     debugLog('SEND FRAME', { command, headers, body });
   }
