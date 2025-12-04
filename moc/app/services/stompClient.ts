@@ -127,15 +127,7 @@ class SimpleStompClient {
         };
 
         socket.onmessage = event => {
-          if (typeof event.data !== 'string') {
-            return;
-          }
-          const payload = event.data;
-          debugLog('RAW INBOUND FRAME', JSON.stringify(payload));
-          if (payload === '\n' || payload === '\r\n') {
-            return; // heartbeat
-          }
-          this.handleRawData(payload);
+          this.handleRawData(event.data);
         };
 
         socket.onclose = event => {
@@ -183,8 +175,15 @@ class SimpleStompClient {
     this.connectPromise = null;
   }
 
-  private handleRawData(data: string) {
-    const frames = data.split('\0');
+  private handleRawData(data: string | ArrayBuffer) {
+    const text = typeof data === 'string' ? data : this.decodeBinary(data);
+    if (!text || text === '\n' || text === '\r\n') {
+      return; // heartbeat or empty
+    }
+
+    debugLog('RAW INBOUND FRAME', JSON.stringify(text));
+
+    const frames = text.split('\0');
     frames.forEach(raw => {
       if (!raw || !raw.trim()) {
         return;
@@ -200,20 +199,18 @@ class SimpleStompClient {
         bodyPreview: frame.body ? frame.body.slice(0, 200) : '',
       });
 
-       debugLog('RAW INBOUND FRAME', JSON.stringify(raw));
-
       if (frame.command === 'CONNECTED') {
         debugLog('STOMP CONNECTED', frame.headers);
         this.connected = true;
         if (this.resolveConnect) {
           this.resolveConnect();
+          this.resolveConnect = undefined;
+          this.rejectConnect = undefined
         }
         
         if (this.onConnectCallback) {
           this.onConnectCallback();
         }
-        this.resolveConnect = undefined;
-        this.rejectConnect = undefined;
         return;
       }
 
@@ -236,6 +233,16 @@ class SimpleStompClient {
       }
     });
   }
+
+  private decodeBinary(data: ArrayBuffer) {
+    try {
+      return new TextDecoder('utf-8').decode(new Uint8Array(data));
+    } catch (err) {
+      debugLog('Failed to decode binary frame', err);
+      return '';
+    }
+  }
+
 
   private parseFrame(raw: string): StompFrame | null {
     const trimmed = raw.replace(/\u0000/g, '');
