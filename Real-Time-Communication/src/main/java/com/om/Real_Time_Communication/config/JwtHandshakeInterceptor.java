@@ -117,17 +117,8 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
     private static String extractBearerOrQueryToken(ServerHttpRequest req) {
         // 1) Authorization: Bearer <token>
         String auth = req.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
-        if (auth != null) {
-            String trimmed = auth.trim();
-            if (trimmed.regionMatches(true, 0, "bearer", 0, 6)) {
-                String candidate = trimmed.substring(Math.min(trimmed.length(), 6)).trim();
-                if (candidate.startsWith(":")) { // e.g., "bearer:token"
-                    candidate = candidate.substring(1).trim();
-                }
-                if (!candidate.isBlank()) {
-                    return candidate;
-                }
-            }
+        if (auth != null && auth.startsWith("Bearer ")) {
+            return auth.substring(7).trim();
         }
 
         // 2) Sec-WebSocket-Protocol: bearer,<token> or "bearer <token>" (best-effort parsing)
@@ -136,14 +127,15 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
             String[] parts = header.split(",");
             for (int i = 0; i < parts.length; i++) {
                 String part = parts[i].trim();
-                if (part.regionMatches(true, 0, "bearer", 0, 6)) {
-                    String candidate = part.substring(Math.min(part.length(), 6)).trim();
-                    if (candidate.startsWith(":")) {
-                        candidate = candidate.substring(1).trim();
+                if (part.regionMatches(true, 0, "bearer ", 0, 7)) {
+                    String candidate = part.substring(7).trim();
+                    if (!candidate.isBlank()) {
+                        return candidate;
                     }
-                    if (candidate.isBlank() && i + 1 < parts.length) {
-                        candidate = parts[i + 1].trim();
-                    }
+                    continue;
+                }
+                if (part.equalsIgnoreCase("bearer") && i + 1 < parts.length) {
+                    String candidate = parts[i + 1].trim();
                     if (!candidate.isBlank()) {
                         return candidate;
                     }
