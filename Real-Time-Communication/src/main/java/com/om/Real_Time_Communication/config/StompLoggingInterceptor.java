@@ -7,6 +7,7 @@ import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
+import org.springframework.messaging.support.AbstractMessageChannel;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
@@ -33,8 +34,10 @@ public class StompLoggingInterceptor implements ChannelInterceptor {
         String dest = acc.getDestination();
         String preview = extractPreview(message.getPayload());
         int size = payloadSize(message.getPayload());
+        String direction = resolveDirection(channel);
 
-        log.info("[STOMP][INBOUND] sid={} user={} cmd={} dest={} size={}B preview={} headers={}",
+        log.info("[STOMP][{}] sid={} user={} cmd={} dest={} size={}B preview={} headers={}",
+                direction,
                 sessionId,
                 user,
                 cmd,
@@ -44,6 +47,23 @@ public class StompLoggingInterceptor implements ChannelInterceptor {
                 acc.toNativeHeaderMap());
         return message;
     }
+
+    private String resolveDirection(MessageChannel channel) {
+        if (channel instanceof AbstractMessageChannel amc) {
+            String name = amc.getBeanName();
+            if (name != null) {
+                if (name.toLowerCase().contains("outbound")) {
+                    return "OUTBOUND";
+                }
+                if (name.toLowerCase().contains("inbound")) {
+                    return "INBOUND";
+                }
+                return name;
+            }
+        }
+        return "UNKNOWN";
+    }
+
 
     private int payloadSize(Object payload) {
         if (payload instanceof byte[] bytes) {

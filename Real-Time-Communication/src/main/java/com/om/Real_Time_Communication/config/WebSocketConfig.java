@@ -81,7 +81,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void configureClientOutboundChannel(ChannelRegistration registration) {
         // Backpressure guard on outbound
-        registration.interceptors(outboundFloodGuardInterceptor);
+        registration.interceptors(stompLoggingInterceptor, outboundFloodGuardInterceptor);
     }
 
     @Override

@@ -108,20 +108,13 @@ class SimpleStompClient {
           } catch {
             connectHeaders.host = connectHeaders.host ?? 'localhost';
           }
-          if (this.token) {
-            // Mirror headers the server expects during CONNECT for transparency.
-            connectHeaders.Authorization = `Bearer ${this.token}`;
-            connectHeaders.login = this.token;
-          }
+          
 
           const tokenPreview = this.token ? `${this.token.slice(0, 10)}...` : null;
           debugLog('STOMP CONNECT outbound', {
             url: wsUrl,
-            headers: {
-              ...connectHeaders,
-              Authorization: tokenPreview ? `Bearer ${tokenPreview}` : undefined,
-              login: tokenPreview ?? undefined,
-            },
+            headers: connectHeaders,
+            tokenPreview,
             protocols,
           });
 
