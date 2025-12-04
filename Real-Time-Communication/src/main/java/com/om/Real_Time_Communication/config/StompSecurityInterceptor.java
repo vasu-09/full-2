@@ -246,9 +246,16 @@ public class StompSecurityInterceptor implements ChannelInterceptor {
             return null;
         }
         String trimmed = token.trim();
-        return trimmed.regionMatches(true, 0, "bearer ", 0, 7)
-                ? trimmed.substring(7).trim()
-                : trimmed;
+        if (trimmed.length() >= 6 && trimmed.regionMatches(true, 0, "bearer", 0, 6)) {
+            int idx = 6;
+            while (idx < trimmed.length() && Character.isWhitespace(trimmed.charAt(idx))) idx++;
+            if (idx < trimmed.length() && trimmed.charAt(idx) == ':') {
+                idx++;
+                while (idx < trimmed.length() && Character.isWhitespace(trimmed.charAt(idx))) idx++;
+            }
+            return trimmed.substring(idx).trim();
+        }
+        return trimmed;
     }
 
     /**

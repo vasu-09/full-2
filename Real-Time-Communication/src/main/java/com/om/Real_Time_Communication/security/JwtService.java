@@ -20,15 +20,15 @@ public class JwtService {
     }
 
     public Long parseUserId(String bearerOrToken) {
-        Claims c = claims(bearerOrToken);
+        Claims c = claims(stripBearerPrefix(bearerOrToken));
         Long userId = c.get("userId", Long.class);
         if (userId == null) throw new JWTVerificationException("userId missing");
         return userId;
     }
 
     public JwtIdentity parse(String bearerOrToken) {
-        String token = bearerOrToken.startsWith("Bearer ") ? bearerOrToken.substring(7) : bearerOrToken;
-        Claims c = claims(bearerOrToken);
+        String token = stripBearerPrefix(bearerOrToken);
+        Claims c = claims(token);
         Long userId = c.get("userId", Long.class);
         String tenant = c.get("tenant", String.class);
         List<String> rolesList = c.get("roles", List.class);
@@ -41,12 +41,28 @@ public class JwtService {
         if (bearerOrToken == null || bearerOrToken.isBlank()) {
             throw new IllegalArgumentException("Missing token");
         }
-        String token = bearerOrToken.startsWith("Bearer ") ? bearerOrToken.substring(7) : bearerOrToken;
+        String token = stripBearerPrefix(bearerOrToken);
         try {
             return verifier.validate(token);
         } catch (JwtException e) {
             throw new JWTVerificationException(e.getMessage(), e);
         }
+    }
+
+    private String stripBearerPrefix(String raw) {
+        if (raw == null) return null;
+        String trimmed = raw.trim();
+        if (trimmed.length() >= 6 && trimmed.regionMatches(true, 0, "bearer", 0, 6)) {
+            int idx = 6;
+            // tolerate optional separators between "Bearer" and the token (space/colon)
+            while (idx < trimmed.length() && Character.isWhitespace(trimmed.charAt(idx))) idx++;
+            if (idx < trimmed.length() && trimmed.charAt(idx) == ':') {
+                idx++;
+                while (idx < trimmed.length() && Character.isWhitespace(trimmed.charAt(idx))) idx++;
+            }
+            return trimmed.substring(idx).trim();
+        }
+        return trimmed;
     }
 
     public static final class JwtIdentity {
