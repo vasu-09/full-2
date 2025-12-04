@@ -59,20 +59,20 @@ public class WebSocketAuthFilter implements GlobalFilter, Ordered {
             tokenSource = "Authorization header";
             token = token.substring(7).trim();
         }
-        List<String> remaining = new ArrayList<>();
+        boolean foundTokenInProtocol = false;
         if (inspectWsProtocols) {
             for (int i = 0; i < protocols.size(); i++) {
                 String p = protocols.get(i);
                 if (p.regionMatches(true, 0, "bearer ", 0, 7)) {
                     tokenSource = "Sec-WebSocket-Protocol (single)";
                     token = p.substring(7).trim();
+                    foundTokenInProtocol = true;
                     log.info("[GATEWAY][WS-FILTER] Found bearer token in subprotocol (single): " + token);
                 } else if (p.equalsIgnoreCase("bearer") && i + 1 < protocols.size()) {
                     tokenSource = "Sec-WebSocket-Protocol (pair)";
                     token = protocols.get(++i);
+                    foundTokenInProtocol = true;
                     log.info("[GATEWAY][WS-FILTER] Found bearer token in subprotocol (pair): " + token);
-                } else {
-                    remaining.add(p);
                 }
             }
         }
@@ -101,17 +101,13 @@ public class WebSocketAuthFilter implements GlobalFilter, Ordered {
                     ? token
                     : "Bearer " + token);
         }
-        if (isWebSocketUpgrade) {
-            if (remaining.isEmpty()) {
-                mutated.headers(h -> h.remove(WS_PROTOCOL_HEADER));
-            } else {
-                mutated.headers(h -> h.set(WS_PROTOCOL_HEADER, String.join(",", remaining)));
-            }
+        if (inspectWsProtocols && !foundTokenInProtocol && !protocols.isEmpty()) {
+            mutated.headers(h -> h.set(WS_PROTOCOL_HEADER, String.join(",", protocols)));
         }
         if (inspectWsProtocols) {
             if (token == null || token.isBlank()) {
                 log.info("[GATEWAY][WS-FILTER] No token found for /ws request" +
-                        (protocols.isEmpty() ? "" : "; forwarding subprotocols=" + String.join(",", remaining)));
+                        (protocols.isEmpty() ? "" : "; forwarding subprotocols=" + String.join(",", protocols)));
             } else if (tokenSource != null) {
                 log.info("[GATEWAY][WS-FILTER] Using token from " + tokenSource);
             }
