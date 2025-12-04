@@ -6,7 +6,9 @@
     </appender>
 
     <!-- Trace STOMP handshake/CONNECT handling to debug client auth headers -->
+    <logger name="org.springframework.web.socket" level="DEBUG" />
     <logger name="org.springframework.messaging.simp" level="TRACE" />
+    <logger name="org.springframework.messaging.simp.stomp" level="TRACE" />
     <logger name="com.om.Real_Time_Communication" level="DEBUG" />
 
     <root level="INFO">
