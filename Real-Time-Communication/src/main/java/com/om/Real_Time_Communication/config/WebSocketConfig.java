@@ -75,6 +75,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     public void configureClientInboundChannel(ChannelRegistration registration) {
         // Security/ACLs first, then size/rate guard
         registration.interceptors(stompSecurityInterceptor, inboundSizeAndRateInterceptor, stompLoggingInterceptor);
+
     }
 
     @Override

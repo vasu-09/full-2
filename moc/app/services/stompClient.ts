@@ -39,6 +39,7 @@ type SubscriptionEntry = {
 };
 
 const HEARTBEAT = '10000,10000';
+const HEARTBEAT_INTERVAL_MS = 10000;
 
 class SimpleStompClient {
   private url: string;
@@ -50,6 +51,7 @@ class SimpleStompClient {
   private rejectConnect?: (err: unknown) => void;
   private subscriptions = new Map<string, FrameHandler>();
   private subscriptionSeq = 0;
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   public onDisconnect?: () => void;
   public onConnectCallback?: () => void;
 
@@ -126,14 +128,20 @@ class SimpleStompClient {
           this.sendFrame('CONNECT', connectHeaders);
         };
 
-        socket.onmessage = event => {
-          this.handleRawData(event.data);
+        socket.onmessage = async event => {
+          try {
+            const text = await this.extractText(event.data);
+            this.handleRawData(text);
+          } catch (err) {
+            debugLog('Failed to process inbound WebSocket message', err);
+          }
         };
 
         socket.onclose = event => {
           const wasPending = Boolean(this.connectPromise) && !this.connected;
           this.connected = false;
           this.connectPromise = null;
+          this.stopHeartbeat();
           if (wasPending && this.rejectConnect) {
             const reason = event?.reason || `WebSocket closed (code ${event?.code ?? 'unknown'})`;
             this.rejectConnect(new Error(reason));
@@ -173,10 +181,23 @@ class SimpleStompClient {
     }
     this.connected = false;
     this.connectPromise = null;
+    this.stopHeartbeat();
   }
 
-  private handleRawData(data: string | ArrayBuffer) {
-    const text = typeof data === 'string' ? data : this.decodeBinary(data);
+  private async extractText(data: string | ArrayBuffer | Blob): Promise<string> {
+    if (typeof data === 'string') {
+      return data;
+    }
+
+    if (typeof Blob !== 'undefined' && data instanceof Blob) {
+      const buffer = await data.arrayBuffer();
+      return this.decodeBinary(buffer);
+    }
+
+    return this.decodeBinary(data as ArrayBuffer);
+  }
+
+  private handleRawData(text: string) {
     if (!text || text === '\n' || text === '\r\n') {
       return; // heartbeat or empty
     }
@@ -202,6 +223,7 @@ class SimpleStompClient {
       if (frame.command === 'CONNECTED') {
         debugLog('STOMP CONNECTED', frame.headers);
         this.connected = true;
+        this.startHeartbeat();
         if (this.resolveConnect) {
           this.resolveConnect();
           this.resolveConnect = undefined;
@@ -297,6 +319,28 @@ class SimpleStompClient {
     debugLog('RAW OUTBOUND FRAME', JSON.stringify(frame));
     this.ws.send(frame);
     debugLog('SEND FRAME', { command, headers, body });
+  }
+
+  private startHeartbeat() {
+    if (this.heartbeatTimer || !this.ws) {
+      return;
+    }
+    this.heartbeatTimer = setInterval(() => {
+      try {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          this.ws.send('\n');
+        }
+      } catch (err) {
+        debugLog('Failed to send heartbeat', err);
+      }
+    }, HEARTBEAT_INTERVAL_MS);
+  }
+
+  private stopHeartbeat() {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
   }
 
   send(destination: string, body: string, headers: Record<string, unknown> = {}) {

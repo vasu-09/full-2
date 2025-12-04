@@ -64,13 +64,13 @@ public class StompSecurityInterceptor implements ChannelInterceptor {
 
         // MDC/correlation as you already added…
         try {
-            Long userId = acc.getUser() != null ? Long.valueOf(acc.getUser().getName()) : null;
+            Long userId = extractUserId(acc);
 
             switch (cmd) {
                 case CONNECT: {
                     // If the WebSocket handshake did not attach a Principal (e.g. token missing from headers),
                     // fall back to validating the STOMP CONNECT headers.
-                    if (acc.getUser() == null) {
+                    if (userId == null) {
                         // 1) Prefer the authenticated userId attached during the WebSocket handshake
                         //    (JwtHandshakeInterceptor stores it in the session attributes). This covers
                         //    cases where intermediaries strip the CONNECT headers but the initial HTTP
@@ -83,7 +83,7 @@ public class StompSecurityInterceptor implements ChannelInterceptor {
                         }
                     }
 
-                    if (acc.getUser() == null) {
+                    if (userId == null) {
                         String token = headerFirst(acc, HttpHeaders.AUTHORIZATION);
                         if (token == null) {
                             token = headerFirst(acc, "authorization"); // tolerate lowercase from some clients
@@ -213,9 +213,32 @@ public class StompSecurityInterceptor implements ChannelInterceptor {
     }
 
     private static Long requireUser(StompHeaderAccessor acc) {
+        Long id = extractUserId(acc);
+        if (id != null) {
+            return id;
+        }
+
         Principal p = acc.getUser();
-        if (p == null) throw new IllegalArgumentException("No Principal on frame");
-        return Long.valueOf(p.getName());
+        String desc = p != null ? p.getName() : "<none>";
+        throw new IllegalArgumentException("No valid Principal on frame (found: " + desc + ")");
+    }
+
+    private static Long extractUserId(StompHeaderAccessor acc) {
+        Principal p = acc.getUser();
+        if (p == null) {
+            return null;
+        }
+        if (p instanceof WsUserPrincipal custom) {
+            return custom.getUserId();
+        }
+        try {
+            return Long.valueOf(p.getName());
+        } catch (NumberFormatException nfe) {
+            // Non-numeric principals (e.g., usernames set by API Gateway) should not abort CONNECT;
+            // fall back to token-based auth instead.
+            log.debug("Ignoring non-numeric Principal on session {}: {}", acc.getSessionId(), p.getName());
+            return null;
+        }
     }
 
     private static String normalizeToken(String token) {
