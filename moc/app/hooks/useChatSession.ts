@@ -17,6 +17,12 @@ import { useChatRegistry } from '../context/ChatContext';
 import { getStoredUserId } from '../services/authStorage';
 import { E2EEClient, E2EEEnvelope, getE2EEClient } from '../services/e2ee';
 import {
+  decryptMessage,
+  encryptMessage,
+  ensureSharedRoomKey,
+  type EncryptedPayload,
+} from '../services/messageCrypto';
+import {
   ChatMessageDto,
   fetchRoomMessages,
   markRoomRead,
@@ -124,6 +130,7 @@ export const useChatSession = ({
   const [userLoaded, setUserLoaded] = useState(false);
   const [e2eeClient, setE2eeClient] = useState<E2EEClient | null>(null);
   const [e2eeReady, setE2eeReady] = useState(false);
+  const [sharedRoomKey, setSharedRoomKey] = useState<string | null>(null);
   const latestMessageIdRef = useRef<string | null>(null);
   const resolvedRoomKey = useMemo(
     () => roomKey ?? (roomId != null ? String(roomId) : null),
@@ -144,6 +151,29 @@ export const useChatSession = ({
       .catch(() => setCurrentUserId(null))
       .finally(() => setUserLoaded(true));
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!resolvedRoomKey) {
+      setSharedRoomKey(null);
+      return undefined;
+    }
+    ensureSharedRoomKey(resolvedRoomKey)
+      .then(key => {
+        if (!cancelled) {
+          setSharedRoomKey(key);
+        }
+      })
+      .catch(err => {
+        console.warn('Failed to derive shared room key', err);
+        if (!cancelled) {
+          setSharedRoomKey(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [resolvedRoomKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -186,7 +216,7 @@ export const useChatSession = ({
       const idx = prev.findIndex(m => m.messageId === incoming.messageId);
       if (idx >= 0) {
         const next = [...prev];
-       next[idx] = {
+        next[idx] = {
           ...next[idx],
           ...incoming,
           readByPeer:
@@ -219,6 +249,14 @@ export const useChatSession = ({
           const base = toInternalMessage(dto);
           let text = dto.body ?? null;
           let failed = false;
+          const encryptedPayload: EncryptedPayload | null =
+            dto.ciphertext && dto.iv
+              ? {
+                  ciphertext: dto.ciphertext,
+                  iv: dto.iv,
+                  aad: dto.aad,
+                }
+              : null;
           if (dto.e2ee && dto.ciphertext && dto.aad && dto.iv && dto.keyRef) {
             const envelope: E2EEEnvelope = {
               messageId: dto.messageId,
@@ -240,6 +278,17 @@ export const useChatSession = ({
               text = 'Encrypted message';
               failed = true;
             }
+            } else if (dto.e2ee && encryptedPayload && sharedRoomKey) {
+            try {
+              text = await decryptMessage(encryptedPayload, sharedRoomKey);
+            } catch (decryptErr) {
+              console.warn('Failed to decrypt symmetric history message', decryptErr);
+              text = 'Unable to decrypt message';
+              failed = true;
+            }
+          } else if (dto.e2ee && encryptedPayload) {
+            text = 'Encrypted message';
+            failed = true;
           }
           return { ...base, body: text, decryptionFailed: failed };
         }),
@@ -264,7 +313,15 @@ export const useChatSession = ({
     } finally {
       setIsLoading(false);
     }
-  }, [roomId, resolvedRoomKey, updateRoomActivity, resetUnread, e2eeClient, currentUserId]);
+  }, [
+    roomId,
+    resolvedRoomKey,
+    updateRoomActivity,
+    resetUnread,
+    e2eeClient,
+    currentUserId,
+    sharedRoomKey,
+  ]);
 
   useEffect(() => {
     if (!userLoaded) {
@@ -401,9 +458,24 @@ export const useChatSession = ({
           } else {
             finalize('Encrypted message', true);
           }
-        } else {
-          finalize('Encrypted message', true);
+        return;
+      }
+       if (payload.ciphertext && payload.iv && sharedRoomKey) {
+          const encrypted: EncryptedPayload = {
+            ciphertext: payload.ciphertext,
+            iv: payload.iv,
+            aad: payload.aad,
+          };
+          decryptMessage(encrypted, sharedRoomKey)
+            .then(text => finalize(text))
+            .catch(err => {
+              console.warn('Failed to decrypt symmetric incoming message', err);
+              finalize('Unable to decrypt message', true);
+            });
+          return;
         }
+
+        finalize('Encrypted message', true);
         return;
       }
 
@@ -523,6 +595,7 @@ export const useChatSession = ({
     currentUserId,
     peerId,
     e2eeClient,
+    sharedRoomKey,
   ]);
 
   useEffect(() => {
@@ -638,7 +711,7 @@ export const useChatSession = ({
         pending: true,
         error: false,
         readByPeer: false,
-        e2ee: Boolean(peerId && e2eeClient),
+        e2ee: Boolean((peerId && e2eeClient) || sharedRoomKey),
       };
       mergeMessage(optimistic);
       latestMessageIdRef.current = messageId;
@@ -670,6 +743,20 @@ export const useChatSession = ({
           } catch (encryptErr) {
             console.warn('Failed to encrypt message', encryptErr);
           }
+           } else if (sharedRoomKey) {
+          try {
+            const encrypted = await encryptMessage(body, sharedRoomKey);
+            payload = {
+              messageId,
+              type: MESSAGE_TYPE_TEXT,
+              e2ee: true,
+              algo: 'XSalsa20-Poly1305',
+              iv: encrypted.iv,
+              ciphertext: encrypted.ciphertext,
+            };
+          } catch (encryptErr) {
+            console.warn('Failed to encrypt symmetric message', encryptErr);
+          }
         }
         if (!payload) {
           payload = {
@@ -699,7 +786,17 @@ export const useChatSession = ({
         });
       }
     },
-    [roomId, resolvedRoomKey, currentUserId, mergeMessage, updateRoomActivity, resetUnread, peerId, e2eeClient],
+   [
+      roomId,
+      resolvedRoomKey,
+      currentUserId,
+      mergeMessage,
+      updateRoomActivity,
+      resetUnread,
+      peerId,
+      e2eeClient,
+      sharedRoomKey,
+    ],
   );
 
   const markLatestRead = useCallback(async () => {
