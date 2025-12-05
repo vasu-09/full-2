@@ -4,11 +4,11 @@ import com.om.Real_Time_Communication.Repository.ChatMessageRepository;
 import com.om.Real_Time_Communication.Repository.ChatRoomParticipantRepository;
 import com.om.Real_Time_Communication.models.ChatMessage;
 import com.om.Real_Time_Communication.utility.MessageCursor;
-import io.micrometer.common.lang.Nullable;
+//import io.micrometer.common.lang.Nullable;
 import jakarta.transaction.Transactional;
-import lombok.RequiredArgsConstructor;
+//import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.redis.core.StringRedisTemplate;
+//import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 
@@ -24,13 +24,14 @@ public class MessagePagingService {
 
     private final ChatRoomParticipantRepository partrepo;
 //    private final StringRedisTemplate redis;
-private final @Nullable StringRedisTemplate redis;
-
-//    public MessagePagingService(ChatMessageRepository repo, ChatRoomParticipantRepository partrepo, StringRedisTemplate redis) {
-public MessagePagingService(ChatMessageRepository repo, ChatRoomParticipantRepository partrepo, @Nullable StringRedisTemplate redis) {
+//private final @Nullable StringRedisTemplate redis;
+//
+////    public MessagePagingService(ChatMessageRepository repo, ChatRoomParticipantRepository partrepo, StringRedisTemplate redis) {
+//public MessagePagingService(ChatMessageRepository repo, ChatRoomParticipantRepository partrepo, @Nullable StringRedisTemplate redis) {
+public MessagePagingService(ChatMessageRepository repo, ChatRoomParticipantRepository partrepo) {
         this.repo = repo;
         this.partrepo = partrepo;
-        this.redis = redis;
+//        this.redis = redis;
     }
 
     @Transactional
@@ -38,9 +39,9 @@ public MessagePagingService(ChatMessageRepository repo, ChatRoomParticipantRepos
         partrepo.updateLastRead(roomId, userId, messageId);
         // clear unread counter in Redis
 //        redis.opsForHash().put("room:unread:" + roomId, String.valueOf(userId), "0");
-        if (redis != null) {
-            redis.opsForHash().put("room:unread:" + roomId, String.valueOf(userId), "0");
-        }
+//        if (redis != null) {
+//            redis.opsForHash().put("room:unread:" + roomId, String.valueOf(userId), "0");
+//        }
     }
 
     public List<ChatMessage> list(Long roomId, Instant beforeTs, Long beforeId, int limit) {

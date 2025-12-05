@@ -2,11 +2,11 @@ package com.om.Real_Time_Communication.service;
 
 import com.om.Real_Time_Communication.Repository.UserRoomStateRepository;
 import com.om.Real_Time_Communication.models.UserRoomState;
-import io.micrometer.common.lang.Nullable;
-import lombok.RequiredArgsConstructor;
+//import io.micrometer.common.lang.Nullable;
+//import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.data.redis.core.StringRedisTemplate;
+//import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.time.Instant;
 
@@ -15,13 +15,14 @@ public class ReadReceiptService {
 
     private final UserRoomStateRepository repo;
 //    private final StringRedisTemplate redis;
-private final @Nullable StringRedisTemplate redis;
-
-//    public ReadReceiptService(UserRoomStateRepository repo, StringRedisTemplate redis) {
-         public ReadReceiptService(UserRoomStateRepository repo, @Nullable StringRedisTemplate redis) {
-        this.repo = repo;
-        this.redis = redis;
-    }
+//private final @Nullable StringRedisTemplate redis;
+//
+////    public ReadReceiptService(UserRoomStateRepository repo, StringRedisTemplate redis) {
+//         public ReadReceiptService(UserRoomStateRepository repo, @Nullable StringRedisTemplate redis) {
+//        this.repo = repo;
+//        this.redis = redis;
+//    }
+    public ReadReceiptService(UserRoomStateRepository repo) { this.repo = repo; }
 
     @Transactional
     public UserRoomState updateLastRead(Long userId, Long roomId, String lastReadMessageId) {
@@ -36,9 +37,9 @@ private final @Nullable StringRedisTemplate redis;
         UserRoomState saved = repo.save(s);
         // clear unread counter in Redis so badge counts stay accurate
 //        redis.opsForHash().put("room:unread:" + roomId, String.valueOf(userId), "0");
-        if (redis != null) {
-            redis.opsForHash().put("room:unread:" + roomId, String.valueOf(userId), "0");
-        }
+//        if (redis != null) {
+//            redis.opsForHash().put("room:unread:" + roomId, String.valueOf(userId), "0");
+//        }
         return saved;
     }
 }

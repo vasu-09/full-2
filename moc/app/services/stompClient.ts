@@ -308,9 +308,26 @@ class SimpleStompClient {
     if (body) {
       frame += body;
     }
-    frame += '\0';
-    debugLog('RAW OUTBOUND FRAME', JSON.stringify(frame));
-    this.ws.send(frame);
+     debugLog('RAW OUTBOUND FRAME', JSON.stringify(frame + '\0'));
+
+    const encode = (text: string): Uint8Array => {
+      if (typeof TextEncoder !== 'undefined') {
+        return new TextEncoder().encode(text);
+      }
+
+      const arr = new Uint8Array(text.length);
+      for (let i = 0; i < text.length; i++) {
+        arr[i] = text.charCodeAt(i) & 0xff;
+      }
+      return arr;
+    };
+
+    const encoded = encode(frame);
+    const bytes = new Uint8Array(encoded.length + 1);
+    bytes.set(encoded, 0);
+    bytes[encoded.length] = 0x00; // STOMP frame terminator
+
+    (this.ws as any).send(bytes.buffer);
     debugLog('SEND FRAME', { command, headers, body });
   }
 
