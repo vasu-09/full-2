@@ -15,6 +15,11 @@ import {
 } from '../constants/stompEndpoints';
 import { useChatRegistry } from '../context/ChatContext';
 import { getStoredUserId } from '../services/authStorage';
+import {
+  getMessagesForConversationFromDb,
+  saveMessagesToDb,
+  updateMessageFlagsInDb,
+} from '../services/database';
 import { E2EEClient, E2EEEnvelope, getE2EEClient } from '../services/e2ee';
 import {
   decryptMessage,
@@ -100,6 +105,33 @@ const generateMessageId = () => {
   return `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
 };
 
+const toStoredMessage = (record: {
+  id: string;
+  conversationId: number;
+  senderId?: number | null;
+  plaintext?: string | null;
+  ciphertext?: string | null;
+  aad?: string | null;
+  iv?: string | null;
+  keyRef?: string | null;
+  e2ee?: boolean;
+  createdAt?: string | null;
+  pending?: boolean;
+  error?: boolean;
+  readByPeer?: boolean;
+}): InternalMessage => ({
+  messageId: record.id,
+  roomId: record.conversationId,
+  senderId: record.senderId ?? null,
+  type: MESSAGE_TYPE_TEXT,
+  body: record.plaintext ?? null,
+  serverTs: record.createdAt ?? null,
+  pending: record.pending,
+  error: record.error,
+  readByPeer: record.readByPeer,
+  e2ee: record.e2ee,
+});
+
 const parseFrameBody = (frame: StompFrame) => {
   try {
     return frame.body ? JSON.parse(frame.body) : null;
@@ -139,6 +171,28 @@ export const useChatSession = ({
   const typingSentRef = useRef(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const subscriptionsRef = useRef<(() => void)[]>([]);
+
+ const toDbRecord = useCallback(
+    (
+      message: InternalMessage,
+      payload?: Partial<ChatMessageDto> & { ciphertext?: string; aad?: string; iv?: string; keyRef?: string; e2ee?: boolean },
+    ) => ({
+      id: message.messageId,
+      conversationId: message.roomId,
+      senderId: message.senderId ?? null,
+      plaintext: message.body ?? null,
+      ciphertext: payload?.ciphertext ?? null,
+      aad: payload?.aad ?? null,
+      iv: payload?.iv ?? null,
+      keyRef: payload?.keyRef ?? null,
+      e2ee: payload?.e2ee ?? message.e2ee ?? false,
+      createdAt: message.serverTs ?? new Date().toISOString(),
+      pending: message.pending,
+      error: message.error,
+      readByPeer: message.readByPeer,
+    }),
+    [],
+  );
 
   useEffect(() => {
     getStoredUserId()
@@ -198,6 +252,30 @@ export const useChatSession = ({
       cancelled = true;
     };
   }, []);
+
+   useEffect(() => {
+    if (!roomId) {
+      setRawMessages([]);
+      return;
+    }
+
+    let cancelled = false;
+    getMessagesForConversationFromDb(roomId, 100)
+      .then(stored => {
+        if (cancelled) {
+          return;
+        }
+        if (stored.length) {
+          setRawMessages(stored.map(toStoredMessage));
+          const last = stored[stored.length - 1];
+          latestMessageIdRef.current = last?.id ?? null;
+        }
+      }).catch(err => console.warn('Failed to load cached messages', err));
+
+    return () => {
+      cancelled = true;
+    };
+  }, [roomId]);
 
   useEffect(() => {
     if (!roomId || !resolvedRoomKey) {
@@ -278,7 +356,7 @@ export const useChatSession = ({
               text = 'Encrypted message';
               failed = true;
             }
-            } else if (dto.e2ee && encryptedPayload && sharedRoomKey) {
+          } else if (dto.e2ee && encryptedPayload && sharedRoomKey) {
             try {
               text = await decryptMessage(encryptedPayload, sharedRoomKey);
             } catch (decryptErr) {
@@ -293,7 +371,23 @@ export const useChatSession = ({
           return { ...base, body: text, decryptionFailed: failed };
         }),
       );
-      setRawMessages(processed);
+     setRawMessages(prev => {
+        const merged = [...processed];
+        prev.forEach(existing => {
+          if (!merged.find(entry => entry.messageId === existing.messageId)) {
+            merged.push(existing);
+          }
+        });
+        return merged;
+      });
+      if (roomId) {
+        const records = processed.map((msg, idx) => toDbRecord(msg, ordered[idx]));
+        try {
+          await saveMessagesToDb(records);
+        } catch (dbErr) {
+          console.warn('Failed to persist history messages', dbErr);
+        }
+      }
       const last = ordered[ordered.length - 1];
       if (last && resolvedRoomKey) {
         latestMessageIdRef.current = last.messageId;
@@ -321,6 +415,8 @@ export const useChatSession = ({
     e2eeClient,
     currentUserId,
     sharedRoomKey,
+    toDbRecord,
+    saveMessagesToDb,
   ]);
 
   useEffect(() => {
@@ -399,9 +495,13 @@ export const useChatSession = ({
       if (!payload) {
         return;
       }
+      const payloadRoomId =
+        typeof payload.roomId === 'number' ? payload.roomId : Number(payload.roomId ?? roomId);
+      const normalizedRoomId =
+        payloadRoomId != null && !Number.isNaN(payloadRoomId) ? payloadRoomId : roomId;
       const base: InternalMessage = {
         messageId: payload.messageId,
-        roomId: payload.roomId,
+        roomId: normalizedRoomId,
         senderId: payload.senderId ?? null,
         type: payload.type ?? MESSAGE_TYPE_TEXT,
         serverTs: payload.serverTs ?? new Date().toISOString(),
@@ -410,11 +510,15 @@ export const useChatSession = ({
         e2ee: Boolean(payload.e2ee),
       };
       const finalize = (text: string | null, failed = false) => {
-        mergeMessage({
+         const merged = {
           ...base,
           body: text,
           decryptionFailed: failed,
-        });
+        };
+        mergeMessage(merged);
+        saveMessagesToDb([toDbRecord(merged, payload)]).catch(err =>
+          console.warn('Failed to persist incoming message', err),
+        );
         latestMessageIdRef.current = base.messageId;
         updateRoomActivity(resolvedRoomKey, {
           messageId: base.messageId,
@@ -496,6 +600,11 @@ export const useChatSession = ({
         pending: false,
         error: false,
       });
+      if (payload.messageId) {
+        updateMessageFlagsInDb(String(payload.messageId), { pending: false, error: false }).catch(err =>
+          console.warn('Failed to clear pending flag for message', err),
+        );
+      }
     });
 
     const typingSub = stompClient.subscribe(roomTypingTopic(roomId), frame => {
@@ -572,11 +681,14 @@ export const useChatSession = ({
               : msg,
           ),
         );
+        if (payload.messageId) {
+        updateMessageFlagsInDb(String(payload.messageId), { pending: false, error: false }).catch(err =>
+          console.warn('Failed to clear pending flag for message', err),
+        );
+      }
       });
-
       subs.push(dmTypingSub, dmReadSub);
     }
-
     subscriptionsRef.current = subs;
 
     return () => {
@@ -596,6 +708,9 @@ export const useChatSession = ({
     peerId,
     e2eeClient,
     sharedRoomKey,
+    toDbRecord,
+    saveMessagesToDb,
+    updateMessageFlagsInDb,
   ]);
 
   useEffect(() => {
@@ -766,6 +881,12 @@ export const useChatSession = ({
             e2ee: false,
           };
         }
+
+        try {
+          await saveMessagesToDb([toDbRecord({ ...optimistic, body }, payload ?? undefined)]);
+        } catch (dbErr) {
+          console.warn('Failed to persist outgoing message', dbErr);
+        }
         
         console.log('[CHAT] sending text via STOMP', {
           roomId,
@@ -784,6 +905,9 @@ export const useChatSession = ({
           pending: false,
           error: true,
         });
+        await updateMessageFlagsInDb(messageId, { pending: false, error: true }).catch(dbErr =>
+          console.warn('Failed to persist failed send status', dbErr),
+        );
       }
     },
    [
@@ -796,6 +920,9 @@ export const useChatSession = ({
       peerId,
       e2eeClient,
       sharedRoomKey,
+      toDbRecord,
+      saveMessagesToDb,
+      updateMessageFlagsInDb,
     ],
   );
 

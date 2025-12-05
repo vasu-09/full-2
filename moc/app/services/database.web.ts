@@ -26,3 +26,19 @@ export const replaceContactsInDb = async (_contacts: any[]) => {};
 export const getContactsFromDb = async () => {
   return [];
 };
+
+export const upsertConversationInDb = async (_conversation: any) => {};
+
+export const getRecentConversationsFromDb = async () => {
+  return [];
+};
+
+export const saveMessagesToDb = async (_messages: any[]) => {};
+
+export const getMessagesForConversationFromDb = async () => {
+  return [];
+};
+
+export const updateMessageFlagsInDb = async () => {};
+
+export const setConversationUnreadInDb = async () => {};

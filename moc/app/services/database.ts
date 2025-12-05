@@ -3,5 +3,5 @@
 // Actual implementations are in database.native.ts (Android/iOS)
 // and database.web.ts (web/debug).
 
-export { };
+export * from './database.native';
 
