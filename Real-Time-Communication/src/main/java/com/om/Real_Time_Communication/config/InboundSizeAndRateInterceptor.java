@@ -2,6 +2,7 @@ package com.om.Real_Time_Communication.config;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.simp.stomp.StompCommand;
@@ -18,6 +19,16 @@ import java.util.List;
 public class InboundSizeAndRateInterceptor implements ChannelInterceptor {
     private static final int CONNECT_MAX_BYTES = 256 * 1024; // allow fatter CONNECT headers (Authorization + E2EE)
     private static final int DEFAULT_MAX_PAYLOAD_BYTES = 64 * 1024; // 64KB cap for regular traffic
+
+    @Value("${rtc.rate-limit.enabled:true}")
+    private boolean rateLimitingEnabled;
+
+    @Value("${rtc.rate-limit.subscriptions-per-window:25}")
+    private int subscriptionsPerWindow;
+
+    @Value("${rtc.rate-limit.subscription-window-ms:10000}")
+    private long subscriptionWindowMs;
+
 
     @Autowired
     private  SlidingWindowRateLimiter limiter;
@@ -37,6 +48,9 @@ public class InboundSizeAndRateInterceptor implements ChannelInterceptor {
             throw new IllegalArgumentException("Payload too large: " + size + " bytes");
         }
 
+        if (!rateLimitingEnabled) {
+            return msg;
+        }
         // 2) Rate limits
         String user = acc.getUser() != null ? acc.getUser().getName() : "anon";
         StompCommand cmd = acc.getCommand();
@@ -50,7 +64,7 @@ public class InboundSizeAndRateInterceptor implements ChannelInterceptor {
             limiter.checkOrThrow("conn:" + connectKey + ":connect", 30, 10_000);
         } else if (StompCommand.SUBSCRIBE.equals(cmd)) {
             // 10 joins / 10s per user
-            limiter.checkOrThrow("u:" + user + ":joins", 10, 10_000);
+            limiter.checkOrThrow("u:" + user + ":joins",  subscriptionsPerWindow, subscriptionWindowMs);
         } else if (StompCommand.SEND.equals(cmd)) {
             // 50 msgs / 5s per (user, room) + 200 msgs / 5s global per user
             String dest = acc.getDestination();        // e.g., /app/room/123/send

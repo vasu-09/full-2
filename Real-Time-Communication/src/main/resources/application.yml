@@ -76,3 +76,7 @@ rtc:
   redis:
     enabled: false
     url: ${RTC_REDIS_URL:redis://localhost:6379}
+  rate-limit:
+    enabled: true
+    subscriptions-per-window: 25
+    subscription-window-ms: 10000
