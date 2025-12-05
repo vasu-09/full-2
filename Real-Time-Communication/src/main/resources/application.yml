@@ -77,6 +77,14 @@ rtc:
     enabled: false
     url: ${RTC_REDIS_URL:redis://localhost:6379}
   rate-limit:
-    enabled: true
-    subscriptions-per-window: 25
-    subscription-window-ms: 10000
+    connect:
+      limit: 30
+      window-ms: 10000
+    subscribe:
+      limit: 50      # more generous to avoid local reconnect storms disconnecting clients
+      window-ms: 10000
+    send:
+      room-limit: 50
+      room-window-ms: 5000
+      user-limit: 200
+      user-window-ms: 5000
