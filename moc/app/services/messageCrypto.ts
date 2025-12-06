@@ -3,13 +3,13 @@ import * as Crypto from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import nacl from 'tweetnacl';
-
+import { getStoredUserId, getStoredUsername } from './authStorage';
 import {
-    base64ToBytes,
-    bytesToBase64,
-    bytesToUtf8,
-    hexToBytes,
-    utf8ToBytes,
+  base64ToBytes,
+  bytesToBase64,
+  bytesToUtf8,
+  hexToBytes,
+  utf8ToBytes,
 } from './e2ee/encoding';
 import { createIntegrityStorage, normalizeSecureStoreKey, type StorageHandler } from './secureStorage';
 
@@ -20,6 +20,8 @@ export type EncryptedPayload = {
 };
 
 const SHARED_KEY_PREFIX = 'chat.sharedKey:';
+const SHARED_KEY_SALT_PREFIX = 'chat.sharedKeySalt:';
+const PBKDF2_ITERATIONS = 150_000;
 
 const sharedKeyStorage: StorageHandler = Platform.OS === 'web'
   ? {
@@ -37,11 +39,54 @@ const sharedKeyStorage: StorageHandler = Platform.OS === 'web'
     );
 
 const getStorageKey = (roomKey: string) => `${SHARED_KEY_PREFIX}${normalizeSecureStoreKey(roomKey)}`;
+const getSalt = (roomKey: string) => `${SHARED_KEY_SALT_PREFIX}${normalizeSecureStoreKey(roomKey)}`;
+
+const deriveWithSubtle = async (secret: string, salt: string) => {
+  const textEncoder = new TextEncoder();
+  const subtle = (globalThis as any)?.crypto?.subtle;
+  if (!subtle) {
+    return null;
+  }
+
+  const baseKey = await subtle.importKey(
+    'raw',
+    textEncoder.encode(secret),
+    'PBKDF2',
+    false,
+    ['deriveBits'],
+  );
+
+  const derivedBits = await subtle.deriveBits(
+    {
+      name: 'PBKDF2',
+      salt: textEncoder.encode(salt),
+      iterations: PBKDF2_ITERATIONS,
+      hash: 'SHA-256',
+    },
+    baseKey,
+    nacl.secretbox.keyLength * 8,
+  );
+
+  return new Uint8Array(derivedBits);
+};
 
 const deriveSharedKey = async (roomKey: string): Promise<string> => {
-  const hex = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, roomKey);
-  const keyBytes = hexToBytes(hex).slice(0, nacl.secretbox.keyLength);
-  return bytesToBase64(keyBytes);
+  const userSecret = (await getStoredUsername()) ?? (await getStoredUserId()) ?? '';
+  if (!userSecret) {
+    throw new Error('Missing user credential for key derivation');
+  }
+
+  const salt = getSalt(roomKey);
+  const derived =
+    (await deriveWithSubtle(userSecret, salt)) ??
+    hexToBytes(
+      await Crypto.digestStringAsync(
+        Crypto.CryptoDigestAlgorithm.SHA512,
+        `${userSecret}:${salt}:${PBKDF2_ITERATIONS}`,
+      ),
+    ).slice(0, nacl.secretbox.keyLength);
+
+  return bytesToBase64(derived);
 };
 
 export const ensureSharedRoomKey = async (roomKey: string): Promise<string> => {
@@ -75,7 +120,14 @@ export const decryptMessage = async (
     }
     return bytesToUtf8(opened);
   } catch (err) {
-    console.warn('[crypto] failed to decrypt message', err);
+    const failureMeta = {
+      aadPresent: Boolean(payload.aad),
+      cipherLength: payload.ciphertext?.length ?? 0,
+      ivLength: payload.iv?.length ?? 0,
+      keyLength: sharedKeyB64?.length ?? 0,
+      reason: err instanceof Error ? err.message : 'unknown',
+    };
+    console.warn('[crypto] failed to decrypt message', failureMeta, err);
     throw err;
   }
 };

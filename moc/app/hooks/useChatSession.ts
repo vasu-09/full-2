@@ -41,6 +41,10 @@ type InternalMessage = {
   type: string;
   body?: string | null;
   serverTs?: string | null;
+  ciphertext?: string | null;
+  iv?: string | null;
+  aad?: string | null;
+  keyRef?: string | null;
   pending?: boolean;
   error?: boolean;
   readByPeer?: boolean;
@@ -126,6 +130,10 @@ const toStoredMessage = (record: {
   type: MESSAGE_TYPE_TEXT,
   body: record.plaintext ?? null,
   serverTs: record.createdAt ?? null,
+  ciphertext: record.ciphertext ?? null,
+  aad: record.aad ?? null,
+  iv: record.iv ?? null,
+  keyRef: record.keyRef ?? null,
   pending: record.pending,
   error: record.error,
   readByPeer: record.readByPeer,
@@ -172,7 +180,7 @@ export const useChatSession = ({
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const subscriptionsRef = useRef<(() => void)[]>([]);
 
- const toDbRecord = useCallback(
+  const toDbRecord = useCallback(
     (
       message: InternalMessage,
       payload?: Partial<ChatMessageDto> & { ciphertext?: string; aad?: string; iv?: string; keyRef?: string; e2ee?: boolean },
@@ -180,7 +188,7 @@ export const useChatSession = ({
       id: message.messageId,
       conversationId: message.roomId,
       senderId: message.senderId ?? null,
-      plaintext: message.body ?? null,
+      plaintext: payload?.ciphertext ? null : message.body ?? null,
       ciphertext: payload?.ciphertext ?? null,
       aad: payload?.aad ?? null,
       iv: payload?.iv ?? null,
@@ -228,6 +236,55 @@ export const useChatSession = ({
       cancelled = true;
     };
   }, [resolvedRoomKey]);
+
+  useEffect(() => {
+    if (!sharedRoomKey) {
+      return;
+    }
+
+    let cancelled = false;
+    const candidates = rawMessages.filter(
+      msg => !msg.body && Boolean(msg.ciphertext) && Boolean(msg.iv),
+    );
+    if (!candidates.length) {
+      return undefined;
+    }
+
+    (async () => {
+      const updates: Record<string, { text: string | null; failed: boolean }> = {};
+      for (const msg of candidates) {
+        try {
+          const text = await decryptMessage(
+            {
+              ciphertext: msg.ciphertext as string,
+              iv: msg.iv as string,
+              aad: msg.aad ?? undefined,
+            },
+            sharedRoomKey,
+          );
+          updates[msg.messageId] = { text, failed: false };
+        } catch (err) {
+          console.warn('Failed to decrypt cached message', { messageId: msg.messageId }, err);
+          updates[msg.messageId] = { text: 'Unable to decrypt message', failed: true };
+        }
+      }
+
+      if (!cancelled && Object.keys(updates).length) {
+        setRawMessages(prev =>
+          prev.map(msg =>
+            updates[msg.messageId]
+              ? { ...msg, body: updates[msg.messageId].text, decryptionFailed: updates[msg.messageId].failed }
+              : msg,
+          ),
+        );
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [rawMessages, sharedRoomKey]);
+
 
   useEffect(() => {
     let cancelled = false;
