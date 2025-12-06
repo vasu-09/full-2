@@ -766,25 +766,31 @@ export default function ChatDetailScreen() {
             >
               <Icon name="arrow-back" size={24} color="#fff" />
             </TouchableOpacity>
-            <Image source={{ uri: avatarUri }} style={styles.avatar} />
-            <TouchableOpacity
-              style={styles.titleContainer}
-              onPress={() => {
-                const media = filteredMessages.filter(m => m.image).map(m => m.image);
-                router.push({
-                  pathname: '/screens/ContactProfileScreen',
-                  params: {
-                    name: chatTitle,
-                    image: avatarUri,
-                    phone: params?.phone ? String(params.phone) : '',
-                    media: JSON.stringify(media),
-                  },
-                });
-              }}
-            >
-              <Text style={styles.headerTitle}>{chatTitle}</Text>
-              <Text style={styles.headerSubtitle}>{subtitleText}</Text>
-              </TouchableOpacity>
+           {!selectedMessage ? (
+              <>
+                <Image source={{ uri: avatarUri }} style={styles.avatar} />
+                <TouchableOpacity
+                  style={styles.titleContainer}
+                  onPress={() => {
+                    const media = filteredMessages.filter(m => m.image).map(m => m.image);
+                    router.push({
+                      pathname: '/screens/ContactProfileScreen',
+                      params: {
+                        name: chatTitle,
+                        image: avatarUri,
+                        phone: params?.phone ? String(params.phone) : '',
+                        media: JSON.stringify(media),
+                      },
+                    });
+                  }}
+                >
+                  <Text style={styles.headerTitle}>{chatTitle}</Text>
+                  <Text style={styles.headerSubtitle}>{subtitleText}</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <View style={{ flex: 1 }} />
+            )}
             <View style={styles.headerActions}>
              {selectedMessage ? (
                 <>
@@ -798,7 +804,12 @@ export default function ChatDetailScreen() {
                     <Icon name="content-copy" size={22} color="#fff" />
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.iconBtn} onPress={handleForwardSelected}>
-                    <Icon name="forward" size={24} color="#fff" />
+                    <Icon
+                      name="reply"
+                      size={24}
+                      color="#fff"
+                      style={{ transform: [{ scaleX: -1 }] }} // flip horizontally
+                    />
                   </TouchableOpacity>
                   <View style={styles.moreMenuWrapper}>
                     <TouchableOpacity
