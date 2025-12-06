@@ -919,8 +919,7 @@ export default function ChatDetailScreen() {
             keyExtractor={i => i.id}
             contentContainerStyle={{
               padding: 12,
-              paddingBottom:
-                BAR_HEIGHT + MESSAGE_BAR_HEIGHT + bottomOffset + 12 + insets.top,
+              paddingBottom: MESSAGE_BAR_HEIGHT + bottomOffset,
             }}
             ListEmptyComponent={
               isHistoryLoading ? (
@@ -1357,7 +1356,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  
+
   titleContainer: {
     flex: 1,
     justifyContent: 'center',
