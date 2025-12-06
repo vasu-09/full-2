@@ -925,11 +925,14 @@ export default function ChatDetailScreen() {
               ) : null
             }
             renderItem={({ item }) => {
-              const statusText = item.pending
-                ? 'Sending…'
-                : item.failed
-                  ? 'Failed'
-                  : item.time;
+               const statusColor = item.failed
+                ? '#b3261e'
+                : item.pending
+                  ? '#1f6ea7'
+                  : item.sender === 'me'
+                    ? '#555'
+                    : '#777';
+              const showClock = item.pending || item.failed;
               const isSelected = selectedMessages.some(m => m.id === item.id);
               return (
                 <TouchableOpacity
@@ -980,16 +983,42 @@ export default function ChatDetailScreen() {
                     ) : (
                       <Text style={styles.messageText}>{item.text}</Text>
                     )}
-                    <Text
-                      style={[
-                        styles.messageTime,
-                        item.sender === 'me' ? styles.myTime : styles.theirTime,
-                        item.pending ? styles.pendingTime : null,
-                        item.failed ? styles.failedTime : null,
-                      ]}
-                    >
-                      {statusText}
-                    </Text>
+                    {showClock ? (
+                      <View style={styles.messageStatusRow}>
+                        {item.time ? (
+                          <Text
+                            style={[
+                              styles.messageTime,
+                              styles.statusTimeInRow,
+                              item.sender === 'me' ? styles.myTime : styles.theirTime,
+                              item.pending ? styles.pendingTime : null,
+                              item.failed ? styles.failedTime : null,
+                              { color: statusColor },
+                            ]}
+                          >
+                            {item.time}
+                          </Text>
+                        ) : null}
+                        <Icon
+                          name="schedule"
+                          size={12}
+                          color={statusColor}
+                          style={styles.statusIcon}
+                        />
+                      </View>
+                    ) : (
+                      <Text
+                        style={[
+                          styles.messageTime,
+                          item.sender === 'me' ? styles.myTime : styles.theirTime,
+                          item.pending ? styles.pendingTime : null,
+                          item.failed ? styles.failedTime : null,
+                          { color: statusColor },
+                        ]}
+                      >
+                        {item.time}
+                      </Text>
+                    )}
                   </View>
                 </TouchableOpacity>
               );
