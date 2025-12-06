@@ -244,7 +244,11 @@ export const useChatSession = ({
 
     let cancelled = false;
     const candidates = rawMessages.filter(
-      msg => !msg.body && Boolean(msg.ciphertext) && Boolean(msg.iv),
+      msg =>
+        !msg.keyRef &&
+        Boolean(msg.ciphertext) &&
+        Boolean(msg.iv) &&
+        (!msg.body || msg.decryptionFailed),
     );
     if (!candidates.length) {
       return undefined;
@@ -285,6 +289,60 @@ export const useChatSession = ({
     };
   }, [rawMessages, sharedRoomKey]);
 
+  useEffect(() => {
+    if (!e2eeClient) {
+      return;
+    }
+
+    let cancelled = false;
+    const candidates = rawMessages.filter(
+      msg =>
+        Boolean(msg.keyRef) &&
+        Boolean(msg.ciphertext) &&
+        Boolean(msg.iv) &&
+        Boolean(msg.aad) &&
+        (!msg.body || msg.decryptionFailed),
+    );
+
+    if (!candidates.length) {
+      return undefined;
+    }
+
+    (async () => {
+      const updates: Record<string, { text: string | null; failed: boolean }> = {};
+      for (const msg of candidates) {
+        try {
+          const envelope: E2EEEnvelope = {
+            messageId: msg.messageId,
+            aad: msg.aad as string,
+            iv: msg.iv as string,
+            ciphertext: msg.ciphertext as string,
+            keyRef: msg.keyRef as string,
+          };
+          const fromSelf = currentUserId != null && msg.senderId === currentUserId;
+          const text = await e2eeClient.decryptEnvelope(envelope, Boolean(fromSelf));
+          updates[msg.messageId] = { text, failed: false };
+        } catch (err) {
+          console.warn('Failed to decrypt cached envelope', { messageId: msg.messageId }, err);
+          updates[msg.messageId] = { text: 'Unable to decrypt message', failed: true };
+        }
+      }
+
+      if (!cancelled && Object.keys(updates).length) {
+        setRawMessages(prev =>
+          prev.map(msg =>
+            updates[msg.messageId]
+              ? { ...msg, body: updates[msg.messageId].text, decryptionFailed: updates[msg.messageId].failed }
+              : msg,
+          ),
+        );
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUserId, e2eeClient, rawMessages]);
 
   useEffect(() => {
     let cancelled = false;
@@ -310,7 +368,7 @@ export const useChatSession = ({
     };
   }, []);
 
-   useEffect(() => {
+  useEffect(() => {
     if (!roomId) {
       setRawMessages([]);
       return;
