@@ -534,6 +534,8 @@ export const useChatSession = ({
     saveMessagesToDb,
   ]);
 
+  const lastLoadedRef = useRef<{ roomId: number | null; key: string | null } | null>(null);
+
   useEffect(() => {
     if (!userLoaded) {
       return;
@@ -541,8 +543,15 @@ export const useChatSession = ({
     if (peerId && !e2eeReady) {
       return;
     }
+    const lastLoaded = lastLoadedRef.current;
+    const resolvedKey = resolvedRoomKey ?? null;
+    if (lastLoaded && lastLoaded.roomId === roomId && lastLoaded.key === resolvedKey) {
+      return;
+    }
+
+    lastLoadedRef.current = { roomId, key: resolvedKey };
     loadHistory();
-  }, [loadHistory, userLoaded, peerId, e2eeReady]);
+  }, [loadHistory, userLoaded, peerId, e2eeReady, roomId, resolvedRoomKey]);
 
   useEffect(() => {
     
