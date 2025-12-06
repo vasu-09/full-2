@@ -1,5 +1,6 @@
 // ChatDetailScreen.js
 import { Audio } from 'expo-audio';
+import * as Clipboard from 'expo-clipboard';
 import * as DocumentPicker from 'expo-document-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -151,6 +152,10 @@ export default function ChatDetailScreen() {
     () => [...sessionMessages, ...localMessages],
     [sessionMessages, localMessages],
   );
+  const filteredMessages = useMemo(
+    () => messages.filter(message => !deletedMessageIds.includes(message.id)),
+    [messages, deletedMessageIds],
+  );
   const subtitleText = typingUsers.length
     ? 'typing…'
     : 'Messages are end-to-end encrypted';
@@ -167,6 +172,9 @@ export default function ChatDetailScreen() {
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
   const [playingMessageId, setPlayingMessageId] = useState(null);
+  const [selectedMessage, setSelectedMessage] = useState(null);
+  const [moreMenuVisible, setMoreMenuVisible] = useState(false);
+  const [deletedMessageIds, setDeletedMessageIds] = useState([]);
 
   const handleCallRoomEvent = useCallback(
     event => {
@@ -314,9 +322,22 @@ export default function ChatDetailScreen() {
     }
   }, [messages, markLatestRead]);
 
+  const clearSelection = useCallback(() => {
+    setSelectedMessage(null);
+    setMoreMenuVisible(false);
+  }, []);
+
   useEffect(() => {
     setLocalMessages([]);
-  }, [roomId, roomKey]);
+  setDeletedMessageIds([]);
+    clearSelection();
+  }, [roomId, roomKey, clearSelection]);
+
+  useEffect(() => {
+    if (selectedMessage && !messages.find(msg => msg.id === selectedMessage.id)) {
+      clearSelection();
+    }
+  }, [messages, selectedMessage, clearSelection]);
 
   const sendCurrentMessage = async () => {
     const txt = input.trim();
@@ -327,6 +348,58 @@ export default function ChatDetailScreen() {
     } catch (err) {
       console.warn('Send message error:', err);
     }
+  };
+
+  const handleReply = () => {
+    if (!selectedMessage) return;
+    setInput(prev => {
+      const prefix = selectedMessage.text || 'Audio message';
+      return prev ? `${prev}\nReplying to: ${prefix}` : `Replying to: ${prefix}`;
+    });
+    clearSelection();
+  };
+
+  const handleDeleteSelected = () => {
+    if (!selectedMessage) return;
+    setDeletedMessageIds(prev => (prev.includes(selectedMessage.id) ? prev : [...prev, selectedMessage.id]));
+    clearSelection();
+  };
+
+  const handleCopySelected = async () => {
+    if (!selectedMessage?.text) {
+      Alert.alert('Copy unavailable', 'Only text messages can be copied.');
+      setMoreMenuVisible(false);
+      return;
+    }
+    try {
+      await Clipboard.setStringAsync(selectedMessage.text);
+      Alert.alert('Copied', 'Message copied to clipboard.');
+    } catch (err) {
+      console.warn('Copy message error:', err);
+    } finally {
+      setMoreMenuVisible(false);
+    }
+  };
+
+  const handleForwardSelected = () => {
+    if (!selectedMessage) return;
+    Alert.alert('Forward', 'Forward message action triggered.');
+    clearSelection();
+  };
+
+  const handleInfo = () => {
+    Alert.alert('Message info', 'Info option selected.');
+    setMoreMenuVisible(false);
+  };
+
+  const handlePin = () => {
+    Alert.alert('Pinned', 'Message pinned.');
+    setMoreMenuVisible(false);
+  };
+
+  const handleTranslate = () => {
+    Alert.alert('Translate', 'Translate option selected.');
+    setMoreMenuVisible(false);
   };
 
   function parseQty(qtyStr) {
@@ -696,7 +769,7 @@ export default function ChatDetailScreen() {
             <TouchableOpacity
               style={styles.titleContainer}
               onPress={() => {
-                const media = messages.filter(m => m.image).map(m => m.image);
+                const media = filteredMessages.filter(m => m.image).map(m => m.image);
                 router.push({
                   pathname: '/screens/ContactProfileScreen',
                   params: {
@@ -710,53 +783,96 @@ export default function ChatDetailScreen() {
             >
               <Text style={styles.headerTitle}>{chatTitle}</Text>
               <Text style={styles.headerSubtitle}>{subtitleText}</Text>
-            </TouchableOpacity>
+              </TouchableOpacity>
             <View style={styles.headerActions}>
-              <TouchableOpacity
-                style={styles.iconBtn}
-                onPress={() =>
-                  router.push({
-                    pathname: '/screens/VideoCallScreen',
-                    params: {
-                      name: chatTitle,
-                      image: avatarUri,
-                    },
-                  })
-                }
-              >
-                <Icon name="videocam" size={24} color="#fff" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.iconBtn}
-                onPress={async () => {
-                  if (!roomId || !peerId) {
-                    Alert.alert('Call unavailable', 'This chat is not ready for calling yet.');
-                    return;
-                  }
-                  if (activeCallIdRef.current && activeCallIdRef.current !== 'pending') {
-                    return;
-                  }
-                  activeCallIdRef.current = 'pending';
-                  try {
-                    await sendRoomCallInvite([peerId]);
-                  } catch (err) {
-                    activeCallIdRef.current = null;
-                    console.warn('Failed to start voice call', err);
-                    Alert.alert('Call failed', 'Unable to start the call. Please try again.');
-                  } finally {
-                    setTimeout(() => {
-                      if (activeCallIdRef.current === 'pending') {
-                        activeCallIdRef.current = null;
+             {selectedMessage ? (
+                <>
+                  <TouchableOpacity style={styles.iconBtn} onPress={handleReply}>
+                    <Icon name="reply" size={24} color="#fff" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.iconBtn} onPress={handleDeleteSelected}>
+                    <Icon name="delete" size={24} color="#fff" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.iconBtn} onPress={handleCopySelected}>
+                    <Icon name="content-copy" size={22} color="#fff" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.iconBtn} onPress={handleForwardSelected}>
+                    <Icon name="forward" size={24} color="#fff" />
+                  </TouchableOpacity>
+                  <View style={styles.moreMenuWrapper}>
+                    <TouchableOpacity
+                      style={styles.iconBtn}
+                      onPress={() => setMoreMenuVisible(v => !v)}
+                    >
+                      <Icon name="more-vert" size={24} color="#fff" />
+                    </TouchableOpacity>
+                    {moreMenuVisible ? (
+                      <View style={styles.moreMenu}>
+                        <TouchableOpacity style={styles.moreMenuItem} onPress={handleInfo}>
+                          <Text style={styles.moreMenuText}>Info</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.moreMenuItem} onPress={handleCopySelected}>
+                          <Text style={styles.moreMenuText}>Copy</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.moreMenuItem} onPress={handlePin}>
+                          <Text style={styles.moreMenuText}>Pin</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.moreMenuItem} onPress={handleTranslate}>
+                          <Text style={styles.moreMenuText}>Translate</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : null}
+                  </View>
+                </>
+              ) : (
+                <>
+                  <TouchableOpacity
+                    style={styles.iconBtn}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/screens/VideoCallScreen',
+                        params: {
+                          name: chatTitle,
+                          image: avatarUri,
+                        },
+                      })
+                    }
+                  >
+                    <Icon name="videocam" size={24} color="#fff" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.iconBtn}
+                    onPress={async () => {
+                      if (!roomId || !peerId) {
+                        Alert.alert('Call unavailable', 'This chat is not ready for calling yet.');
+                        return;
                       }
-                    }, 10000);
-                  }
-                }}
-              >
-                <Icon name="call" size={24} color="#fff" />
+                      if (activeCallIdRef.current && activeCallIdRef.current !== 'pending') {
+                        return;
+                      }
+                      activeCallIdRef.current = 'pending';
+                      try {
+                        await sendRoomCallInvite([peerId]);
+                      } catch (err) {
+                        activeCallIdRef.current = null;
+                        console.warn('Failed to start voice call', err);
+                        Alert.alert('Call failed', 'Unable to start the call. Please try again.');
+                      } finally {
+                        setTimeout(() => {
+                          if (activeCallIdRef.current === 'pending') {
+                            activeCallIdRef.current = null;
+                          }
+                        }, 10000);        
+                      }
+                       }}
+                  >
+                    <Icon name="call" size={24} color="#fff" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.iconBtn}>
+                    <Icon name="more-vert" size={24} color="#fff" />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.iconBtn}>
-                <Icon name="more-vert" size={24} color="#fff" />
-              </TouchableOpacity>
+               </>
+              )}
             </View>
           </View>
 
@@ -768,7 +884,7 @@ export default function ChatDetailScreen() {
           ) : null}
           <FlatList
             ref={flatListRef}
-            data={messages}
+            data={filteredMessages}
             keyExtractor={i => i.id}
             contentContainerStyle={{
               padding: 12,
@@ -788,43 +904,58 @@ export default function ChatDetailScreen() {
                 : item.failed
                   ? 'Failed'
                   : item.time;
+              const isSelected = selectedMessage?.id === item.id;
               return (
-                <View
-                  style={[
-                    styles.bubble,
-                    item.sender === 'me' ? styles.myBubble : styles.theirBubble,
-                    item.failed ? styles.failedBubble : null,
-                  ]}
+                <TouchableOpacity
+                  activeOpacity={0.9}
+                  onLongPress={() => {
+                    setSelectedMessage(item);
+                    setMoreMenuVisible(false);
+                  }}
+                  onPress={() => {
+                    if (selectedMessage) {
+                      clearSelection();
+                    }
+                  }}
                 >
-                  {item.audio ? (
-                    <View style={styles.audioMessageRow}>
-                      <TouchableOpacity
-                        style={styles.audioPlayButton}
-                        onPress={() => toggleMessagePlayback(item)}
-                        disabled={item.pending || item.failed}
-                      >
-                        <Icon
-                          name={playingMessageId === item.id ? 'pause' : 'play-arrow'}
-                          size={28}
-                          color="#1f6ea7"
-                        />
-                      </TouchableOpacity>
-                      <Text style={styles.audioDurationText}>{formatDuration(item.duration)}</Text>
-                    </View>
-                  ) : (
-                    <Text style={styles.messageText}>{item.text}</Text>
-                  )}
-                  <Text
+                  <View
                     style={[
-                      styles.messageTime,
-                      item.sender === 'me' ? styles.myTime : styles.theirTime,
-                      item.pending ? styles.pendingTime : null,
-                      item.failed ? styles.failedTime : null,
+                       styles.bubble,
+                      item.sender === 'me' ? styles.myBubble : styles.theirBubble,
+                      item.failed ? styles.failedBubble : null,
+                      isSelected ? styles.selectedBubble : null,
                     ]}
                   >
-                    {statusText}
-                  </Text>
-                </View>
+                    {item.audio ? (
+                      <View style={styles.audioMessageRow}>
+                        <TouchableOpacity
+                          style={styles.audioPlayButton}
+                          onPress={() => toggleMessagePlayback(item)}
+                          disabled={item.pending || item.failed}
+                        >
+                          <Icon
+                            name={playingMessageId === item.id ? 'pause' : 'play-arrow'}
+                            size={28}
+                            color="#1f6ea7"
+                          />
+                        </TouchableOpacity>
+                        <Text style={styles.audioDurationText}>{formatDuration(item.duration)}</Text>
+                      </View>
+                    ) : (
+                      <Text style={styles.messageText}>{item.text}</Text>
+                    )}
+                    <Text
+                      style={[
+                        styles.messageTime,
+                        item.sender === 'me' ? styles.myTime : styles.theirTime,
+                        item.pending ? styles.pendingTime : null,
+                        item.failed ? styles.failedTime : null,
+                      ]}
+                    >
+                      {statusText}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
               );
             }}
           />
@@ -1150,6 +1281,27 @@ const styles = StyleSheet.create({
   },
   headerTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   headerActions: { flexDirection: 'row' },
+  moreMenuWrapper: { position: 'relative' },
+  moreMenu: {
+    position: 'absolute',
+    top: BAR_HEIGHT,
+    right: 0,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
+    paddingVertical: 4,
+    minWidth: 140,
+    zIndex: 5,
+  },
+  moreMenuItem: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  moreMenuText: { color: '#333', fontSize: 14 },
   headerSubtitle: {
     color: '#d8e8f6',
     fontSize: 12,
@@ -1170,6 +1322,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#ECEFF1',
     alignSelf: 'flex-start',
     borderBottomLeftRadius: 0,
+  },
+   selectedBubble: {
+    borderWidth: 1,
+    borderColor: '#1f6ea7',
   },
   messageText: { fontSize: 16, lineHeight: 20 },
   messageTime: {
