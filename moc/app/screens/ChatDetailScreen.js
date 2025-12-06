@@ -148,6 +148,7 @@ export default function ChatDetailScreen() {
   }, []);
 
   const [localMessages, setLocalMessages] = useState([]);
+  const [deletedMessageIds, setDeletedMessageIds] = useState([]);
   const messages = useMemo(
     () => [...sessionMessages, ...localMessages],
     [sessionMessages, localMessages],
@@ -174,7 +175,7 @@ export default function ChatDetailScreen() {
   const [playingMessageId, setPlayingMessageId] = useState(null);
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [moreMenuVisible, setMoreMenuVisible] = useState(false);
-  const [deletedMessageIds, setDeletedMessageIds] = useState([]);
+  
 
   const handleCallRoomEvent = useCallback(
     event => {
