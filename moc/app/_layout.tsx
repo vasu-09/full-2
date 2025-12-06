@@ -4,20 +4,25 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ChatProvider } from './context/ChatContext';
+import { initializeDatabase } from './services/database';
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const [loaded] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
+  useEffect(() => {
+    initializeDatabase().catch(err => console.warn('Failed to initialize SQLite', err));
+  }, []);
   if (!loaded) return null;
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <SafeAreaProvider>
-         <ChatProvider>
+        <ChatProvider>
           <Stack initialRouteName="screens/LoginScreen" screenOptions={{ headerShown: false }}>
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             {/* <Stack.Screen name="screens/PremissionsScreen" options={{ headerShown: false }} /> */}

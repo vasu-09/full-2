@@ -1,4 +1,10 @@
-import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+
+import {
+  getRecentConversationsFromDb,
+  setConversationUnreadInDb,
+  upsertConversationInDb,
+} from '../services/database';
 
 export type RoomLastMessage = {
   messageId: string;
@@ -38,21 +44,69 @@ const sortRooms = (rooms: RoomSummary[]) => {
 export const ChatProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
 
+   useEffect(() => {
+    let cancelled = false;
+
+    getRecentConversationsFromDb()
+      .then(results => {
+        if (cancelled) {
+          return;
+        }
+        const restored = results.map(room => ({
+          id: room.id,
+          roomKey: room.roomKey,
+          title: room.title ?? room.roomKey,
+          avatar: room.avatar ?? null,
+          peerId: room.peerId ?? null,
+          lastMessage: room.lastMessage
+            ? {
+                messageId: room.lastMessage.id,
+                text: room.lastMessage.plaintext ?? room.lastMessage.ciphertext ?? undefined,
+                at: room.lastMessage.createdAt ?? new Date().toISOString(),
+                senderId: room.lastMessage.senderId ?? undefined,
+              }
+            : null,
+          unreadCount: room.unreadCount ?? 0,
+        }));
+        setRooms(sortRooms(restored));
+      })
+      .catch(err => console.warn('Failed to hydrate chat registry from SQLite', err));
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const persistConversation = useCallback((summary: RoomSummary) => {
+    upsertConversationInDb({
+      id: summary.id,
+      roomKey: summary.roomKey,
+      title: summary.title,
+      avatar: summary.avatar,
+      peerId: summary.peerId,
+      unreadCount: summary.unreadCount,
+      updatedAt: summary.lastMessage?.at,
+    }).catch(err => console.warn('Failed to persist conversation', summary.id, err));
+  }, []);
+
   const upsertRoom = useCallback(
     (room: Partial<RoomSummary> & { id: number; roomKey: string }) => {
       setRooms(prev => {
         const existingIndex = prev.findIndex(r => r.roomKey === room.roomKey);
+        let nextSummary: RoomSummary;
         if (existingIndex >= 0) {
           const next = [...prev];
-          next[existingIndex] = {
+          nextSummary  = {
             ...next[existingIndex],
             ...room,
             unreadCount: room.unreadCount ?? next[existingIndex].unreadCount,
           };
+          next[existingIndex] = nextSummary;
+          persistConversation(nextSummary);
           return sortRooms(next);
         }
 
-        const summary: RoomSummary = {
+        nextSummary  = {
           id: room.id,
           roomKey: room.roomKey,
           title: room.title ?? room.roomKey,
@@ -61,10 +115,11 @@ export const ChatProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
           lastMessage: room.lastMessage ?? null,
           unreadCount: room.unreadCount ?? 0,
         };
-        return sortRooms([...prev, summary]);
+        persistConversation(nextSummary);
+        return sortRooms([...prev, nextSummary]);
       });
     },
-    [],
+    [persistConversation],
   );
 
   const updateRoomActivity = useCallback((roomKey: string, message: RoomLastMessage) => {
@@ -78,9 +133,10 @@ export const ChatProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
         ...next[idx],
         lastMessage: message,
       };
+      persistConversation(next[idx]);
       return sortRooms(next);
     });
-  }, []);
+  }, [persistConversation]);
 
   const incrementUnread = useCallback((roomKey: string) => {
     setRooms(prev => {
@@ -93,9 +149,13 @@ export const ChatProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
         ...next[idx],
         unreadCount: next[idx].unreadCount + 1,
       };
+      setConversationUnreadInDb(next[idx].roomKey, next[idx].unreadCount).catch(err =>
+        console.warn('Failed to increment unread counter in DB', err),
+      );
+      persistConversation(next[idx]);
       return next;
     });
-  }, []);
+  }, [persistConversation]);
 
   const resetUnread = useCallback((roomKey: string) => {
     setRooms(prev => {
@@ -108,9 +168,13 @@ export const ChatProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
         ...next[idx],
         unreadCount: 0,
       };
+       setConversationUnreadInDb(next[idx].roomKey, 0).catch(err =>
+        console.warn('Failed to reset unread counter in DB', err),
+      );
+      persistConversation(next[idx]);
       return next;
     });
-  }, []);
+  }, [persistConversation]);
 
   const value = useMemo(
     () => ({ rooms, upsertRoom, updateRoomActivity, incrementUnread, resetUnread }),
