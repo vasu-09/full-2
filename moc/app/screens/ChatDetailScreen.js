@@ -929,10 +929,11 @@ export default function ChatDetailScreen() {
                       clearSelection();
                     }
                   }}
+                  style={[styles.messageRow, isSelected ? styles.selectedRow : null]}
                 >
                   <View
                     style={[
-                       styles.bubble,
+                      styles.bubble,
                       item.sender === 'me' ? styles.myBubble : styles.theirBubble,
                       item.failed ? styles.failedBubble : null,
                       isSelected ? styles.selectedBubble : null,
@@ -1319,6 +1320,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
+  messageRow: {
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+    borderRadius: 8,
+  },
+  selectedRow: {
+    backgroundColor: '#8cbbdd',
+  },
   bubble: {
     maxWidth: '80%',
     padding: 8,
@@ -1335,7 +1344,8 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     borderBottomLeftRadius: 0,
   },
-   selectedBubble: {
+  selectedBubble: {
+    backgroundColor: '#8cbbdd',
     borderWidth: 1,
     borderColor: '#1f6ea7',
   },
