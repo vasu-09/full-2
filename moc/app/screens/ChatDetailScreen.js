@@ -173,7 +173,7 @@ export default function ChatDetailScreen() {
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
   const [playingMessageId, setPlayingMessageId] = useState(null);
-  const [selectedMessage, setSelectedMessage] = useState(null);
+  const [selectedMessages, setSelectedMessages] = useState([]);
   const [moreMenuVisible, setMoreMenuVisible] = useState(false);
   
 
@@ -324,21 +324,25 @@ export default function ChatDetailScreen() {
   }, [messages, markLatestRead]);
 
   const clearSelection = useCallback(() => {
-    setSelectedMessage(null);
+    setSelectedMessages([]);
     setMoreMenuVisible(false);
   }, []);
 
   useEffect(() => {
     setLocalMessages([]);
-  setDeletedMessageIds([]);
+    setDeletedMessageIds([]);
     clearSelection();
   }, [roomId, roomKey, clearSelection]);
 
   useEffect(() => {
-    if (selectedMessage && !messages.find(msg => msg.id === selectedMessage.id)) {
-      clearSelection();
+    setSelectedMessages(prev => prev.filter(msg => messages.find(m => m.id === msg.id)));
+  }, [messages]);
+
+  useEffect(() => {
+    if (!selectedMessages.length) {
+      setMoreMenuVisible(false);
     }
-  }, [messages, selectedMessage, clearSelection]);
+  }, [selectedMessages.length]);
 
   const sendCurrentMessage = async () => {
     const txt = input.trim();
@@ -352,7 +356,11 @@ export default function ChatDetailScreen() {
   };
 
   const handleReply = () => {
-    if (!selectedMessage) return;
+    if (selectedMessages.length !== 1) {
+      Alert.alert('Select one message', 'Please select a single message to reply.');
+      return;
+    }
+    const [selectedMessage] = selectedMessages;
     setInput(prev => {
       const prefix = selectedMessage.text || 'Audio message';
       return prev ? `${prev}\nReplying to: ${prefix}` : `Replying to: ${prefix}`;
@@ -361,19 +369,24 @@ export default function ChatDetailScreen() {
   };
 
   const handleDeleteSelected = () => {
-    if (!selectedMessage) return;
-    setDeletedMessageIds(prev => (prev.includes(selectedMessage.id) ? prev : [...prev, selectedMessage.id]));
+    if (!selectedMessages.length) return;
+    setDeletedMessageIds(prev => {
+      const idSet = new Set(prev);
+      selectedMessages.forEach(message => idSet.add(message.id));
+      return Array.from(idSet);
+    });
     clearSelection();
   };
 
   const handleCopySelected = async () => {
-    if (!selectedMessage?.text) {
+    const textMessages = selectedMessages.filter(m => m.text);
+    if (!textMessages.length) {
       Alert.alert('Copy unavailable', 'Only text messages can be copied.');
       setMoreMenuVisible(false);
       return;
     }
     try {
-      await Clipboard.setStringAsync(selectedMessage.text);
+      await Clipboard.setStringAsync(textMessages.map(m => m.text).join('\n'));
       Alert.alert('Copied', 'Message copied to clipboard.');
     } catch (err) {
       console.warn('Copy message error:', err);
@@ -383,7 +396,7 @@ export default function ChatDetailScreen() {
   };
 
   const handleForwardSelected = () => {
-    if (!selectedMessage) return;
+    if (!selectedMessages.length) return;
     Alert.alert('Forward', 'Forward message action triggered.');
     clearSelection();
   };
@@ -766,7 +779,7 @@ export default function ChatDetailScreen() {
             >
               <Icon name="arrow-back" size={24} color="#fff" />
             </TouchableOpacity>
-           {!selectedMessage ? (
+           {!selectedMessages.length ? (
               <>
                 <Image source={{ uri: avatarUri }} style={styles.avatar} />
                 <TouchableOpacity
@@ -792,8 +805,9 @@ export default function ChatDetailScreen() {
               <View style={{ flex: 1 }} />
             )}
             <View style={styles.headerActions}>
-             {selectedMessage ? (
+             {selectedMessages.length? (
                 <>
+                <Text style={styles.selectionCount}>{selectedMessages.length}</Text>
                   <TouchableOpacity style={styles.iconBtn} onPress={handleReply}>
                     <Icon name="reply" size={24} color="#fff" />
                   </TouchableOpacity>
@@ -916,17 +930,26 @@ export default function ChatDetailScreen() {
                 : item.failed
                   ? 'Failed'
                   : item.time;
-              const isSelected = selectedMessage?.id === item.id;
+              const isSelected = selectedMessages.some(m => m.id === item.id);
               return (
                 <TouchableOpacity
                   activeOpacity={0.9}
                   onLongPress={() => {
-                    setSelectedMessage(item);
+                    setSelectedMessages(prev => {
+                      if (prev.some(m => m.id === item.id)) return prev;
+                      return [...prev, item];
+                    });
                     setMoreMenuVisible(false);
                   }}
                   onPress={() => {
-                    if (selectedMessage) {
-                      clearSelection();
+                    if (selectedMessages.length) {
+                      setSelectedMessages(prev => {
+                        const exists = prev.some(m => m.id === item.id);
+                        if (exists) {
+                          return prev.filter(m => m.id !== item.id);
+                        }
+                        return [...prev, item];
+                      });
                     }
                   }}
                   style={[styles.messageRow, isSelected ? styles.selectedRow : null]}
@@ -1293,6 +1316,13 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   headerTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  selectionCount: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginRight: 8,
+    alignSelf: 'center',
+  },
   headerActions: { flexDirection: 'row' },
   moreMenuWrapper: { position: 'relative' },
   moreMenu: {
