@@ -316,6 +316,11 @@ const MocScreen = () => {
             filteredRooms.map(room => {
               const lastMessage = room.lastMessage?.text ?? 'No messages yet';
               const time = formatLastTime(room.lastMessage?.at);
+              const avatarUri =
+                typeof room.avatar === 'string' && room.avatar.trim().length
+                  ? room.avatar.trim()
+                  : room.avatar;
+              const avatarSource = avatarUri ? { uri: avatarUri } : null;
               return (
                 <TouchableOpacity
                   key={room.roomKey}
@@ -332,10 +337,13 @@ const MocScreen = () => {
                     })
                   }
                 >
-                  <Image
-                    source={{ uri: room.avatar ?? 'https://ui-avatars.com/api/?name=' + encodeURIComponent(room.title) }}
-                    style={styles.chatAvatar}
-                  />
+                  {avatarSource ? (
+                    <Image source={avatarSource} style={styles.chatAvatar} />
+                  ) : (
+                    <View style={styles.chatAvatarPlaceholder}>
+                      <Icon name="person" size={24} color="#7a7a7a" />
+                    </View>
+                  )}
                   <View style={styles.chatText}>
                     <Text style={styles.chatName}>{room.title}</Text>
                     <Text style={styles.chatLastMessage} numberOfLines={1}>
@@ -687,6 +695,15 @@ const styles = StyleSheet.create({
   },
   chatAvatar: { width: 48, height: 48, borderRadius: 24, marginRight: 12 },
   chatText: { flex: 1 },
+  chatAvatarPlaceholder: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    marginRight: 12,
+    backgroundColor: '#e6e6e6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   chatName: { fontWeight: 'bold', fontSize: 16, color: '#111' },
   chatLastMessage: { color: '#555', marginTop: 2, fontSize: 13 },
   chatTime: { fontSize: 12, color: '#777' },

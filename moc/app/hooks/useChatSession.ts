@@ -1008,7 +1008,13 @@ export const useChatSession = ({
     }
   }, [roomId, resolvedRoomKey, resetUnread, peerId]);
 
-  const typingUsers = useMemo(() => typing.map(entry => entry.userId), [typing]);
+   const typingUsers = useMemo(
+    () =>
+      typing
+        .filter(entry => (currentUserId == null ? true : entry.userId !== currentUserId))
+        .map(entry => entry.userId),
+    [typing, currentUserId],
+  );
 
   return {
     messages: displayMessages,

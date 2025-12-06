@@ -1,8 +1,8 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Animated,
   Alert,
+  Animated,
   Image,
   StyleSheet,
   Text,
@@ -180,7 +180,7 @@ export default function CallScreen() {
             {image ? (
               <Image source={{ uri: image }} style={styles.avatarImage} />
             ) : (
-              <Icon name="person" size={80} color="#1f6ea7" />
+              <Icon name="person" size={80} color="#7a7a7a" />
             )}
           </View>
         </View>
@@ -268,7 +268,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
-    backgroundColor: '#fff',
+    backgroundColor: '#e6e6e6',
   },
   avatarImage: {
     width: '100%',

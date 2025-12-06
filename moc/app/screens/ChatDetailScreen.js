@@ -160,9 +160,8 @@ export default function ChatDetailScreen() {
   const subtitleText = typingUsers.length
     ? 'typing…'
     : 'Messages are end-to-end encrypted';
-  const avatarUri = params?.image
-    ? String(params.image)
-    : `https://ui-avatars.com/api/?name=${encodeURIComponent(chatTitle)}`;
+  const avatarUri = params?.image && String(params.image).trim() ? String(params.image) : null;
+  const avatarSource = avatarUri ? { uri: avatarUri } : null;
   const isRoomReady = Boolean(roomId && (roomKey || roomId));
 
   const recordingRef = useRef(null);
@@ -212,7 +211,7 @@ export default function ChatDetailScreen() {
           callId: String(callId),
           roomId: roomId ? String(roomId) : '',
           name: chatTitle,
-          image: avatarUri,
+          ...(avatarUri ? { image: avatarUri } : {}),
           role,
           peerId: peerId != null ? String(peerId) : undefined,
         },
@@ -781,7 +780,13 @@ export default function ChatDetailScreen() {
             </TouchableOpacity>
            {!selectedMessages.length ? (
               <>
-                <Image source={{ uri: avatarUri }} style={styles.avatar} />
+                {avatarSource ? (
+                  <Image source={avatarSource} style={styles.avatar} />
+                ) : (
+                  <View style={styles.avatarPlaceholder}>
+                    <Icon name="person" size={24} color="#7a7a7a" />
+                  </View>
+                )}
                 <TouchableOpacity
                   style={styles.titleContainer}
                   onPress={() => {
@@ -790,7 +795,7 @@ export default function ChatDetailScreen() {
                       pathname: '/screens/ContactProfileScreen',
                       params: {
                         name: chatTitle,
-                        image: avatarUri,
+                         ...(avatarUri ? { image: avatarUri } : {}),
                         phone: params?.phone ? String(params.phone) : '',
                         media: JSON.stringify(media),
                       },
@@ -864,7 +869,7 @@ export default function ChatDetailScreen() {
                       })
                     }
                   >
-                    <Icon name="videocam" size={24} color="#fff" />
+                  <Icon name="videocam" size={24} color="#fff" />
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.iconBtn}
@@ -1342,7 +1347,17 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     marginHorizontal: 8,
   },
-
+  
+  avatarPlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginHorizontal: 8,
+    backgroundColor: '#e6e6e6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  
   titleContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -1455,7 +1470,7 @@ const styles = StyleSheet.create({
   statusIcon: {
     marginLeft: 4,
   },
-  
+
   listPickerContainer: {
     position: 'absolute',
     left: 16,
