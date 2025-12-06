@@ -965,60 +965,64 @@ export default function ChatDetailScreen() {
                       isSelected ? styles.selectedBubble : null,
                     ]}
                   >
-                    {item.audio ? (
-                      <View style={styles.audioMessageRow}>
-                        <TouchableOpacity
-                          style={styles.audioPlayButton}
-                          onPress={() => toggleMessagePlayback(item)}
-                          disabled={item.pending || item.failed}
-                        >
-                          <Icon
-                            name={playingMessageId === item.id ? 'pause' : 'play-arrow'}
-                            size={28}
-                            color="#1f6ea7"
-                          />
-                        </TouchableOpacity>
-                        <Text style={styles.audioDurationText}>{formatDuration(item.duration)}</Text>
-                      </View>
-                    ) : (
-                      <Text style={styles.messageText}>{item.text}</Text>
-                    )}
-                    {showClock ? (
-                      <View style={styles.messageStatusRow}>
-                        {item.time ? (
-                          <Text
-                            style={[
-                              styles.messageTime,
-                              styles.statusTimeInRow,
-                              item.sender === 'me' ? styles.myTime : styles.theirTime,
-                              item.pending ? styles.pendingTime : null,
-                              item.failed ? styles.failedTime : null,
-                              { color: statusColor },
-                            ]}
+                    <View style={styles.messageContentRow}>
+                      {item.audio ? (
+                        <View style={[styles.audioMessageRow, styles.messageTextFlex]}>
+                          <TouchableOpacity
+                            style={styles.audioPlayButton}
+                            onPress={() => toggleMessagePlayback(item)}
+                            disabled={item.pending || item.failed}
                           >
-                            {item.time}
-                          </Text>
-                        ) : null}
-                        <Icon
-                          name="schedule"
-                          size={12}
-                          color={statusColor}
-                          style={styles.statusIcon}
-                        />
+                            <Icon
+                              name={playingMessageId === item.id ? 'pause' : 'play-arrow'}
+                              size={28}
+                              color="#1f6ea7"
+                            />
+                          </TouchableOpacity>
+                          <Text style={styles.audioDurationText}>{formatDuration(item.duration)}</Text>
+                        </View>
+                      ) : (
+                        <Text style={[styles.messageText, styles.messageTextFlex]}>{item.text}</Text>
+                      )}
+                      {showClock ? (
+                        <View style={styles.messageStatusRow}>
+                          {item.time ? (
+                            <Text
+                              style={[
+                                styles.messageTime,
+                                styles.inlineTime,
+                                styles.statusTimeInRow,
+                                item.sender === 'me' ? styles.myTime : styles.theirTime,
+                                item.pending ? styles.pendingTime : null,
+                                item.failed ? styles.failedTime : null,
+                                { color: statusColor },
+                              ]}
+                            >
+                              {item.time}
+                            </Text>
+                          ) : null}
+                          <Icon
+                            name="schedule"
+                            size={12}
+                            color={statusColor}
+                            style={styles.statusIcon}
+                          />
                       </View>
-                    ) : (
-                      <Text
-                        style={[
-                          styles.messageTime,
-                          item.sender === 'me' ? styles.myTime : styles.theirTime,
-                          item.pending ? styles.pendingTime : null,
-                          item.failed ? styles.failedTime : null,
-                          { color: statusColor },
-                        ]}
-                      >
-                        {item.time}
-                      </Text>
-                    )}
+                      ) : (
+                        <Text
+                          style={[
+                            styles.messageTime,
+                            styles.inlineTime,
+                            item.sender === 'me' ? styles.myTime : styles.theirTime,
+                            item.pending ? styles.pendingTime : null,
+                            item.failed ? styles.failedTime : null,
+                            { color: statusColor },
+                          ]}
+                        >
+                          {item.time}
+                        </Text>
+                      )}
+                    </View>
                   </View>
                 </TouchableOpacity>
               );
@@ -1408,11 +1412,22 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1f6ea7',
   },
+  messageContentRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+  },
   messageText: { fontSize: 16, lineHeight: 20 },
+  messageTextFlex: {
+    flexShrink: 1,
+  },
   messageTime: {
     fontSize: 10,
     marginTop: 4,
     alignSelf: 'flex-end',
+  },
+  inlineTime: {
+    marginTop: 0,
+    marginLeft: 6,
   },
   myTime: { color: '#555' },
   theirTime: { color: '#777' },
@@ -1428,6 +1443,19 @@ const styles = StyleSheet.create({
     borderColor: '#b3261e',
   },
 
+  messageStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 6,
+  },
+  statusTimeInRow: {
+    marginTop: 0,
+    marginLeft: 0,
+  },
+  statusIcon: {
+    marginLeft: 4,
+  },
+  
   listPickerContainer: {
     position: 'absolute',
     left: 16,
