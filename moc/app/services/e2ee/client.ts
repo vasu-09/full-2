@@ -39,7 +39,7 @@ type EncryptResult = {
   sharedKey: string; // base64
 };
 
-const DEVICE_VERSION = 11;
+const DEVICE_VERSION = 15;
 const INITIAL_PREKEY_BATCH = 10;
 const MIN_SERVER_STOCK = 5;
 const CONSUMED_PREKEY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days

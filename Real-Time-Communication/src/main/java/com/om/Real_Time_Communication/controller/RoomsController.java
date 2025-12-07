@@ -190,9 +190,16 @@ public class RoomsController {
             );
         }
         if (principal instanceof JwtAuthenticationToken jwtAuth) {
-            Long claimUserId = jwtAuth.getToken().getClaim("userId");
-            if (claimUserId != null) {
-                return claimUserId;
+            Object claimUserId = jwtAuth.getToken().getClaim("userId");
+            if (claimUserId instanceof Number asNumber) {
+                return asNumber.longValue();
+            }
+            if (claimUserId instanceof String asString && !asString.isBlank()) {
+                try {
+                    return Long.parseLong(asString);
+                } catch (NumberFormatException ignored) {
+                    // Fall back to principal.getName()
+                }
             }
         }
 
