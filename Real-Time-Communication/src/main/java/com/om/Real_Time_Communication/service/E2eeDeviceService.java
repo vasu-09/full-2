@@ -79,15 +79,17 @@ public class E2eeDeviceService {
     public DeviceBundleDto claimOneTimePrekey(Long targetUserId, String deviceId) {
         E2eeDevice dev = deviceRepo.findByUserIdAndDeviceId(targetUserId, deviceId)
                 .orElseThrow(() -> new IllegalArgumentException("device not found"));
+        Long otkId = null;
         byte[] otk = null;
         var avail = prekeyRepo.findAvailable(targetUserId, deviceId);
         if (!avail.isEmpty()) {
             var first = avail.get(0);
+            otkId = first.getId();
             otk = first.getPrekeyPub();
             first.setConsumed(true);
             prekeyRepo.save(first);
         }
-        return new DeviceBundleDto(dev.getDeviceId(), dev.getIdentityKeyPub(), dev.getSignedPrekeyPub(), dev.getSignedPrekeySig(), otk);
+        return new DeviceBundleDto(dev.getDeviceId(), dev.getIdentityKeyPub(), dev.getSignedPrekeyPub(), dev.getSignedPrekeySig(), otkId, otk);
     }
 
     /** Fetch a single device bundle without consuming any one-time prekeys. */
@@ -95,7 +97,7 @@ public class E2eeDeviceService {
     public DeviceBundleDto getBundle(Long targetUserId, String deviceId) {
         E2eeDevice dev = deviceRepo.findByUserIdAndDeviceId(targetUserId, deviceId)
                 .orElseThrow(() -> new IllegalArgumentException("device not found"));
-        return new DeviceBundleDto(dev.getDeviceId(), dev.getIdentityKeyPub(), dev.getSignedPrekeyPub(), dev.getSignedPrekeySig(), null);
+        return new DeviceBundleDto(dev.getDeviceId(), dev.getIdentityKeyPub(), dev.getSignedPrekeyPub(), dev.getSignedPrekeySig(), null, null);
     }
 
     /** List device bundles (without consuming OTKs). */
@@ -104,7 +106,7 @@ public class E2eeDeviceService {
         var devs = deviceRepo.findByUserId(targetUserId);
         var out = new ArrayList<DeviceBundleDto>(devs.size());
         for (var d : devs) {
-            out.add(new DeviceBundleDto(d.getDeviceId(), d.getIdentityKeyPub(), d.getSignedPrekeyPub(), d.getSignedPrekeySig(), null));
+            out.add(new DeviceBundleDto(d.getDeviceId(), d.getIdentityKeyPub(), d.getSignedPrekeyPub(), d.getSignedPrekeySig(), null,null));
         }
         return out;
     }
