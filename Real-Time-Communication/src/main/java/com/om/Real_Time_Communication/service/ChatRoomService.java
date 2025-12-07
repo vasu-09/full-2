@@ -105,11 +105,13 @@ public class ChatRoomService {
         p1.setUserId(userId);
         p1.setChatRoom(saved);
         p1.setJoinedAt(LocalDateTime.now());
+        p1.setRole(Role.MEMBER);
 
         ChatRoomParticipant p2 = new ChatRoomParticipant();
         p2.setUserId(otherUserId);
         p2.setChatRoom(saved);
         p2.setJoinedAt(LocalDateTime.now());
+        p2.setRole(Role.MEMBER);
 
         participantRepository.saveAll(List.of(p1, p2));
         return saved;
