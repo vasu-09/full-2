@@ -6,8 +6,11 @@ import com.om.Real_Time_Communication.models.ChatRoom;
 import com.om.Real_Time_Communication.models.Role;
 import com.om.Real_Time_Communication.service.ChatRoomService;
 import com.om.Real_Time_Communication.service.MessagePagingService;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 import lombok.RequiredArgsConstructor;
 
 import java.nio.file.AccessDeniedException;
@@ -50,7 +53,7 @@ public class RoomsController {
     @PostMapping("/direct")
     public ResponseEntity<ChatRoom> createDirectChat(@RequestBody CreateDirectChatRequest request,
                                                      Principal principal) {
-        Long userId = Long.valueOf(principal.getName());
+        Long userId = resolveUserId(principal);
         ChatRoom room = chatRoomService.createDirectChat(userId, request.getParticipantId());
         return ResponseEntity.ok(room);
     }
@@ -149,7 +152,7 @@ public class RoomsController {
                                      @RequestParam(required = false) Instant beforeTs,
                                      @RequestParam(required = false) Long beforeId,
                                      @RequestParam(defaultValue = "50") int limit) {
-        Long userId = Long.valueOf(principal.getName());
+        Long userId = resolveUserId(principal);
         if (!acl.canPublish(userId,roomId)) // or a dedicated canRead(...)
             throw new IllegalArgumentException("Forbidden");
 
@@ -162,10 +165,29 @@ public class RoomsController {
     public Map<String, Object> markRead(Principal principal,
                                         @PathVariable Long roomId,
                                         @RequestParam String messageId) {
-        Long userId = Long.valueOf(principal.getName());
+        Long userId = resolveUserId(principal);
         paging.markRead(roomId, userId, messageId);
         return Map.of("ok", true);
     }
+    private Long resolveUserId(Principal principal) {
+        if (principal instanceof JwtAuthenticationToken jwtAuth) {
+            Long claimUserId = jwtAuth.getToken().getClaim("userId");
+            if (claimUserId != null) {
+                return claimUserId;
+            }
+        }
+
+        try {
+            return Long.valueOf(principal.getName());
+        } catch (Exception ex) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "Authenticated user id is missing or invalid",
+                    ex
+            );
+        }
+    }
+
 //    @GetMapping("/{roomId}/messages")
 //    public ResponseEntity<List<?>> listRoomMessages(@PathVariable Long roomId,
 //                                                    @RequestParam(name = "beforeId", required = false) Long beforeId,
