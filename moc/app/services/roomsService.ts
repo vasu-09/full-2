@@ -32,8 +32,12 @@ type HistoryParams = {
 export const createDirectRoom = async (
   participantId: number,
 ): Promise<ChatRoomResponse> => {
+  const normalizedId = Number(participantId);
+  if (!Number.isInteger(normalizedId) || normalizedId <= 0) {
+    throw new Error('A valid participant id is required to start a chat');
+  }
   const { data } = await apiClient.post<ChatRoomResponse>('/api/rooms/direct', {
-    participantId,
+    participantId: normalizedId,
   });
 
   return data;

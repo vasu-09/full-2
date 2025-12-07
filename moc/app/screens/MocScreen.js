@@ -83,7 +83,8 @@ const MocScreen = () => {
    const handleStartDirectChat = useCallback(
     async (contact) => {
       const participantId = Number(contact?.matchUserId);
-      if (!Number.isFinite(participantId)) {
+       if (!Number.isInteger(participantId) || participantId <= 0) {
+        setCreateError('Contact is missing a valid MoC account.');
         return;
       }
 
