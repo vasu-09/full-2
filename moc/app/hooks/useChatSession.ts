@@ -188,7 +188,10 @@ export const useChatSession = ({
       id: message.messageId,
       conversationId: message.roomId,
       senderId: message.senderId ?? null,
-      plaintext: payload?.ciphertext ? null : message.body ?? null,
+      plaintext:
+        payload?.ciphertext && message.decryptionFailed
+          ? null
+          : message.body ?? null,
       ciphertext: payload?.ciphertext ?? null,
       aad: payload?.aad ?? null,
       iv: payload?.iv ?? null,
@@ -281,13 +284,40 @@ export const useChatSession = ({
               : msg,
           ),
         );
-      }
+      const successful = Object.entries(updates)
+          .filter(([, result]) => !result.failed)
+          .map(([id, result]) => {
+            const original = rawMessages.find(msg => msg.messageId === id);
+            if (!original) {
+              return null;
+            }
+            const merged: InternalMessage = {
+              ...original,
+              body: result.text,
+              decryptionFailed: false,
+            };
+            return toDbRecord(merged, {
+              ciphertext: original.ciphertext ?? undefined,
+              aad: original.aad ?? undefined,
+              iv: original.iv ?? undefined,
+              keyRef: original.keyRef ?? undefined,
+              e2ee: original.e2ee,
+            });
+          })
+          .filter(Boolean) as ReturnType<typeof toDbRecord>[];
+
+        if (successful.length) {
+          saveMessagesToDb(successful).catch(err =>
+            console.warn('Failed to persist decrypted cached messages', err),
+          );
+        }
+        }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [rawMessages, sharedRoomKey]);
+  }, [rawMessages, saveMessagesToDb, sharedRoomKey, toDbRecord]);
 
   useEffect(() => {
     if (!e2eeClient) {
@@ -336,13 +366,40 @@ export const useChatSession = ({
               : msg,
           ),
         );
+        const successful = Object.entries(updates)
+          .filter(([, result]) => !result.failed)
+          .map(([id, result]) => {
+            const original = rawMessages.find(msg => msg.messageId === id);
+            if (!original) {
+              return null;
+            }
+            const merged: InternalMessage = {
+              ...original,
+              body: result.text,
+              decryptionFailed: false,
+            };
+            return toDbRecord(merged, {
+              ciphertext: original.ciphertext ?? undefined,
+              aad: original.aad ?? undefined,
+              iv: original.iv ?? undefined,
+              keyRef: original.keyRef ?? undefined,
+              e2ee: original.e2ee,
+            });
+          })
+          .filter(Boolean) as ReturnType<typeof toDbRecord>[];
+
+        if (successful.length) {
+          saveMessagesToDb(successful).catch(err =>
+            console.warn('Failed to persist decrypted cached envelopes', err),
+          );
+        }
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [currentUserId, e2eeClient, rawMessages]);
+  }, [currentUserId, e2eeClient, rawMessages, saveMessagesToDb, toDbRecord]);
 
   useEffect(() => {
     let cancelled = false;
