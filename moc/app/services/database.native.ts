@@ -531,6 +531,15 @@ type ContactRow = {
   updated_at: string | null;
 };
 
+const normalizeMatchUserId = (value: unknown): number | null => {
+  if (value == null) {
+    return null;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
 const deserializeContactRow = (row: ContactRow): StoredContactInput => {
   let phoneNumbers: { label?: string | null; number: string }[] | undefined;
 
@@ -553,7 +562,7 @@ const deserializeContactRow = (row: ContactRow): StoredContactInput => {
     phoneNumbers,
     imageUri: row.image_uri,
     matchPhone: row.match_phone,
-    matchUserId: row.match_user_id,
+    matchUserId: normalizeMatchUserId(row.match_user_id),
     updatedAt: row.updated_at,
   } as StoredContactInput;
 };
@@ -809,7 +818,7 @@ export const replaceContactsInDb = async (contacts: StoredContactInput[]): Promi
             phoneJson,
             contact.imageUri ?? null,
             contact.matchPhone ?? null,
-            contact.matchUserId ?? null,
+            normalizeMatchUserId(contact.matchUserId),
             contact.updatedAt ?? new Date().toISOString(),
           ],
         );
