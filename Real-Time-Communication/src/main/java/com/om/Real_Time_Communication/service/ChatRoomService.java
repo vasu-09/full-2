@@ -79,6 +79,13 @@ public class ChatRoomService {
     }
 
     public ChatRoom createDirectChat(Long userId, Long otherUserId) {
+        if (userId == null || otherUserId == null) {
+            throw new IllegalArgumentException("Both user ids are required to create a direct chat");
+        }
+
+        if (userId.equals(otherUserId)) {
+            throw new IllegalArgumentException("Cannot create a direct chat with yourself");
+        }
         Optional<ChatRoom> existing = chatRoomRepository.findDirectRoom(userId, otherUserId, ChatRoomType.DIRECT);
         if (existing.isPresent()) {
             return existing.get();

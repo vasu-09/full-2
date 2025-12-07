@@ -53,9 +53,22 @@ public class RoomsController {
     @PostMapping("/direct")
     public ResponseEntity<ChatRoom> createDirectChat(@RequestBody CreateDirectChatRequest request,
                                                      Principal principal) {
+        if (request == null || request.getParticipantId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "participantId is required");
+        }
         Long userId = resolveUserId(principal);
-        ChatRoom room = chatRoomService.createDirectChat(userId, request.getParticipantId());
-        return ResponseEntity.ok(room);
+        Long otherUserId = request.getParticipantId();
+
+        if (userId.equals(otherUserId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot start a chat with yourself");
+        }
+
+        try {
+            ChatRoom room = chatRoomService.createDirectChat(userId, otherUserId);
+            return ResponseEntity.ok(room);
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
+        }
     }
 
     @PutMapping("/{roomId}/update-metadata")
