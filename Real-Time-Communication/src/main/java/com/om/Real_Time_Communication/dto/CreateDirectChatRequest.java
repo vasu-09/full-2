@@ -1,6 +1,5 @@
 package com.om.Real_Time_Communication.dto;
 
-
 public class CreateDirectChatRequest {
     private Long participantId;
 
