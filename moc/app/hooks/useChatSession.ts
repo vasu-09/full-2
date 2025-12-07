@@ -251,7 +251,8 @@ export const useChatSession = ({
         !msg.keyRef &&
         Boolean(msg.ciphertext) &&
         Boolean(msg.iv) &&
-        (!msg.body || msg.decryptionFailed),
+        !msg.body &&
+        !msg.decryptionFailed,
     );
     if (!candidates.length) {
       return undefined;
@@ -331,7 +332,8 @@ export const useChatSession = ({
         Boolean(msg.ciphertext) &&
         Boolean(msg.iv) &&
         Boolean(msg.aad) &&
-        (!msg.body || msg.decryptionFailed),
+        !msg.body &&
+        !msg.decryptionFailed,
     );
 
     if (!candidates.length) {
