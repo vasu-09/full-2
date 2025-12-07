@@ -466,11 +466,17 @@ export const useChatSession = ({
       const idx = prev.findIndex(m => m.messageId === incoming.messageId);
       if (idx >= 0) {
         const next = [...prev];
+        const existing = next[idx];
         next[idx] = {
-          ...next[idx],
+          ...existing,
           ...incoming,
-          readByPeer:
-            incoming.readByPeer !== undefined ? incoming.readByPeer : next[idx].readByPeer,
+          body: incoming.body !== undefined ? incoming.body : existing.body,
+          serverTs: incoming.serverTs ?? existing.serverTs,
+          ciphertext: incoming.ciphertext ?? existing.ciphertext,
+          aad: incoming.aad ?? existing.aad,
+          iv: incoming.iv ?? existing.iv,
+          keyRef: incoming.keyRef ?? existing.keyRef,
+          readByPeer: incoming.readByPeer ?? existing.readByPeer,
         };
         return next;
       }

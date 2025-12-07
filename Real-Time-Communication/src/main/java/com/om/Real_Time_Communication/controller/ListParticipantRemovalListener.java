@@ -80,7 +80,7 @@ public class ListParticipantRemovalListener {
         entity.setSenderId(removedId);
         entity.setType(MessageType.SYSYEM);
         entity.setBody(content);
-        entity.setE2ee(true);
+        entity.setE2ee(false);
 
         ChatMessage savedMsg = msgRepo.save(entity);
 
