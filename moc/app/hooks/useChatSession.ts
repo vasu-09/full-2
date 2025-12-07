@@ -500,7 +500,7 @@ export const useChatSession = ({
       const data = await fetchRoomMessages(roomId, { limit: 50 });
       const ordered = data.slice().reverse();
       const client = e2eeClient;
-       const processed: InternalMessage[] = await Promise.all(
+      const processed: InternalMessage[] = await Promise.all(
         ordered.map(async dto => {
           const base = toInternalMessage(dto);
           let text = dto.body ?? null;
@@ -546,7 +546,15 @@ export const useChatSession = ({
             text = 'Encrypted message';
             failed = true;
           }
-          return { ...base, body: text, decryptionFailed: failed };
+          return {
+            ...base,
+            body: text,
+            decryptionFailed: failed,
+            ciphertext: dto.ciphertext ?? null,
+            iv: dto.iv ?? null,
+            aad: dto.aad ?? null,
+            keyRef: dto.keyRef ?? null,
+          };
         }),
       );
      setRawMessages(prev => {
@@ -701,7 +709,11 @@ export const useChatSession = ({
           ...base,
           body: text,
           decryptionFailed: failed,
-        };
+           ciphertext: payload.ciphertext ?? null,
+          iv: payload.iv ?? null,
+          aad: payload.aad ?? null,
+          keyRef: payload.keyRef ?? null,
+        } as InternalMessage;
         mergeMessage(merged);
         saveMessagesToDb([toDbRecord(merged, payload)]).catch(err =>
           console.warn('Failed to persist incoming message', err),

@@ -42,6 +42,7 @@ type EncryptResult = {
 const DEVICE_VERSION = 11;
 const INITIAL_PREKEY_BATCH = 10;
 const MIN_SERVER_STOCK = 5;
+const CONSUMED_PREKEY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 const ensurePrekeysAvailable = (state: DeviceState, count: number): DeviceState => {
   const now = Date.now();
@@ -70,6 +71,21 @@ const rememberSentKey = (state: DeviceState, entry: SentMessageKey): DeviceState
   return {
     ...state,
     sentMessageKeys: next,
+  };
+};
+
+const markPrekeyConsumed = (state: DeviceState, publicKey: string): DeviceState => {
+  const now = Date.now();
+  const updated = state.oneTimePrekeys.map(pk =>
+    pk.publicKey === publicKey ? { ...pk, consumed: true, consumedAt: now } : pk,
+  );
+  const filtered = updated.filter(
+    pk => !pk.consumedAt || pk.consumedAt >= now - CONSUMED_PREKEY_RETENTION_MS,
+  );
+
+  return {
+    ...state,
+    oneTimePrekeys: filtered,
   };
 };
 
@@ -401,9 +417,8 @@ export class E2EEClient {
       }
       shared = computeFromEphemeral(record.privateKey, meta.e);
       await this.withState(async current => {
-        const filtered = current.oneTimePrekeys.filter(pk => pk.publicKey !== key);
-        const base = { ...current, oneTimePrekeys: filtered };
-        return replenishPrekeys(base);
+        const marked = markPrekeyConsumed(current, key);
+        return replenishPrekeys(marked);
       });
     } else {
       shared = computeFromEphemeral(this.state.signedPrekey.privateKey, meta.e);

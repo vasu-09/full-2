@@ -34,6 +34,7 @@ export type StoredPrekey = {
   privateKey: string;
   uploaded: boolean;
   consumed?: boolean;
+  consumedAt?: number;
   createdAt: number;
 };
 
