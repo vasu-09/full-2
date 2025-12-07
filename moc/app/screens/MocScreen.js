@@ -82,25 +82,25 @@ const MocScreen = () => {
 
    const handleStartDirectChat = useCallback(
     async (contact) => {
-      const userId = contact?.matchUserId;
-      if (!userId) {
+      const participantId = Number(contact?.matchUserId);
+      if (!Number.isFinite(participantId)) {
         return;
       }
 
       setCreateError('');
       const roomTitle = contact?.name || contact?.matchPhone || 'Chat';
       const roomAvatar = contact?.imageUri ?? null;
-      const tracker = contact?.id ?? contact?.matchPhone ?? String(userId);
+      const tracker = contact?.id ?? contact?.matchPhone ?? String(participantId);
 
       try {
         setCreatingRoomFor(tracker);
-        const room = await createDirectRoom(Number(userId));
+        const room = await createDirectRoom(participantId);
         upsertRoom({
           id: room.id,
           roomKey: room.roomId,
           title: roomTitle,
           avatar: roomAvatar,
-          peerId: Number(userId),
+          peerId: participantId,
         });
         router.push({
           pathname: '/screens/ChatDetailScreen',
@@ -108,9 +108,9 @@ const MocScreen = () => {
             roomId: String(room.id),
             roomKey: room.roomId,
             title: roomTitle,
-            peerId: String(userId),
-          },
-        });
+            peerId: String(participantId),
+            },
+          });
       } catch (err) {
         console.warn('Unable to start direct chat', err);
         setCreateError('Unable to start a conversation right now. Please try again.');

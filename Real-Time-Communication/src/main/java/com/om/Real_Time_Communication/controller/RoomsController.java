@@ -183,6 +183,12 @@ public class RoomsController {
         return Map.of("ok", true);
     }
     private Long resolveUserId(Principal principal) {
+        if (principal == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "Authenticated user id is missing"
+            );
+        }
         if (principal instanceof JwtAuthenticationToken jwtAuth) {
             Long claimUserId = jwtAuth.getToken().getClaim("userId");
             if (claimUserId != null) {

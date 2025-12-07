@@ -353,7 +353,9 @@ export default function ContactPickerScreen() {
 
     const contact = selected[0];
     const match = getMatchForContact(contact);
-    if (!match) {
+    const participantId = Number(match?.userId);
+
+    if (!match || !Number.isFinite(participantId)) {
       setCreateError('Please choose a contact who already uses MoC.');
       return;
     }
@@ -362,13 +364,13 @@ export default function ContactPickerScreen() {
       setCreateError('');
       setIsCreating(true);
 
-      const room = await createDirectRoom(match.userId);
+      const room = await createDirectRoom(participantId);
       upsertRoom({
         id: room.id,
         roomKey: room.roomId,
         title: contact?.name ?? match.phone,
         avatar: contact?.imageAvailable ? contact?.image?.uri ?? null : null,
-        peerId: match.userId,
+        peerId: participantId,
       });
 
       router.replace({
@@ -377,7 +379,7 @@ export default function ContactPickerScreen() {
           roomId: String(room.id),
           roomKey: room.roomId,
           title: contact?.name ?? match.phone,
-          peerId: String(match.userId),
+          peerId: String(participantId),
         },
       });
     } catch (err) {
