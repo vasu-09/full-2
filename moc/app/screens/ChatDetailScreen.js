@@ -264,6 +264,7 @@ export default function ChatDetailScreen() {
     isLoading: isHistoryLoading,
     error: historyError,
     currentUserId,
+    retryDecryptMessage
   } = useChatSession({ roomId, roomKey, peerId, title: chatTitle });
 
   useEffect(() => () => {
