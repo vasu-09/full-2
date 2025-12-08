@@ -3,6 +3,7 @@ package com.om.Real_Time_Communication.controller;
 import com.om.Real_Time_Communication.dto.ClaimPrekeyRequest;
 import com.om.Real_Time_Communication.dto.DeviceBundleDto;
 import com.om.Real_Time_Communication.dto.RegisterDto;
+import com.om.Real_Time_Communication.dto.SessionRecoveryRequest;
 import com.om.Real_Time_Communication.dto.RegisterResponse;
 import com.om.Real_Time_Communication.service.E2eeDeviceService;
 import org.springframework.web.bind.annotation.*;
@@ -72,5 +73,11 @@ public class E2eeDeviceController {
     public long stock(Principal principal, @PathVariable String deviceId) {
         Long userId = Long.valueOf(principal.getName());
         return svc.availablePrekeys(userId, deviceId);
+    }
+
+    @PostMapping("/recover-session")
+    public DeviceBundleDto recoverSession(Principal principal, @RequestBody SessionRecoveryRequest req) {
+        Long requesterUserId = Long.valueOf(principal.getName());
+        return svc.recoverSession(requesterUserId, req);
     }
 }

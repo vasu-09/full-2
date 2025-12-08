@@ -16,4 +16,5 @@ public interface E2eeOneTimePrekeyRepository extends JpaRepository<E2eeOneTimePr
     List<E2eeOneTimePrekey> findAvailable(@Param("userId") Long userId, @Param("deviceId") String deviceId);
 
     long countByUserIdAndDeviceIdAndConsumedFalse(Long userId, String deviceId);
+    void deleteByUserIdAndDeviceId(Long userId, String deviceId);
 }

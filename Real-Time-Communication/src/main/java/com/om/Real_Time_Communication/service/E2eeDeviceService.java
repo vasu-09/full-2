@@ -6,12 +6,14 @@ import com.om.Real_Time_Communication.Repository.E2eeOneTimePrekeyRepository;
 import com.om.Real_Time_Communication.dto.DeviceBundleDto;
 import com.om.Real_Time_Communication.dto.RegisterDto;
 import com.om.Real_Time_Communication.models.E2eeDevice;
+import com.om.Real_Time_Communication.dto.SessionRecoveryRequest;
 import com.om.Real_Time_Communication.models.E2eeOneTimePrekey;
 import com.om.Real_Time_Communication.security.Ed25519Verifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.ArrayList;
 import org.slf4j.Logger;
 import java.util.HexFormat;
@@ -53,6 +55,9 @@ public class E2eeDeviceService {
         }
 
         E2eeDevice dev = deviceRepo.findByUserIdAndDeviceId(userId, dto.getDeviceId()).orElseGet(E2eeDevice::new);
+        boolean existing = dev.getId() != null;
+        boolean keyChanged = existing && (!java.util.Arrays.equals(dev.getIdentityKeyPub(), dto.getIdentityKeyPub())
+                || !java.util.Arrays.equals(dev.getSignedPrekeyPub(), dto.getSignedPrekeyPub()));
         dev.setUserId(userId);
         dev.setDeviceId(dto.getDeviceId());
         dev.setName(dto.getName());
@@ -63,6 +68,11 @@ public class E2eeDeviceService {
         dev.setLastSeen(Instant.now());
         deviceRepo.save(dev);
 
+        if (keyChanged) {
+            prekeyRepo.deleteByUserIdAndDeviceId(userId, dto.getDeviceId());
+            log.info("E2EE bundle refreshed; purged old OTKs for user={} device={} after key change", userId, dto.getDeviceId());
+        }
+
         if (dto.getOneTimePrekeys()!=null) {
             for (byte[] otk : dto.getOneTimePrekeys()) {
                 if (otk == null || otk.length == 0) continue;
@@ -70,6 +80,9 @@ public class E2eeDeviceService {
                 p.setUserId(userId); p.setDeviceId(dto.getDeviceId()); p.setPrekeyPub(otk);
                 prekeyRepo.save(p);
             }
+            log.info("E2EE stored {} OTKs for user={} device={}", dto.getOneTimePrekeys().size(), userId, dto.getDeviceId());
+        } else {
+            log.warn("E2EE register user={} device={} with no OTKs uploaded", userId, dto.getDeviceId());
         }
         return true;
     }
@@ -88,6 +101,10 @@ public class E2eeDeviceService {
             otk = first.getPrekeyPub();
             first.setConsumed(true);
             prekeyRepo.save(first);
+            log.info("E2EE claimed OTK user={} device={} otkId={} remaining={}", targetUserId, deviceId, otkId,
+                    prekeyRepo.countByUserIdAndDeviceIdAndConsumedFalse(targetUserId, deviceId));
+        } else {
+            log.warn("E2EE no available OTK user={} device={}", targetUserId, deviceId);
         }
         return new DeviceBundleDto(dev.getDeviceId(), dev.getIdentityKeyPub(), dev.getSignedPrekeyPub(), dev.getSignedPrekeySig(), otkId, otk);
     }
@@ -124,6 +141,23 @@ public class E2eeDeviceService {
             prekeyRepo.save(p);
         }
     }
+
+    @Transactional
+    public DeviceBundleDto recoverSession(Long requesterUserId, SessionRecoveryRequest req) {
+        require(req != null, "request required");
+        require(req.getTargetUserId() != null, "targetUserId required");
+        require(req.getTargetDeviceId() != null && !req.getTargetDeviceId().isBlank(), "targetDeviceId required");
+        log.warn("E2EE recovery reason={} requesterUser={} device={} targetUser={} targetDevice={} sessionId={} keyVersion={}",
+                req.getFailureReason(),
+                requesterUserId,
+                req.getRequesterDeviceId(),
+                req.getTargetUserId(),
+                req.getTargetDeviceId(),
+                req.getSessionId(),
+                req.getKeyVersion());
+        return claimOneTimePrekey(req.getTargetUserId(), req.getTargetDeviceId());
+    }
+
 
     @Transactional(readOnly = true)
     public long availablePrekeys(Long userId, String deviceId) {
