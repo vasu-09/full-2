@@ -60,7 +60,7 @@ public class MessageBroadcastPerformanceTest {
                     ChatSendDto dto = new ChatSendDto();
                     dto.setMessageId(UUID.randomUUID().toString());
                     dto.setType(MessageType.TEXT);
-                    controller.sendToRoom(1L, dto, p, null);
+                    controller.sendToRoom("1L", dto, p, null);
                 }
                 latch.countDown();
             });

@@ -143,7 +143,8 @@ class MessageServiceTest {
         ChatRoomParticipant participant = new ChatRoomParticipant();
         participant.setHidden(false);
 
-        when(chatRoomRepository.findDirectRoom(1L, 2L, ChatRoomType.DIRECT)).thenReturn(Optional.of(room));
+        String pairKey = ChatRoomRepository.buildDirectPairKey(1L, 2L);
+        when(chatRoomRepository.findByDirectPairKeyAndType(pairKey, ChatRoomType.DIRECT)).thenReturn(Optional.of(room));
         when(chatRoomParticipantRepository.findByUserIdAndChatRoom(1L, room)).thenReturn(Optional.of(participant));
 
         service.deleteConversationForUser("1", "2");

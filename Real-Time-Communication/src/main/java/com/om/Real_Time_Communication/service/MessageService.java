@@ -456,7 +456,9 @@ public class MessageService {
             return;
         }
 
-        chatRoomRepository.findDirectRoom(maybeUserId.get(), maybePeerId.get(), ChatRoomType.DIRECT)
+        String pairKey = ChatRoomRepository.buildDirectPairKey(maybeUserId.get(), maybePeerId.get());
+
+        chatRoomRepository.findByDirectPairKeyAndType(pairKey, ChatRoomType.DIRECT)
                 .flatMap(room -> chatRoomParticipantRepository.findByUserIdAndChatRoom(maybeUserId.get(), room))
                 .ifPresent(participant -> {
                     if (!participant.isHidden()) {
@@ -478,7 +480,9 @@ public class MessageService {
             return;
         }
 
-        chatRoomRepository.findDirectRoom(maybeUserId.get(), maybePeerId.get(), ChatRoomType.DIRECT)
+        String pairKey = ChatRoomRepository.buildDirectPairKey(maybeUserId.get(), maybePeerId.get());
+
+        chatRoomRepository.findByDirectPairKeyAndType(pairKey, ChatRoomType.DIRECT)
                 .flatMap(room -> chatRoomParticipantRepository.findByUserIdAndChatRoom(maybeUserId.get(), room))
                 .ifPresent(participant -> {
                     if (participant.isHidden()) {

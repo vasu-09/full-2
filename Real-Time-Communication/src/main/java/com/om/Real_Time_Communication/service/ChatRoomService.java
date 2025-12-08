@@ -1,14 +1,14 @@
 package com.om.Real_Time_Communication.service;
 
 import com.om.Real_Time_Communication.Repository.ChatRoomParticipantRepository;
-import com.om.Real_Time_Communication.Repository.MessageRepository;
 import com.om.Real_Time_Communication.client.UserServiceClient;
 import com.om.Real_Time_Communication.dto.*;
 import com.om.Real_Time_Communication.models.*;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import com.om.Real_Time_Communication.Repository.ChatRoomRepository;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.file.AccessDeniedException;
 import java.time.LocalDateTime;
@@ -78,6 +78,7 @@ public class ChatRoomService {
         return savedRoom;
     }
 
+    @Transactional
     public ChatRoom createDirectChat(Long userId, Long otherUserId) {
         if (userId == null || otherUserId == null) {
             throw new IllegalArgumentException("Both user ids are required to create a direct chat");
@@ -86,14 +87,23 @@ public class ChatRoomService {
         if (userId.equals(otherUserId)) {
             throw new IllegalArgumentException("Cannot create a direct chat with yourself");
         }
-        Optional<ChatRoom> existing = chatRoomRepository.findDirectRoom(userId, otherUserId, ChatRoomType.DIRECT);
-        if (existing.isPresent()) {
-            return existing.get();
-        }
+        String pairKey = ChatRoomRepository.buildDirectPairKey(userId, otherUserId);
 
+        try {
+            return chatRoomRepository
+                    .findDirectRoomForUpdate(pairKey, ChatRoomType.DIRECT)
+                    .orElseGet(() -> createDirectRoom(userId, otherUserId, pairKey));
+        } catch (DataIntegrityViolationException duplicatePair) {
+            return chatRoomRepository
+                    .findByDirectPairKeyAndType(pairKey, ChatRoomType.DIRECT)
+                    .orElseThrow(() -> duplicatePair);
+        }
+    }
+    private ChatRoom createDirectRoom(Long userId, Long otherUserId, String pairKey) {
         ChatRoom room = new ChatRoom();
         room.setRoomId(UUID.randomUUID().toString());
         room.setType(ChatRoomType.DIRECT);
+        room.setDirectPairKey(pairKey);
         room.setGroup(false);
         room.setAllowMembersToAddMembers(false);
         room.setAllowMembersToEditMetadata(false);

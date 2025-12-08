@@ -2,7 +2,7 @@ package com.om.Real_Time_Communication.controller;
 
 import com.om.Real_Time_Communication.Repository.ChatMessageRepository;
 import com.om.Real_Time_Communication.Repository.ChatRoomParticipantRepository;
-import com.om.Real_Time_Communication.Repository.ChatRoomRepository;
+import com.om.Real_Time_Communication.service.ChatRoomService;
 import com.om.Real_Time_Communication.client.UserServiceClient;
 import com.om.Real_Time_Communication.dto.ChatMessageDto;
 import com.om.Real_Time_Communication.dto.RecipientsRemovedFromListEvent;
@@ -18,20 +18,20 @@ import java.util.Set;
 @Component
 public class ListParticipantRemovalListener {
 
-    private final ChatRoomRepository             roomRepo;
+    private final ChatRoomService chatRoomService;
     private final ChatRoomParticipantRepository  partRepo;
     private final ChatMessageRepository          msgRepo;
     private final SimpMessagingTemplate          wsTemplate;
     private final UserServiceClient              userService;
 
     public ListParticipantRemovalListener(
-            ChatRoomRepository roomRepo,
+            ChatRoomService chatRoomService,
             ChatRoomParticipantRepository partRepo,
             ChatMessageRepository msgRepo,
             SimpMessagingTemplate wsTemplate,
             UserServiceClient userService
     ) {
-        this.roomRepo    = roomRepo;
+        this.chatRoomService = chatRoomService;
         this.partRepo    = partRepo;
         this.msgRepo     = msgRepo;
         this.wsTemplate  = wsTemplate;
@@ -48,27 +48,7 @@ public class ListParticipantRemovalListener {
         String removerName = userService
                 .getUserById(removerId);
         // 2) Find or create the DIRECT room
-        ChatRoom room = roomRepo
-                .findDirectRoom(removerId, removedId, ChatRoomType.DIRECT)
-                .orElseGet(() -> {
-                    ChatRoom r = ChatRoom.builder()
-                            .type(ChatRoomType.DIRECT)
-                            .createdAt(LocalDateTime.from(Instant.now()))
-                            .allowMembersToEditMetadata(false).allowMembersToAddMembers(false).build();
-                    ChatRoom saved = roomRepo.save(r);
-
-                    // now add the two participants
-                    ChatRoomParticipant p1 = ChatRoomParticipant.builder()
-                            .chatRoom(saved)
-                            .userId(removerId)
-                            .build();
-                    ChatRoomParticipant p2 = ChatRoomParticipant.builder()
-                            .chatRoom(saved)
-                            .userId(removedId)
-                            .build();
-                    partRepo.saveAll(Set.of(p1, p2));
-                    return saved;
-                });
+        ChatRoom room = chatRoomService.createDirectChat(removerId, removedId);
 
         // 3) Build & save the SYSTEM message
         String content = String.format(

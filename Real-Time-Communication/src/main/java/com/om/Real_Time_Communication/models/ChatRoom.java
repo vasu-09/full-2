@@ -6,7 +6,12 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "chat_rooms")
+@Table(
+        name = "chat_rooms",
+        uniqueConstraints = {
+                @UniqueConstraint(name = "uk_chat_room_direct_pair", columnNames = "direct_pair_key")
+        }
+)
 @AllArgsConstructor
 @Getter
 @Setter
@@ -17,7 +22,8 @@ public class ChatRoom {
     private Long id;
 
     private String roomId; // UUID or composite of userIds
-
+    @Column(name = "direct_pair_key", unique = true)
+    private String directPairKey;
     private String name; // only for group chats
     private String description;        // Optional group bio
     private String imageUrl;
@@ -49,6 +55,7 @@ public class ChatRoom {
     private ChatRoom(Builder b) {
         this.id = b.id;
         this.roomId = b.roomId;
+        this.directPairKey = b.directPairKey;
         this.name = b.name;
         this.description = b.description;
         this.imageUrl = b.imageUrl;
@@ -69,6 +76,7 @@ public class ChatRoom {
         return new Builder()
                 .id(id)
                 .roomId(roomId)
+                .directPairKey(directPairKey)
                 .name(name)
                 .description(description)
                 .imageUrl(imageUrl)
@@ -98,6 +106,15 @@ public class ChatRoom {
     public void setRoomId(String roomId) {
         this.roomId = roomId;
     }
+
+    public String getDirectPairKey() {
+        return directPairKey;
+    }
+
+    public void setDirectPairKey(String directPairKey) {
+        this.directPairKey = directPairKey;
+    }
+
 
     public String getName() {
         return name;
@@ -198,6 +215,7 @@ public class ChatRoom {
     public static final class Builder {
         private Long id;
         private String roomId;
+        private String directPairKey;
         private String name;
         private String description;
         private String imageUrl;
@@ -213,6 +231,7 @@ public class ChatRoom {
 
         public Builder id(Long id) { this.id = id; return this; }
         public Builder roomId(String roomId) { this.roomId = roomId; return this; }
+        public Builder directPairKey(String directPairKey) { this.directPairKey = directPairKey; return this; }
         public Builder name(String name) { this.name = name; return this; }
         public Builder description(String description) { this.description = description; return this; }
         public Builder imageUrl(String imageUrl) { this.imageUrl = imageUrl; return this; }
