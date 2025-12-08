@@ -1,9 +1,9 @@
-import { claimPrekey, getPrekeyStock, listDeviceBundles, uploadPrekeys } from './api';
-import { E2EEClient } from './client';
-import { generateDhKeyPair } from './dh';
-import { generateKeyPair as generateEd25519KeyPair, sign as signEd25519 } from './ed25519';
-import { base64ToBytes, bytesToBase64 } from './encoding';
-import type { DeviceState } from './storage';
+import { claimPrekey, getPrekeyStock, listDeviceBundles, uploadPrekeys } from '../api';
+import { E2EEClient } from '../client';
+import { generateDhKeyPair } from '../dh';
+import { generateKeyPair as generateEd25519KeyPair, sign as signEd25519 } from '../ed25519';
+import { base64ToBytes, bytesToBase64 } from '../encoding';
+import type { DeviceState } from '../storage';
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
   getItem: jest.fn(async () => null),

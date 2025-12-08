@@ -66,6 +66,7 @@ export type DeviceState = {
   oneTimePrekeys: StoredPrekey[];
   sentMessageKeys: SentMessageKey[];
   lastRegisteredAt?: number;
+  peerFingerprints?: Record<number, PeerFingerprint>;
 };
 
 export const loadDeviceState = async (): Promise<DeviceState | null> => {
