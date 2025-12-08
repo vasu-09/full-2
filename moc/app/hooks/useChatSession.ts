@@ -265,7 +265,12 @@ export const useChatSession = ({
         setRawMessages(prev =>
           prev.map(msg =>
             updates[msg.messageId]
-              ? { ...msg, body: updates[msg.messageId].text, decryptionFailed: updates[msg.messageId].failed }
+               ? {
+                  ...msg,
+                  body: updates[msg.messageId].text,
+                  decryptionFailed: updates[msg.messageId].failed,
+                  debugBody: updates[msg.messageId].failed ? msg.debugBody ?? null : null,
+                }
               : msg,
           ),
         );
@@ -280,6 +285,7 @@ export const useChatSession = ({
               ...original,
               body: result.text,
               decryptionFailed: false,
+              debugBody: null,
             };
             return toDbRecord(merged, {
               ciphertext: original.ciphertext ?? undefined,
@@ -348,7 +354,12 @@ export const useChatSession = ({
         setRawMessages(prev =>
           prev.map(msg =>
             updates[msg.messageId]
-              ? { ...msg, body: updates[msg.messageId].text, decryptionFailed: updates[msg.messageId].failed }
+              ? {
+                  ...msg,
+                  body: updates[msg.messageId].text,
+                  decryptionFailed: updates[msg.messageId].failed,
+                  debugBody: updates[msg.messageId].failed ? msg.debugBody ?? null : null,
+                }
               : msg,
           ),
         );
@@ -363,6 +374,7 @@ export const useChatSession = ({
               ...original,
               body: result.text,
               decryptionFailed: false,
+              debugBody: null,
             };
             return toDbRecord(merged, {
               ciphertext: original.ciphertext ?? undefined,
@@ -467,6 +479,7 @@ export const useChatSession = ({
           const base = toInternalMessage(dto);
           let text = dto.body ?? null;
           let failed = false;
+          let debugBody: string | null = null;
           const encryptedPayload: EncryptedPayload | null =
             dto.ciphertext && dto.iv
               ? {
@@ -491,9 +504,10 @@ export const useChatSession = ({
                 console.warn('Failed to decrypt history message', decryptErr);
                 text = dto.body ?? 'Unable to decrypt message';
                 failed = dto.body == null;
+                debugBody = dto.body ?? null;
               }
             } else {
-              text = dto.body ?? null; 
+              text = dto.body ?? null;
             }
           } else if (dto.e2ee && encryptedPayload && sharedRoomKey) {
             try {
@@ -502,6 +516,7 @@ export const useChatSession = ({
               console.warn('Failed to decrypt symmetric history message', decryptErr);
               text = dto.body ?? 'Unable to decrypt message';
               failed = dto.body == null;
+              debugBody = dto.body ?? null;
             }
           } else if (dto.e2ee && encryptedPayload) {
             text = dto.body ?? null;
@@ -510,6 +525,7 @@ export const useChatSession = ({
             ...base,
             body: text,
             decryptionFailed: failed,
+            debugBody,
             ciphertext: dto.ciphertext ?? null,
             iv: dto.iv ?? null,
             aad: dto.aad ?? null,
@@ -662,11 +678,12 @@ export const useChatSession = ({
         error: false,
         e2ee: Boolean(payload.e2ee),
       };
-      const finalize = (text: string | null, failed = false) => {
+      const finalize = (text: string | null, failed = false, debugText: string | null = null) => {
         const merged = {
           ...base,
           body: text,
           decryptionFailed: failed,
+          debugBody: failed ? debugText : null,
           ciphertext: payload.ciphertext ?? null,
           iv: payload.iv ?? null,
           aad: payload.aad ?? null,
@@ -721,7 +738,7 @@ export const useChatSession = ({
               .then(text => finalize(text))
               .catch(err => {
                 console.warn('Failed to decrypt incoming message', err);
-                finalize(payload.body ?? 'Unable to decrypt message', payload.body == null);
+                finalize(payload.body ?? 'Unable to decrypt message', payload.body == null, payload.body ?? null);
               });
           } else {
             const merged: InternalMessage = {
@@ -751,7 +768,7 @@ export const useChatSession = ({
             .then(text => finalize(text))
             .catch(err => {
               console.warn('Failed to decrypt symmetric incoming message', err);
-              finalize(payload.body ?? 'Unable to decrypt message', payload.body == null);
+              finalize(payload.body ?? 'Unable to decrypt message', payload.body == null, payload.body ?? null);
             });
           return;
         }
@@ -914,6 +931,116 @@ export const useChatSession = ({
     }, 1500);
     return () => clearTimeout(timer);
   }, [typing]);
+
+  const rebuildCryptoSession = useCallback(async () => {
+    try {
+      const client = await getE2EEClient();
+      setE2eeClient(client);
+      let key: string | null = null;
+      if (resolvedRoomKey) {
+        key = await ensureSharedRoomKey(resolvedRoomKey);
+        setSharedRoomKey(key);
+      }
+      return { client, sharedKey: key ?? sharedRoomKey };
+    } catch (err) {
+      console.warn('Failed to rebuild secure session', err);
+      return { client: e2eeClient, sharedKey: sharedRoomKey };
+    }
+  }, [resolvedRoomKey, e2eeClient, sharedRoomKey]);
+
+  const retryDecryptMessage = useCallback(
+    async (message: DisplayMessage): Promise<string | null> => {
+      const hasCiphertext = Boolean(message.raw?.ciphertext) && Boolean(message.raw?.iv);
+      if (!hasCiphertext) {
+        if (__DEV__ && message.raw?.debugBody) {
+          return message.raw.debugBody;
+        }
+        return null;
+      }
+
+      const { client, sharedKey } = await rebuildCryptoSession();
+      const keyToUse = sharedKey ?? sharedRoomKey;
+      try {
+        let decrypted: string | null = null;
+        if (
+          message.raw?.keyRef &&
+          client &&
+          message.raw.ciphertext &&
+          message.raw.iv &&
+          message.raw.aad
+        ) {
+          const envelope: E2EEEnvelope = {
+            messageId: message.messageId,
+            aad: message.raw.aad,
+            iv: message.raw.iv,
+            ciphertext: message.raw.ciphertext,
+            keyRef: message.raw.keyRef,
+          };
+          const fromSelf = currentUserId != null && message.senderId === currentUserId;
+          decrypted = await client.decryptEnvelope(envelope, Boolean(fromSelf));
+        } else if (keyToUse && message.raw?.ciphertext && message.raw?.iv) {
+          decrypted = await decryptMessage(
+            {
+              ciphertext: message.raw.ciphertext,
+              iv: message.raw.iv,
+              aad: message.raw.aad ?? undefined,
+            },
+            keyToUse,
+          );
+        }
+
+        if (!decrypted && __DEV__ && message.raw?.debugBody) {
+          decrypted = message.raw.debugBody;
+        }
+
+        if (!decrypted) {
+          return null;
+        }
+
+        setRawMessages(prev =>
+          prev.map(msg =>
+            msg.messageId === message.id
+              ? { ...msg, body: decrypted, decryptionFailed: false, debugBody: null }
+              : msg,
+          ),
+        );
+
+        const existing = rawMessages.find(msg => msg.messageId === message.id) ?? message.raw;
+        const merged: InternalMessage = {
+          ...existing,
+          body: decrypted,
+          decryptionFailed: false,
+          debugBody: null,
+        };
+        const payload = {
+          ciphertext: merged.ciphertext ?? undefined,
+          aad: merged.aad ?? undefined,
+          iv: merged.iv ?? undefined,
+          keyRef: merged.keyRef ?? undefined,
+          e2ee: merged.e2ee,
+        };
+        saveMessagesToDb([toDbRecord(merged, payload)]).catch(err =>
+          console.warn('Failed to persist retried decryption', err),
+        );
+
+        return decrypted;
+      } catch (err) {
+        console.warn('Retry decryption failed', err);
+        if (__DEV__ && message.raw?.debugBody) {
+          return message.raw.debugBody;
+        }
+        return null;
+      }
+    },
+    [
+      currentUserId,
+      rebuildCryptoSession,
+      rawMessages,
+      saveMessagesToDb,
+      sharedRoomKey,
+      toDbRecord,
+    ],
+  );
 
   const displayMessages: DisplayMessage[] = useMemo(() => {
     return rawMessages
@@ -1156,6 +1283,7 @@ export const useChatSession = ({
     markLatestRead,
     typingUsers,
     currentUserId,
+    retryDecryptMessage,
   } as const;
 };
 

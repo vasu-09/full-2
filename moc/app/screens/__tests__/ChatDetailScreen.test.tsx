@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react-native';
+import { render, waitFor } from '@testing-library/react-native';
 import React from 'react';
 import { MessageContent } from '../ChatDetailScreen';
 
@@ -76,10 +76,86 @@ describe('MessageContent', () => {
         item={message}
         playingMessageId={null}
         onTogglePlayback={jest.fn()}
+        onRetryDecrypt={jest.fn(async () => null)}
       />,
     );
 
     expect(getByText('Hello world')).toBeTruthy();
     expect(getByText('10:00')).toBeTruthy();
+  });
+
+    it('retries decrypting and displays recovered text', async () => {
+    const message = {
+      id: 'm2',
+      messageId: 'm2',
+      roomId: 1,
+      senderId: 42,
+      sender: 'other' as const,
+      text: 'Unable to decrypt message',
+      time: '11:00',
+      pending: false,
+      failed: true,
+      raw: {
+        messageId: 'm2',
+        roomId: 1,
+        senderId: 42,
+        type: 'TEXT',
+        body: null,
+        decryptionFailed: true,
+        ciphertext: 'abc',
+        iv: 'iv',
+        aad: 'aad',
+        keyRef: 'k',
+      },
+    };
+
+    const retryDecrypt = jest.fn(async () => 'Recovered text');
+
+    const { getByText } = render(
+      <MessageContent
+        item={message}
+        playingMessageId={null}
+        onTogglePlayback={jest.fn()}
+        onRetryDecrypt={retryDecrypt}
+      />,
+    );
+
+    await waitFor(() => expect(getByText('Recovered text')).toBeTruthy());
+    expect(retryDecrypt).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows session rebuild hint when retry fails', async () => {
+    const message = {
+      id: 'm3',
+      messageId: 'm3',
+      roomId: 1,
+      senderId: 1,
+      sender: 'other' as const,
+      text: 'Unable to decrypt message',
+      time: '11:05',
+      pending: false,
+      failed: true,
+      raw: {
+        messageId: 'm3',
+        roomId: 1,
+        senderId: 1,
+        type: 'TEXT',
+        body: null,
+        decryptionFailed: true,
+        ciphertext: 'abc',
+        iv: 'iv',
+      },
+    };
+
+    const { getByText } = render(
+      <MessageContent
+        item={message}
+        playingMessageId={null}
+        onTogglePlayback={jest.fn()}
+        onRetryDecrypt={jest.fn(async () => null)}
+      />,
+    );
+
+    await waitFor(() => expect(getByText('Re-establishing secure session…')).toBeTruthy());
   });
 });

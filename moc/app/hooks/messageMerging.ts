@@ -14,6 +14,7 @@ export type InternalMessage = {
   readByPeer?: boolean;
   decryptionFailed?: boolean;
   e2ee?: boolean;
+  debugBody?: string | null;
 };
 
 export const mergeIncomingMessage = (
@@ -34,6 +35,7 @@ export const mergeIncomingMessage = (
       iv: incoming.iv ?? existing.iv,
       keyRef: incoming.keyRef ?? existing.keyRef,
       readByPeer: incoming.readByPeer ?? existing.readByPeer,
+      debugBody: incoming.debugBody ?? existing.debugBody,
     };
     return next;
   }
