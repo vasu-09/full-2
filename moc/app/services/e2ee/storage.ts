@@ -44,6 +44,13 @@ export type SentMessageKey = {
   createdAt: number;
 };
 
+export type PeerFingerprint = {
+  deviceId: string;
+  identityKey: string;
+  signedPrekey: string;
+  updatedAt: number;
+};
+
 export type DeviceState = {
   version: number;
   deviceId: string;

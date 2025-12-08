@@ -124,7 +124,52 @@ export const formatDurationText = millis => {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 };
 
-export const MessageContent = ({ item, playingMessageId, onTogglePlayback }) => {
+export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRetryDecrypt }) => {
+  const [overrideText, setOverrideText] = useState(null);
+  const [retryStatus, setRetryStatus] = useState('idle');
+
+  useEffect(() => {
+    setOverrideText(null);
+    setRetryStatus('idle');
+  }, [item.id]);
+
+  useEffect(() => {
+    if (overrideText && item.text && item.text !== 'Unable to decrypt message') {
+      setOverrideText(null);
+    }
+  }, [item.text, overrideText]);
+
+  useEffect(() => {
+    const shouldRetry = Boolean(onRetryDecrypt) && Boolean(item.failed || item?.raw?.decryptionFailed);
+    if (!shouldRetry) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    setRetryStatus('retrying');
+    onRetryDecrypt(item)
+      .then(result => {
+        if (cancelled) return;
+        if (result) {
+          setOverrideText(result);
+          setRetryStatus('idle');
+        } else {
+          setRetryStatus('failed');
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setRetryStatus('failed');
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [item.id, item.failed, item?.raw?.decryptionFailed, onRetryDecrypt]);
+
+  const showRetryStatus = retryStatus === 'failed' && Boolean(item.failed || item?.raw?.decryptionFailed);
+  const messageText = showRetryStatus ? 'Re-establishing secure session…' : overrideText ?? item.text;
   const statusColor = item.failed
     ? '#b3261e'
     : item.pending
@@ -1032,10 +1077,11 @@ export default function ChatDetailScreen() {
                       isSelected ? styles.selectedBubble : null,
                     ]}
                   >
-                   <MessageContent
+                  <MessageContent
                       item={item}
                       playingMessageId={playingMessageId}
                       onTogglePlayback={toggleMessagePlayback}
+                      onRetryDecrypt={retryDecryptMessage}
                     />
                   </View>
                 </TouchableOpacity>
