@@ -1,8 +1,6 @@
+import { render } from '@testing-library/react-native';
 import React from 'react';
-import renderer, { ReactTestRendererJSON } from 'react-test-renderer';
-import ChatDetailScreen from '../ChatDetailScreen';
-
-const mockSendTextMessage = jest.fn();
+import { MessageContent } from '../ChatDetailScreen';
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn(), back: jest.fn() }),
@@ -23,37 +21,6 @@ jest.mock('react-native-safe-area-context', () => {
   };
 });
 
-jest.mock('react-native-vector-icons/MaterialIcons', () => 'Icon');
-
-jest.mock('../hooks/useCallSignaling', () => ({
-  __esModule: true,
-  default: () => ({ sendInviteDefault: jest.fn() }),
-}));
-
-jest.mock('../hooks/useChatSession', () => ({
-  useChatSession: jest.fn(() => ({
-    messages: [
-      {
-        id: 'm1',
-        messageId: 'm1',
-        roomId: 1,
-        senderId: 99,
-        sender: 'me' as const,
-        text: 'Hello world',
-        time: '10:00',
-        raw: {},
-      },
-    ],
-    sendTextMessage: mockSendTextMessage,
-    notifyTyping: jest.fn(),
-    markLatestRead: jest.fn(),
-    typingUsers: [],
-    isLoading: false,
-    error: null,
-    currentUserId: 99,
-  })),
-}));
-
 jest.mock('expo-audio', () => ({
   Audio: {
     requestPermissionsAsync: jest.fn().mockResolvedValue({ granted: true }),
@@ -72,31 +39,47 @@ jest.mock('expo-audio', () => ({
 
 jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn() }));
 jest.mock('expo-document-picker', () => ({ getDocumentAsync: jest.fn() }));
+jest.mock('../../hooks/useCallSignaling', () => ({
+  __esModule: true,
+  default: () => ({ sendInviteDefault: jest.fn() }),
+}));
+jest.mock('react-native-vector-icons/MaterialIcons', () => 'Icon');
+jest.mock('../../hooks/useChatSession', () => ({
+  useChatSession: jest.fn(() => ({
+    messages: [],
+    sendTextMessage: jest.fn(),
+    notifyTyping: jest.fn(),
+    markLatestRead: jest.fn(),
+    typingUsers: [],
+    isLoading: false,
+    error: null,
+    currentUserId: 99,
+  })),
+}));
 
-describe('ChatDetailScreen', () => {
-  it('renders plaintext messages instead of encryption placeholder', () => {
-    let tree: ReactTestRendererJSON | ReactTestRendererJSON[] | null = null;
-    renderer.act(() => {
-      tree = renderer.create(<ChatDetailScreen />).toJSON();
-    });
-
-    const findText = (node: any, text: string): boolean => {
-      if (node == null) {
-        return false;
-      }
-      if (typeof node === 'string') {
-        return node.includes(text);
-      }
-      if (Array.isArray(node)) {
-        return node.some(child => findText(child, text));
-      }
-      if (typeof node === 'object') {
-        const children = (node as ReactTestRendererJSON).children;
-        return Array.isArray(children) && children.some(child => findText(child, text));
-      }
-      return false;
+describe('MessageContent', () => {
+  it('renders sent message text with timestamp', () => {
+    const message = {
+      id: 'm1',
+      messageId: 'm1',
+      roomId: 1,
+      senderId: 99,
+      sender: 'me' as const,
+      text: 'Hello world',
+      time: '10:00',
+      pending: false,
+      failed: false,
     };
 
-    expect(findText(tree, 'Hello world')).toBe(true);
+    const { getByText } = render(
+      <MessageContent
+        item={message}
+        playingMessageId={null}
+        onTogglePlayback={jest.fn()}
+      />,
+    );
+
+    expect(getByText('Hello world')).toBeTruthy();
+    expect(getByText('10:00')).toBeTruthy();
   });
 });

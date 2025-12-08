@@ -33,24 +33,8 @@ import {
   markRoomRead,
 } from '../services/roomsService';
 import stompClient, { StompFrame } from '../services/stompClient';
-
-type InternalMessage = {
-  messageId: string;
-  roomId: number;
-  senderId: number | null;
-  type: string;
-  body?: string | null;
-  serverTs?: string | null;
-  ciphertext?: string | null;
-  iv?: string | null;
-  aad?: string | null;
-  keyRef?: string | null;
-  pending?: boolean;
-  error?: boolean;
-  readByPeer?: boolean;
-  decryptionFailed?: boolean;
-  e2ee?: boolean;
-};
+import { mergeIncomingMessage, type InternalMessage } from './messageMerging';
+export type { InternalMessage } from './messageMerging';
 
 export type DisplayMessage = {
   id: string;
@@ -463,34 +447,10 @@ export const useChatSession = ({
     });
   }, [roomId, resolvedRoomKey, title, peerId, upsertRoom]);
 
-  const mergeMessage = useCallback((incoming: InternalMessage) => {
-    setRawMessages(prev => {
-      const idx = prev.findIndex(m => m.messageId === incoming.messageId);
-      if (idx >= 0) {
-        const next = [...prev];
-        const existing = next[idx];
-        next[idx] = {
-          ...existing,
-          ...incoming,
-          body: incoming.body !== undefined ? incoming.body : existing.body,
-          serverTs: incoming.serverTs ?? existing.serverTs,
-          ciphertext: incoming.ciphertext ?? existing.ciphertext,
-          aad: incoming.aad ?? existing.aad,
-          iv: incoming.iv ?? existing.iv,
-          keyRef: incoming.keyRef ?? existing.keyRef,
-          readByPeer: incoming.readByPeer ?? existing.readByPeer,
-        };
-        return next;
-      }
-      return [
-        ...prev,
-        {
-          ...incoming,
-          readByPeer: incoming.readByPeer ?? false,
-        },
-      ];
-    });
-  }, []);
+  const mergeMessage = useCallback(
+    (incoming: InternalMessage) => setRawMessages(prev => mergeIncomingMessage(prev, incoming)),
+    [],
+  );
 
   const loadHistory = useCallback(async () => {
     if (!roomId) {
@@ -560,13 +520,11 @@ export const useChatSession = ({
           };
         }),
       );
-     setRawMessages(prev => {
-        const merged = [...processed];
-        prev.forEach(existing => {
-          if (!merged.find(entry => entry.messageId === existing.messageId)) {
-            merged.push(existing);
-          }
-        });
+      setRawMessages(prev => {
+        let merged = prev;
+        for (const msg of processed) {
+          merged = mergeIncomingMessage(merged, msg);
+        }
         return merged;
       });
       if (roomId) {
@@ -742,7 +700,14 @@ export const useChatSession = ({
       if (payload.e2ee) {
         const fromSelf = currentUserId != null && base.senderId === currentUserId;
         if (fromSelf) {
-          mergeMessage({ ...base, body: payload.body ?? null });
+          const selfUpdate: InternalMessage = {
+            ...base,
+            ciphertext: payload.ciphertext ?? null,
+            iv: payload.iv ?? null,
+            aad: payload.aad ?? null,
+            keyRef: payload.keyRef ?? null,
+          };
+          mergeMessage(selfUpdate);
           return;
         }
         if (payload.ciphertext && payload.aad && payload.iv && payload.keyRef) {
