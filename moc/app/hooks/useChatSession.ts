@@ -507,6 +507,7 @@ export const useChatSession = ({
           const base = toInternalMessage(dto);
           let text = dto.body ?? null;
           let failed = false;
+          const fallbackText = dto.body ?? 'Encrypted message';
           const encryptedPayload: EncryptedPayload | null =
             dto.ciphertext && dto.iv
               ? {
@@ -529,24 +530,24 @@ export const useChatSession = ({
                 text = await client.decryptEnvelope(envelope, Boolean(fromSelf));
               } catch (decryptErr) {
                 console.warn('Failed to decrypt history message', decryptErr);
-                text = 'Unable to decrypt message';
-                failed = true;
+                text = fallbackText;
+                failed = dto.body == null;
               }
             } else {
-              text = 'Encrypted message';
-              failed = true;
+              text = fallbackText;
+              failed = dto.body == null;
             }
           } else if (dto.e2ee && encryptedPayload && sharedRoomKey) {
             try {
               text = await decryptMessage(encryptedPayload, sharedRoomKey);
             } catch (decryptErr) {
               console.warn('Failed to decrypt symmetric history message', decryptErr);
-              text = 'Unable to decrypt message';
-              failed = true;
+              text = fallbackText;
+              failed = dto.body == null;
             }
           } else if (dto.e2ee && encryptedPayload) {
-            text = 'Encrypted message';
-            failed = true;
+            text = fallbackText;
+            failed = dto.body == null;
           }
           return {
             ...base,
@@ -707,11 +708,11 @@ export const useChatSession = ({
         e2ee: Boolean(payload.e2ee),
       };
       const finalize = (text: string | null, failed = false) => {
-         const merged = {
+        const merged = {
           ...base,
           body: text,
           decryptionFailed: failed,
-           ciphertext: payload.ciphertext ?? null,
+          ciphertext: payload.ciphertext ?? null,
           iv: payload.iv ?? null,
           aad: payload.aad ?? null,
           keyRef: payload.keyRef ?? null,
@@ -741,7 +742,7 @@ export const useChatSession = ({
       if (payload.e2ee) {
         const fromSelf = currentUserId != null && base.senderId === currentUserId;
         if (fromSelf) {
-          mergeMessage({ ...base });
+          mergeMessage({ ...base, body: payload.body ?? null });
           return;
         }
         if (payload.ciphertext && payload.aad && payload.iv && payload.keyRef) {
@@ -758,14 +759,15 @@ export const useChatSession = ({
               .then(text => finalize(text))
               .catch(err => {
                 console.warn('Failed to decrypt incoming message', err);
-                finalize('Unable to decrypt message', true);
+                finalize(payload.body ?? 'Unable to decrypt message', payload.body == null);
               });
           } else {
-            finalize('Encrypted message', true);
+             finalize(payload.body ?? 'Encrypted message', payload.body == null);
           }
-        return;
-      }
-       if (payload.ciphertext && payload.iv && sharedRoomKey) {
+          return;
+        }
+
+        if (payload.ciphertext && payload.iv && sharedRoomKey) {
           const encrypted: EncryptedPayload = {
             ciphertext: payload.ciphertext,
             iv: payload.iv,
@@ -775,12 +777,12 @@ export const useChatSession = ({
             .then(text => finalize(text))
             .catch(err => {
               console.warn('Failed to decrypt symmetric incoming message', err);
-              finalize('Unable to decrypt message', true);
+              finalize(payload.body ?? 'Unable to decrypt message', payload.body == null);
             });
           return;
         }
 
-        finalize('Encrypted message', true);
+        finalize(payload.body ?? 'Encrypted message', payload.body == null);
         return;
       }
 
