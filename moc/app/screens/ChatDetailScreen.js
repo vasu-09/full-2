@@ -117,6 +117,84 @@ const DUMMY_LIST = {
   ],
 };
 
+export const formatDurationText = millis => {
+  const totalSeconds = Math.max(0, Math.floor((millis || 0) / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+};
+
+export const MessageContent = ({ item, playingMessageId, onTogglePlayback }) => {
+  const statusColor = item.failed
+    ? '#b3261e'
+    : item.pending
+      ? '#1f6ea7'
+      : item.sender === 'me'
+        ? '#555'
+        : '#777';
+  const showClock = item.pending || item.failed;
+  return (
+    <View style={styles.messageContentRow}>
+      {item.audio ? (
+        <View style={[styles.audioMessageRow, styles.messageTextFlex]}>
+          <TouchableOpacity
+            style={styles.audioPlayButton}
+            onPress={() => onTogglePlayback(item)}
+            disabled={item.pending || item.failed}
+          >
+            <Icon
+              name={playingMessageId === item.id ? 'pause' : 'play-arrow'}
+              size={28}
+              color="#1f6ea7"
+            />
+          </TouchableOpacity>
+          <Text style={styles.audioDurationText}>{formatDurationText(item.duration)}</Text>
+        </View>
+      ) : (
+        <Text style={[styles.messageText, styles.messageTextFlex]}>{item.text}</Text>
+      )}
+      {showClock ? (
+        <View style={styles.messageStatusRow}>
+          {item.time ? (
+            <Text
+              style={[
+                styles.messageTime,
+                styles.inlineTime,
+                styles.statusTimeInRow,
+                item.sender === 'me' ? styles.myTime : styles.theirTime,
+                item.pending ? styles.pendingTime : null,
+                item.failed ? styles.failedTime : null,
+                { color: statusColor },
+              ]}
+            >
+              {item.time}
+            </Text>
+          ) : null}
+          <Icon
+            name="schedule"
+            size={12}
+            color={statusColor}
+            style={styles.statusIcon}
+          />
+        </View>
+      ) : (
+        <Text
+          style={[
+            styles.messageTime,
+            styles.inlineTime,
+            item.sender === 'me' ? styles.myTime : styles.theirTime,
+            item.pending ? styles.pendingTime : null,
+            item.failed ? styles.failedTime : null,
+            { color: statusColor },
+          ]}
+        >
+          {item.time}
+        </Text>
+      )}
+    </View>
+  );
+};
+
 export default function ChatDetailScreen() {
   const insets = useSafeAreaInsets();
   const [input, setInput] = useState('');
@@ -499,16 +577,9 @@ export default function ChatDetailScreen() {
 
   const anyChecked = todoState.some(e => e.checked);
 
-  const formatDuration = millis => {
-    const totalSeconds = Math.max(0, Math.floor((millis || 0) / 1000));
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-  };
-
   const stopPreviewPlayback = async () => {
-    if (!previewSoundRef.current) return;
-    try {
+      if (!previewSoundRef.current) return;
+      try {
       await previewSoundRef.current.stopAsync();
       await previewSoundRef.current.setPositionAsync(0);
     } catch (err) {
@@ -929,14 +1000,6 @@ export default function ChatDetailScreen() {
               ) : null
             }
             renderItem={({ item }) => {
-               const statusColor = item.failed
-                ? '#b3261e'
-                : item.pending
-                  ? '#1f6ea7'
-                  : item.sender === 'me'
-                    ? '#555'
-                    : '#777';
-              const showClock = item.pending || item.failed;
               const isSelected = selectedMessages.some(m => m.id === item.id);
               return (
                 <TouchableOpacity
@@ -969,64 +1032,11 @@ export default function ChatDetailScreen() {
                       isSelected ? styles.selectedBubble : null,
                     ]}
                   >
-                    <View style={styles.messageContentRow}>
-                      {item.audio ? (
-                        <View style={[styles.audioMessageRow, styles.messageTextFlex]}>
-                          <TouchableOpacity
-                            style={styles.audioPlayButton}
-                            onPress={() => toggleMessagePlayback(item)}
-                            disabled={item.pending || item.failed}
-                          >
-                            <Icon
-                              name={playingMessageId === item.id ? 'pause' : 'play-arrow'}
-                              size={28}
-                              color="#1f6ea7"
-                            />
-                          </TouchableOpacity>
-                          <Text style={styles.audioDurationText}>{formatDuration(item.duration)}</Text>
-                        </View>
-                      ) : (
-                        <Text style={[styles.messageText, styles.messageTextFlex]}>{item.text}</Text>
-                      )}
-                      {showClock ? (
-                        <View style={styles.messageStatusRow}>
-                          {item.time ? (
-                            <Text
-                              style={[
-                                styles.messageTime,
-                                styles.inlineTime,
-                                styles.statusTimeInRow,
-                                item.sender === 'me' ? styles.myTime : styles.theirTime,
-                                item.pending ? styles.pendingTime : null,
-                                item.failed ? styles.failedTime : null,
-                                { color: statusColor },
-                              ]}
-                            >
-                              {item.time}
-                            </Text>
-                          ) : null}
-                          <Icon
-                            name="schedule"
-                            size={12}
-                            color={statusColor}
-                            style={styles.statusIcon}
-                          />
-                      </View>
-                      ) : (
-                        <Text
-                          style={[
-                            styles.messageTime,
-                            styles.inlineTime,
-                            item.sender === 'me' ? styles.myTime : styles.theirTime,
-                            item.pending ? styles.pendingTime : null,
-                            item.failed ? styles.failedTime : null,
-                            { color: statusColor },
-                          ]}
-                        >
-                          {item.time}
-                        </Text>
-                      )}
-                    </View>
+                   <MessageContent
+                      item={item}
+                      playingMessageId={playingMessageId}
+                      onTogglePlayback={toggleMessagePlayback}
+                    />
                   </View>
                 </TouchableOpacity>
               );
@@ -1186,8 +1196,8 @@ export default function ChatDetailScreen() {
                 </TouchableOpacity>
                 <Text style={styles.previewDuration}>
                   {isRecording
-                    ? `Recording… ${formatDuration(recordingDuration)}`
-                    : formatDuration(recordingDuration)}
+                     ? `Recording… ${formatDurationText(recordingDuration)}`
+                    : formatDurationText(recordingDuration)}
                 </Text>
                 <TouchableOpacity style={styles.previewClose} onPress={handleDiscardRecording}>
                   <Icon name="close" size={18} color="#333" />

@@ -724,7 +724,7 @@ export const useChatSession = ({
                 finalize(payload.body ?? 'Unable to decrypt message', payload.body == null);
               });
           } else {
-             const merged: InternalMessage = {
+            const merged: InternalMessage = {
               ...base,
               body: payload.body ?? null,
               decryptionFailed: false,
@@ -755,8 +755,7 @@ export const useChatSession = ({
             });
           return;
         }
-
-       const merged: InternalMessage = {
+        const merged: InternalMessage = {
           ...base,
           body: payload.body ?? null,
           decryptionFailed: false,
@@ -771,7 +770,6 @@ export const useChatSession = ({
         );
         return;
       }
-
       finalize(payload.body ?? null);
     });
 
