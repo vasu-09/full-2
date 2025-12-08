@@ -467,7 +467,6 @@ export const useChatSession = ({
           const base = toInternalMessage(dto);
           let text = dto.body ?? null;
           let failed = false;
-          const fallbackText = dto.body ?? 'Encrypted message';
           const encryptedPayload: EncryptedPayload | null =
             dto.ciphertext && dto.iv
               ? {
@@ -490,24 +489,22 @@ export const useChatSession = ({
                 text = await client.decryptEnvelope(envelope, Boolean(fromSelf));
               } catch (decryptErr) {
                 console.warn('Failed to decrypt history message', decryptErr);
-                text = fallbackText;
+                text = dto.body ?? 'Unable to decrypt message';
                 failed = dto.body == null;
               }
             } else {
-              text = fallbackText;
-              failed = dto.body == null;
+              text = dto.body ?? null; 
             }
           } else if (dto.e2ee && encryptedPayload && sharedRoomKey) {
             try {
               text = await decryptMessage(encryptedPayload, sharedRoomKey);
             } catch (decryptErr) {
               console.warn('Failed to decrypt symmetric history message', decryptErr);
-              text = fallbackText;
+              text = dto.body ?? 'Unable to decrypt message';
               failed = dto.body == null;
             }
           } else if (dto.e2ee && encryptedPayload) {
-            text = fallbackText;
-            failed = dto.body == null;
+            text = dto.body ?? null;
           }
           return {
             ...base,
@@ -727,7 +724,19 @@ export const useChatSession = ({
                 finalize(payload.body ?? 'Unable to decrypt message', payload.body == null);
               });
           } else {
-             finalize(payload.body ?? 'Encrypted message', payload.body == null);
+             const merged: InternalMessage = {
+              ...base,
+              body: payload.body ?? null,
+              decryptionFailed: false,
+              ciphertext: payload.ciphertext ?? null,
+              iv: payload.iv ?? null,
+              aad: payload.aad ?? null,
+              keyRef: payload.keyRef ?? null,
+            };
+            mergeMessage(merged);
+            saveMessagesToDb([toDbRecord(merged, payload)]).catch(err =>
+              console.warn('Failed to persist incoming message', err),
+            );
           }
           return;
         }
@@ -747,7 +756,19 @@ export const useChatSession = ({
           return;
         }
 
-        finalize(payload.body ?? 'Encrypted message', payload.body == null);
+       const merged: InternalMessage = {
+          ...base,
+          body: payload.body ?? null,
+          decryptionFailed: false,
+          ciphertext: payload.ciphertext ?? null,
+          iv: payload.iv ?? null,
+          aad: payload.aad ?? null,
+          keyRef: payload.keyRef ?? null,
+        };
+        mergeMessage(merged);
+        saveMessagesToDb([toDbRecord(merged, payload)]).catch(err =>
+          console.warn('Failed to persist incoming message', err),
+        );
         return;
       }
 
