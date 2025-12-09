@@ -16,6 +16,8 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.stereotype.Service;
 import org.springframework.web.socket.WebSocketSession;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.nio.file.AccessDeniedException;
 import java.time.Instant;
@@ -25,6 +27,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class MessageService {
+
+    private static final Logger log = LoggerFactory.getLogger(MessageService.class);
 
     @Autowired
     private  OutboxEventRepository outboxRepo;
@@ -114,7 +118,7 @@ public class MessageService {
         boolean e2ee = dto.isE2ee(); // <- your ChatSendDto should expose isE2ee() (primitive boolean)
         if (e2ee) {
             if (dto.getBody() != null && !dto.getBody().isBlank()) {
-                throw new IllegalArgumentException("Plaintext body not allowed when e2ee=true");
+                log.warn("Dropping plaintext body for e2ee messageId={} roomId={}", dto.getMessageId(), roomId);
             }
             msg.setE2ee(true);
             msg.setE2eeVer(dto.getE2eeVer() == null ? 1 : dto.getE2eeVer());
