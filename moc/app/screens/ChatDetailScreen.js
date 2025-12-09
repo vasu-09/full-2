@@ -134,10 +134,10 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
   }, [item.id]);
 
   useEffect(() => {
-    if (overrideText && item.text && item.text !== 'Unable to decrypt message') {
+    if (overrideText && item.text && !item?.raw?.decryptionFailed) {
       setOverrideText(null);
     }
-  }, [item.text, overrideText]);
+  }, [item.text, item?.raw?.decryptionFailed, overrideText]);
 
   useEffect(() => {
     const shouldRetry = Boolean(onRetryDecrypt) && Boolean(item.failed || item?.raw?.decryptionFailed);
@@ -169,7 +169,8 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
   }, [item.id, item.failed, item?.raw?.decryptionFailed, onRetryDecrypt]);
 
   const showRetryStatus = retryStatus === 'failed' && Boolean(item.failed || item?.raw?.decryptionFailed);
-  const messageText = showRetryStatus ? 'Re-establishing secure session…' : overrideText ?? item.text;
+  const fallbackText = item.text ?? item?.raw?.body ?? 'Encrypted message';
+  const messageText = overrideText ?? fallbackText;
   const statusColor = item.failed
     ? '#b3261e'
     : item.pending
@@ -178,6 +179,7 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
         ? '#555'
         : '#777';
   const showClock = item.pending || item.failed;
+  const decryptionFailed = Boolean(item?.raw?.decryptionFailed);
   return (
     <View style={styles.messageContentRow}>
       {item.audio ? (
@@ -196,7 +198,18 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
           <Text style={styles.audioDurationText}>{formatDurationText(item.duration)}</Text>
         </View>
       ) : (
-        <Text style={[styles.messageText, styles.messageTextFlex]}>{item.text}</Text>
+        <View style={[styles.messageTextFlex, styles.messageTextWrapper]}>
+          <Text style={styles.messageText}>{messageText}</Text>
+          {showRetryStatus ? (
+            <Text style={styles.retryStatusText}>Re-establishing secure session…</Text>
+          ) : null}
+          {decryptionFailed ? (
+            <View style={styles.decryptionBadge}>
+              <Icon name="lock-open" size={12} color="#b3261e" style={styles.decryptionIcon} />
+              <Text style={styles.decryptionBadgeText}>Decryption failed</Text>
+            </View>
+          ) : null}
+        </View>
       )}
       {showClock ? (
         <View style={styles.messageStatusRow}>
@@ -1488,8 +1501,34 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   messageText: { fontSize: 16, lineHeight: 20 },
+  messageTextWrapper: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+  },
   messageTextFlex: {
     flexShrink: 1,
+  },
+  decryptionBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fdecea',
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginTop: 4,
+  },
+  decryptionIcon: {
+    marginRight: 2,
+  },
+  decryptionBadgeText: {
+    color: '#b3261e',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  retryStatusText: {
+    color: '#1f6ea7',
+    fontSize: 12,
+    marginTop: 4,
   },
   messageTime: {
     fontSize: 10,

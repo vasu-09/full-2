@@ -36,6 +36,7 @@ export const mergeIncomingMessage = (
       keyRef: incoming.keyRef ?? existing.keyRef,
       readByPeer: incoming.readByPeer ?? existing.readByPeer,
       debugBody: incoming.debugBody ?? existing.debugBody,
+      decryptionFailed: incoming.decryptionFailed ?? existing.decryptionFailed,
     };
     return next;
   }

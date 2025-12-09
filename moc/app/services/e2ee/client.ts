@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 
-import { claimPrekey, getPrekeyStock, listDeviceBundles, registerDevice, uploadPrekeys } from './api';
+import { claimPrekey, getPrekeyStock, listDeviceBundles, registerDevice, uploadPrekeys, type DeviceBundleResponse } from './api';
 import { computeFromEphemeral, deriveEphemeral, generateDhKeyPair } from './dh';
 import {
   generateKeyPair as generateEd25519KeyPair,
@@ -11,13 +11,7 @@ import {
 import { base64ToBytes, bytesToBase64, bytesToUtf8, concatBytes, utf8ToBytes } from './encoding';
 import { randomBytes, randomId } from './random';
 import { sha256 } from './sha256';
-import {
-  DeviceState,
-  SentMessageKey,
-  StoredPrekey,
-  loadDeviceState,
-  saveDeviceState,
-} from './storage';
+import { DeviceState, PeerFingerprint, SentMessageKey, StoredPrekey, loadDeviceState, saveDeviceState } from './storage';
 
 type Envelope = {
   messageId: string;
@@ -43,6 +37,7 @@ const DEVICE_VERSION = 15;
 const INITIAL_PREKEY_BATCH = 10;
 const MIN_SERVER_STOCK = 5;
 const CONSUMED_PREKEY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const FINGERPRINT_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 const ensurePrekeysAvailable = (state: DeviceState, count: number): DeviceState => {
   const now = Date.now();
@@ -89,6 +84,27 @@ const markPrekeyConsumed = (state: DeviceState, publicKey: string): DeviceState 
   };
 };
 
+const buildFingerprint = (bundle: DeviceBundleResponse, timestamp: number): PeerFingerprint => ({
+  deviceId: bundle.deviceId,
+  identityKey: bundle.identityKeyPub,
+  signedPrekey: bundle.signedPrekeyPub,
+  updatedAt: timestamp,
+});
+
+const fingerprintsMatch = (
+  bundle: DeviceBundleResponse,
+  cached: PeerFingerprint | null | undefined
+): cached is PeerFingerprint =>
+  Boolean(
+    cached &&
+      cached.deviceId === bundle.deviceId &&
+      cached.identityKey === bundle.identityKeyPub &&
+      cached.signedPrekey === bundle.signedPrekeyPub
+  );
+
+const isFingerprintFresh = (cached: PeerFingerprint | null | undefined): cached is PeerFingerprint =>
+  Boolean(cached && cached.updatedAt >= Date.now() - FINGERPRINT_TTL_MS);
+
 const SIGNATURE_LENGTH = 64;
 const KEY_LENGTH = 32;
 
@@ -122,6 +138,12 @@ const signPrekey = async (
   return bytesToBase64(signature);
 };
 
+const normalizePeerFingerprints = (state: DeviceState): DeviceState => ({
+  ...state,
+  peerFingerprints: state.peerFingerprints ?? {},
+});
+
+
 
 const createDeviceState = async (): Promise<DeviceState> => {
   const deviceId = `dev-${randomId(20)}`;
@@ -141,6 +163,7 @@ const createDeviceState = async (): Promise<DeviceState> => {
     },
     oneTimePrekeys: [],
     sentMessageKeys: [],
+    peerFingerprints: {},
   };
    const withPrekeys = ensurePrekeysAvailable(base, INITIAL_PREKEY_BATCH);
   const signature = await signPrekey(withPrekeys.identity.privateKey, withPrekeys.signedPrekey.publicKey);
@@ -192,7 +215,8 @@ const ensureDeviceState = async (): Promise<DeviceState> => {
   if (!current || current.version !== DEVICE_VERSION) {
     return createDeviceState();
   }
-  return ensureSignedPrekeySignature(current);
+  const withSignature = await ensureSignedPrekeySignature(current);
+  return normalizePeerFingerprints(withSignature);
 };
 
 const toUploadablePrekeys = (prekeys: StoredPrekey[]) => prekeys.map(k => k.publicKey);
@@ -372,8 +396,46 @@ export class E2EEClient {
     if (!devices.length) {
       return null;
     }
-    const target = devices[0];
+
+   const validatedDevices: DeviceBundleResponse[] = [];
+    for (const device of devices) {
+      const validSignature = await hasValidPrekeySignature(
+        device.identityKeyPub,
+        device.signedPrekeyPub,
+        device.signedPrekeySig
+      );
+      if (validSignature) {
+        validatedDevices.push(device);
+      }
+    }
+
+    if (!validatedDevices.length) {
+      return null;
+    }
+
+    const cached = isFingerprintFresh(this.state.peerFingerprints?.[targetUserId])
+      ? this.state.peerFingerprints?.[targetUserId] ?? null
+      : null;
+
+    const preferred = cached
+      ? validatedDevices.find(bundle => fingerprintsMatch(bundle, cached))
+      : undefined;
+    const target = preferred ?? validatedDevices[0];
+
     const bundle = await claimPrekey(targetUserId, target.deviceId);
+    const bundleSignatureValid = await hasValidPrekeySignature(
+      bundle.identityKeyPub,
+      bundle.signedPrekeyPub,
+      bundle.signedPrekeySig
+    );
+    if (!bundleSignatureValid) {
+      return null;
+    }
+
+    const now = Date.now();
+    const fingerprint = buildFingerprint(bundle, now);
+    const fingerprintChanged = !fingerprintsMatch(bundle, cached);
+
     const prekey = bundle.oneTimePrekeyPub ?? bundle.signedPrekeyPub;
     if (!prekey) {
       return null;
@@ -381,9 +443,23 @@ export class E2EEClient {
     const { shared, ephemeralPublic } = deriveEphemeral(prekey);
     const keyRef = bundle.oneTimePrekeyPub ? `otk:${bundle.oneTimePrekeyPub}` : 'spk';
     const envelope = encryptPayload(shared, plaintext, keyRef, ephemeralPublic);
+
+     if (fingerprintChanged && cached) {
+      console.warn('[E2EE] Detected changed device fingerprint; refreshing session before send');
+    }
+
     await this.withState(async current => {
-      return rememberSentKey(current, { messageId, key: envelope.sharedKey, createdAt: Date.now() });
+      const normalized = normalizePeerFingerprints(current);
+      const withSentKey = rememberSentKey(normalized, { messageId, key: envelope.sharedKey, createdAt: now });
+      return {
+        ...withSentKey,
+        peerFingerprints: {
+          ...(withSentKey.peerFingerprints ?? {}),
+          [targetUserId]: fingerprint,
+        },
+      };
     });
+    
     return envelope;
   }
 

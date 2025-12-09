@@ -69,6 +69,14 @@ describe('MessageContent', () => {
       time: '10:00',
       pending: false,
       failed: false,
+      raw: {
+        messageId: 'm1',
+        roomId: 1,
+        senderId: 99,
+        type: 'TEXT',
+        body: 'Hello world',
+        decryptionFailed: false,
+      },
     };
 
     const { getByText } = render(
@@ -91,7 +99,7 @@ describe('MessageContent', () => {
       roomId: 1,
       senderId: 42,
       sender: 'other' as const,
-      text: 'Unable to decrypt message',
+      text: null,
       time: '11:00',
       pending: false,
       failed: true,
@@ -100,7 +108,7 @@ describe('MessageContent', () => {
         roomId: 1,
         senderId: 42,
         type: 'TEXT',
-        body: null,
+        body: 'Original raw message',
         decryptionFailed: true,
         ciphertext: 'abc',
         iv: 'iv',
@@ -120,8 +128,11 @@ describe('MessageContent', () => {
       />,
     );
 
+    expect(getByText('Original raw message')).toBeTruthy();
+
     await waitFor(() => expect(getByText('Recovered text')).toBeTruthy());
     expect(retryDecrypt).toHaveBeenCalledTimes(1);
+    expect(getByText('Decryption failed')).toBeTruthy();
   });
 
   it('shows session rebuild hint when retry fails', async () => {
@@ -131,7 +142,7 @@ describe('MessageContent', () => {
       roomId: 1,
       senderId: 1,
       sender: 'other' as const,
-      text: 'Unable to decrypt message',
+      text: null,
       time: '11:05',
       pending: false,
       failed: true,
@@ -140,7 +151,7 @@ describe('MessageContent', () => {
         roomId: 1,
         senderId: 1,
         type: 'TEXT',
-        body: null,
+        body: 'Raw text from payload',
         decryptionFailed: true,
         ciphertext: 'abc',
         iv: 'iv',
@@ -157,5 +168,6 @@ describe('MessageContent', () => {
     );
 
     await waitFor(() => expect(getByText('Re-establishing secure session…')).toBeTruthy());
+    expect(getByText('Raw text from payload')).toBeTruthy();
   });
 });
