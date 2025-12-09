@@ -3,6 +3,7 @@ package com.om.Real_Time_Communication.controller;
 import com.om.Real_Time_Communication.dto.ClaimPrekeyRequest;
 import com.om.Real_Time_Communication.dto.DeviceBundleDto;
 import com.om.Real_Time_Communication.dto.RegisterDto;
+import com.om.Real_Time_Communication.dto.OneTimePrekeyDto;
 import com.om.Real_Time_Communication.dto.SessionRecoveryRequest;
 import com.om.Real_Time_Communication.dto.RegisterResponse;
 import com.om.Real_Time_Communication.service.E2eeDeviceService;
@@ -34,7 +35,7 @@ public class E2eeDeviceController {
 
     /** Upload more OTKs for an existing device. */
     @PostMapping("/devices/{deviceId}/prekeys")
-    public void uploadPrekeys(Principal principal, @PathVariable String deviceId, @RequestBody List<byte[]> prekeys) {
+    public void uploadPrekeys(Principal principal, @PathVariable String deviceId, @RequestBody List<OneTimePrekeyDto> prekeys) {
         Long userId = Long.valueOf(principal.getName());
         svc.addPrekeys(userId, deviceId, prekeys);
     }

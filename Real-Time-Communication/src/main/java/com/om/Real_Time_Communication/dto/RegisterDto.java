@@ -1,4 +1,5 @@
 package com.om.Real_Time_Communication.dto;
+import com.om.Real_Time_Communication.dto.OneTimePrekeyDto;
 
 import java.util.List;
 
@@ -9,7 +10,7 @@ public class RegisterDto {
     private byte[] identityKeyPub;   // Ed25519 public
     private byte[] signedPrekeyPub;  // Ed25519 public
     private byte[] signedPrekeySig;  // Ed25519 signature over signedPrekeyPub
-    private List<byte[]> oneTimePrekeys; // each is X25519 public
+    private List<OneTimePrekeyDto> oneTimePrekeys;
 
     public String getDeviceId() { return deviceId; } public void setDeviceId(String deviceId) { this.deviceId = deviceId; }
     public String getName() { return name; } public void setName(String name) { this.name = name; }
@@ -17,5 +18,5 @@ public class RegisterDto {
     public byte[] getIdentityKeyPub() { return identityKeyPub; } public void setIdentityKeyPub(byte[] identityKeyPub) { this.identityKeyPub = identityKeyPub; }
     public byte[] getSignedPrekeyPub() { return signedPrekeyPub; } public void setSignedPrekeyPub(byte[] signedPrekeyPub) { this.signedPrekeyPub = signedPrekeyPub; }
     public byte[] getSignedPrekeySig() { return signedPrekeySig; } public void setSignedPrekeySig(byte[] signedPrekeySig) { this.signedPrekeySig = signedPrekeySig; }
-    public List<byte[]> getOneTimePrekeys() { return oneTimePrekeys; } public void setOneTimePrekeys(List<byte[]> oneTimePrekeys) { this.oneTimePrekeys = oneTimePrekeys; }
+    public List<OneTimePrekeyDto> getOneTimePrekeys() { return oneTimePrekeys; } public void setOneTimePrekeys(List<OneTimePrekeyDto> oneTimePrekeys) { this.oneTimePrekeys = oneTimePrekeys; }
 }

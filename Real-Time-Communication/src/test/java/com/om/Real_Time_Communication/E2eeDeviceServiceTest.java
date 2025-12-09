@@ -1,10 +1,12 @@
-package com.om.Real_Time_Communication.service;
+package com.om.Real_Time_Communication;
 
 import com.om.Real_Time_Communication.Repository.E2eeDeviceRepository;
 import com.om.Real_Time_Communication.Repository.E2eeOneTimePrekeyRepository;
 import com.om.Real_Time_Communication.dto.RegisterDto;
 import com.om.Real_Time_Communication.dto.SessionRecoveryRequest;
+import com.om.Real_Time_Communication.dto.OneTimePrekeyDto;
 import com.om.Real_Time_Communication.models.E2eeDevice;
+import com.om.Real_Time_Communication.service.E2eeDeviceService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,14 +40,17 @@ class E2eeDeviceServiceTest {
     void registerReplacesKeysOnReinstallAndPurgesOldPrekeys() throws Exception {
         KeyPair identityV1 = generateKeyPair();
         KeyPair signedV1 = generateKeyPair();
-        RegisterDto v1 = buildRegister("device-A", identityV1, signedV1, List.of(new byte[]{1, 2, 3}, new byte[]{4, 5, 6}));
+        RegisterDto v1 = buildRegister("device-A", identityV1, signedV1, List.of(
+                prekey(10, new byte[]{1, 2, 3}),
+                prekey(11, new byte[]{4, 5, 6})
+        ));
 
         assertThat(service.register(10L, v1)).isTrue();
         assertThat(prekeyRepository.countByUserIdAndDeviceIdAndConsumedFalse(10L, "device-A")).isEqualTo(2);
 
         KeyPair identityV2 = generateKeyPair();
         KeyPair signedV2 = generateKeyPair();
-        RegisterDto v2 = buildRegister("device-A", identityV2, signedV2, List.of(new byte[]{7, 8, 9}));
+        RegisterDto v2 = buildRegister("device-A", identityV2, signedV2, List.of(prekey(15, new byte[]{7, 8, 9})));
 
         assertThat(service.register(10L, v2)).isTrue();
 
@@ -59,7 +64,10 @@ class E2eeDeviceServiceTest {
     void claimOneTimePrekeyConsumesAndTracksAvailability() throws Exception {
         KeyPair identity = generateKeyPair();
         KeyPair signed = generateKeyPair();
-        RegisterDto register = buildRegister("device-B", identity, signed, List.of(new byte[]{10, 11, 12}, new byte[]{13, 14, 15}));
+        RegisterDto register = buildRegister("device-B", identity, signed, List.of(
+                prekey(21, new byte[]{10, 11, 12}),
+                prekey(22, new byte[]{13, 14, 15})
+        ));
         assertThat(service.register(22L, register)).isTrue();
 
         var bundle = service.claimOneTimePrekey(22L, "device-B");
@@ -72,7 +80,7 @@ class E2eeDeviceServiceTest {
     void recoverSessionFetchesFreshPrekeyAfterFailure() throws Exception {
         KeyPair identity = generateKeyPair();
         KeyPair signed = generateKeyPair();
-        RegisterDto register = buildRegister("device-C", identity, signed, List.of(new byte[]{20, 21, 22}));
+        RegisterDto register = buildRegister("device-C", identity, signed, List.of(prekey(30, new byte[]{20, 21, 22})));
         assertThat(service.register(33L, register)).isTrue();
 
         SessionRecoveryRequest request = new SessionRecoveryRequest();
@@ -88,7 +96,7 @@ class E2eeDeviceServiceTest {
         assertThat(prekeyRepository.countByUserIdAndDeviceIdAndConsumedFalse(33L, "device-C")).isZero();
     }
 
-    private RegisterDto buildRegister(String deviceId, KeyPair identityKey, KeyPair signedPrekey, List<byte[]> otks) throws Exception {
+    private RegisterDto buildRegister(String deviceId, KeyPair identityKey, KeyPair signedPrekey, List<OneTimePrekeyDto> otks) throws Exception {
         byte[] identityPub = rawPublicKey(identityKey);
         byte[] signedPrekeyPub = rawPublicKey(signedPrekey);
         byte[] signature = sign(identityKey.getPrivate(), signedPrekeyPub);
@@ -99,6 +107,13 @@ class E2eeDeviceServiceTest {
         dto.setSignedPrekeyPub(signedPrekeyPub);
         dto.setSignedPrekeySig(signature);
         dto.setOneTimePrekeys(otks);
+        return dto;
+    }
+
+    private OneTimePrekeyDto prekey(int id, byte[] pub) {
+        OneTimePrekeyDto dto = new OneTimePrekeyDto();
+        dto.setPrekeyId(id);
+        dto.setPrekeyPub(pub);
         return dto;
     }
 

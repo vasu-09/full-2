@@ -6,6 +6,7 @@ import com.om.Real_Time_Communication.Repository.E2eeOneTimePrekeyRepository;
 import com.om.Real_Time_Communication.dto.DeviceBundleDto;
 import com.om.Real_Time_Communication.dto.RegisterDto;
 import com.om.Real_Time_Communication.models.E2eeDevice;
+import com.om.Real_Time_Communication.dto.OneTimePrekeyDto;
 import com.om.Real_Time_Communication.dto.SessionRecoveryRequest;
 import com.om.Real_Time_Communication.models.E2eeOneTimePrekey;
 import com.om.Real_Time_Communication.security.Ed25519Verifier;
@@ -74,13 +75,16 @@ public class E2eeDeviceService {
         }
 
         if (dto.getOneTimePrekeys()!=null) {
-            for (byte[] otk : dto.getOneTimePrekeys()) {
-                if (otk == null || otk.length == 0) continue;
+            for (OneTimePrekeyDto otk : dto.getOneTimePrekeys()) {
+                if (otk == null || otk.getPrekeyPub() == null || otk.getPrekeyPub().length == 0) continue;
                 E2eeOneTimePrekey p = new E2eeOneTimePrekey();
-                p.setUserId(userId); p.setDeviceId(dto.getDeviceId()); p.setPrekeyPub(otk);
+                p.setUserId(userId); p.setDeviceId(dto.getDeviceId());
+                p.setPrekeyId(otk.getPrekeyId());
+                p.setPrekeyPub(otk.getPrekeyPub());
                 prekeyRepo.save(p);
             }
-            log.info("E2EE stored {} OTKs for user={} device={}", dto.getOneTimePrekeys().size(), userId, dto.getDeviceId());
+            log.info("E2EE stored {} OTKs for user={} device={} (examples id={} ...)", dto.getOneTimePrekeys().size(), userId, dto.getDeviceId(),
+                    dto.getOneTimePrekeys().isEmpty() ? null : dto.getOneTimePrekeys().get(0).getPrekeyId());
         } else {
             log.warn("E2EE register user={} device={} with no OTKs uploaded", userId, dto.getDeviceId());
         }
@@ -97,7 +101,7 @@ public class E2eeDeviceService {
         var avail = prekeyRepo.findAvailable(targetUserId, deviceId);
         if (!avail.isEmpty()) {
             var first = avail.get(0);
-            otkId = first.getId();
+            otkId = first.getPrekeyId() != null ? first.getPrekeyId().longValue() : first.getId();
             otk = first.getPrekeyPub();
             first.setConsumed(true);
             prekeyRepo.save(first);
@@ -130,14 +134,16 @@ public class E2eeDeviceService {
 
     /** Upload additional OTKs for an existing device. */
     @Transactional
-    public void addPrekeys(Long userId, String deviceId, List<byte[]> prekeys) {
+    public void addPrekeys(Long userId, String deviceId, List<OneTimePrekeyDto> prekeys) {
         deviceRepo.findByUserIdAndDeviceId(userId, deviceId)
                 .orElseThrow(() -> new IllegalArgumentException("device not found"));
         if (prekeys == null) return;
-        for (byte[] otk : prekeys) {
-            if (otk == null || otk.length == 0) continue;
+        for (OneTimePrekeyDto otk : prekeys) {
+            if (otk == null || otk.getPrekeyPub() == null || otk.getPrekeyPub().length == 0) continue;
             E2eeOneTimePrekey p = new E2eeOneTimePrekey();
-            p.setUserId(userId); p.setDeviceId(deviceId); p.setPrekeyPub(otk);
+            p.setUserId(userId); p.setDeviceId(deviceId);
+            p.setPrekeyId(otk.getPrekeyId());
+            p.setPrekeyPub(otk.getPrekeyPub());
             prekeyRepo.save(p);
         }
     }
