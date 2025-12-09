@@ -19,6 +19,30 @@ export type EncryptedPayload = {
   aad?: string;
 };
 
+const seedPrng = () => {
+  const applyRandom = (target: Uint8Array) => {
+    const bytes = Crypto.getRandomBytes(target.length);
+    target.set(bytes);
+    return target;
+  };
+
+  const globalCrypto = (globalThis as any).crypto ?? {};
+  if (typeof globalCrypto.getRandomValues !== 'function') {
+    globalCrypto.getRandomValues = applyRandom;
+    (globalThis as any).crypto = globalCrypto;
+  }
+
+  const setPrng = (nacl as unknown as { setPRNG?: (fn: (x: Uint8Array, n: number) => void) => void }).setPRNG;
+  if (setPrng) {
+    setPrng((x, n) => {
+      const bytes = Crypto.getRandomBytes(n);
+      x.set(bytes);
+    });
+  }
+};
+
+seedPrng();
+
 const SHARED_KEY_PREFIX = 'chat.sharedKey:';
 const SHARED_KEY_SALT_PREFIX = 'chat.sharedKeySalt:';
 const PBKDF2_ITERATIONS = 150_000;

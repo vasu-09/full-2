@@ -8,6 +8,11 @@ export type DeviceBundleResponse = {
   oneTimePrekeyPub?: string | null;
 };
 
+export type OneTimePrekeyPayload = {
+  prekeyId?: number | null;
+  prekeyPub: string;
+};
+
 export type RegisterPayload = {
   deviceId: string;
   name?: string | null;
@@ -15,14 +20,14 @@ export type RegisterPayload = {
   identityKeyPub: string;
   signedPrekeyPub: string;
   signedPrekeySig?: string | null;
-  oneTimePrekeys?: string[];
+  oneTimePrekeys?: OneTimePrekeyPayload[];
 };
 
 export const registerDevice = async (payload: RegisterPayload): Promise<void> => {
   await apiClient.post('/api/e2ee/devices/register', payload);
 };
 
-export const uploadPrekeys = async (deviceId: string, prekeys: string[]): Promise<void> => {
+export const uploadPrekeys = async (deviceId: string, prekeys: OneTimePrekeyPayload[]): Promise<void> => {
   if (!prekeys.length) {
     return;
   }

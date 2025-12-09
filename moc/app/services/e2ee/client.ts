@@ -1,6 +1,14 @@
 import { Platform } from 'react-native';
 
-import { claimPrekey, getPrekeyStock, listDeviceBundles, registerDevice, uploadPrekeys, type DeviceBundleResponse } from './api';
+import {
+  claimPrekey,
+  getPrekeyStock,
+  listDeviceBundles,
+  registerDevice,
+  uploadPrekeys,
+  type DeviceBundleResponse,
+  type OneTimePrekeyPayload,
+} from './api';
 import { computeFromEphemeral, deriveEphemeral, generateDhKeyPair } from './dh';
 import {
   generateKeyPair as generateEd25519KeyPair,
@@ -219,10 +227,14 @@ const ensureDeviceState = async (): Promise<DeviceState> => {
   return normalizePeerFingerprints(withSignature);
 };
 
-const toUploadablePrekeys = (prekeys: StoredPrekey[]) => prekeys.map(k => k.publicKey);
+const toUploadablePrekeys = (prekeys: StoredPrekey[]): OneTimePrekeyPayload[] =>
+  prekeys.map(k => ({
+    prekeyId: k.prekeyId ?? null,
+    prekeyPub: k.publicKey,
+  }));
 
 const registerIfNeeded = async (state: DeviceState): Promise<DeviceState> => {
-  const pendingUpload = state.oneTimePrekeys.filter(pk => !pk.uploaded).map(pk => pk.publicKey);
+  const pendingUpload = state.oneTimePrekeys.filter(pk => !pk.uploaded);
   await registerDevice({
     deviceId: state.deviceId,
     name: 'MoC Mobile',
@@ -230,7 +242,7 @@ const registerIfNeeded = async (state: DeviceState): Promise<DeviceState> => {
     identityKeyPub: state.identity.publicKey,
     signedPrekeyPub: state.signedPrekey.publicKey,
     signedPrekeySig: state.signedPrekey.signature,
-    oneTimePrekeys: pendingUpload,
+     oneTimePrekeys: toUploadablePrekeys(pendingUpload),
   });
   const updated: DeviceState = {
     ...state,

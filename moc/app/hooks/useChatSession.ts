@@ -57,6 +57,7 @@ type TypingUser = {
 };
 
 const MESSAGE_TYPE_TEXT = 'TEXT';
+const SHOULD_LOG_DECRYPT = __DEV__ && process.env.EXPO_PUBLIC_DEBUG_DECRYPT !== '0';
 
 const formatTime = (iso?: string | null) => {
   if (!iso) {
@@ -172,10 +173,7 @@ export const useChatSession = ({
       id: message.messageId,
       conversationId: message.roomId,
       senderId: message.senderId ?? null,
-      plaintext:
-        payload?.ciphertext && message.decryptionFailed
-          ? null
-          : message.body ?? null,
+      plaintext: message.body ?? null,
       ciphertext: payload?.ciphertext ?? null,
       aad: payload?.aad ?? null,
       iv: payload?.iv ?? null,
@@ -678,7 +676,11 @@ export const useChatSession = ({
         error: false,
         e2ee: Boolean(payload.e2ee),
       };
-      const finalize = (text: string | null, failed = false, debugText: string | null = null) => {
+       const finalize = (
+        text: string | null,
+        failed = false,
+        debugText: string | null = null,
+      ) => {
         const merged = {
           ...base,
           body: text,
@@ -711,11 +713,15 @@ export const useChatSession = ({
         }
       };
 
+      const fallbackBody = payload.body ?? null;
+
+
       if (payload.e2ee) {
         const fromSelf = currentUserId != null && base.senderId === currentUserId;
         if (fromSelf) {
           const selfUpdate: InternalMessage = {
             ...base,
+            body: fallbackBody,
             ciphertext: payload.ciphertext ?? null,
             iv: payload.iv ?? null,
             aad: payload.aad ?? null,
@@ -738,13 +744,30 @@ export const useChatSession = ({
               .then(text => finalize(text))
               .catch(err => {
                 console.warn('Failed to decrypt incoming message', err);
-                finalize(payload.body ?? 'Unable to decrypt message', payload.body == null, payload.body ?? null);
+               if (SHOULD_LOG_DECRYPT) {
+                  console.log('[CHAT] e2ee envelope fallback', {
+                    messageId: base.messageId,
+                    hasFallback: Boolean(fallbackBody),
+                  });
+                }
+                finalize(
+                  fallbackBody ?? 'Unable to decrypt message',
+                  true,
+                  fallbackBody ?? payload.body ?? null,
+                );
               });
           } else {
+             if (SHOULD_LOG_DECRYPT) {
+              console.log('[CHAT] e2ee client unavailable, using fallback body', {
+                messageId: base.messageId,
+                hasFallback: Boolean(fallbackBody),
+              });
+            }
             const merged: InternalMessage = {
               ...base,
-              body: payload.body ?? null,
-              decryptionFailed: false,
+              body: fallbackBody,
+              decryptionFailed: Boolean(payload.ciphertext),
+              debugBody: fallbackBody,
               ciphertext: payload.ciphertext ?? null,
               iv: payload.iv ?? null,
               aad: payload.aad ?? null,
@@ -768,14 +791,21 @@ export const useChatSession = ({
             .then(text => finalize(text))
             .catch(err => {
               console.warn('Failed to decrypt symmetric incoming message', err);
-              finalize(payload.body ?? 'Unable to decrypt message', payload.body == null, payload.body ?? null);
+              if (SHOULD_LOG_DECRYPT) {
+                console.log('[CHAT] symmetric decrypt fallback', {
+                  messageId: base.messageId,
+                  hasFallback: Boolean(fallbackBody),
+                });
+              }
+              finalize(fallbackBody ?? 'Unable to decrypt message', true, fallbackBody);
             });
           return;
         }
         const merged: InternalMessage = {
           ...base,
-          body: payload.body ?? null,
-          decryptionFailed: false,
+          body: fallbackBody,
+          decryptionFailed: Boolean(payload.ciphertext),
+          debugBody: fallbackBody,
           ciphertext: payload.ciphertext ?? null,
           iv: payload.iv ?? null,
           aad: payload.aad ?? null,
@@ -1161,6 +1191,7 @@ export const useChatSession = ({
                 messageId,
                 type: MESSAGE_TYPE_TEXT,
                 e2ee: true,
+                body,
                 e2eeVer: encrypted.envelope.e2eeVer,
                 algo: encrypted.envelope.algo,
                 aad: encrypted.envelope.aad,
@@ -1179,6 +1210,7 @@ export const useChatSession = ({
               messageId,
               type: MESSAGE_TYPE_TEXT,
               e2ee: true,
+              body,
               algo: 'XSalsa20-Poly1305',
               iv: encrypted.iv,
               ciphertext: encrypted.ciphertext,

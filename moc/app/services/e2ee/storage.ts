@@ -30,6 +30,7 @@ const deviceStorage = Platform.OS === 'web' ? asyncHandler : secureHandler;
 
 
 export type StoredPrekey = {
+  prekeyId?: number;
   publicKey: string;
   privateKey: string;
   uploaded: boolean;
