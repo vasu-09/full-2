@@ -49,7 +49,7 @@ public class MessageController {
      * Client SEND to: /app/rooms.{roomId}.send
      * Server BROADCAST to: /topic/room.{roomId}
      */
-    @MessageMapping("/rooms/{roomId}/send")
+    @MessageMapping({"/rooms/{roomId}/send", "/rooms.{roomId}.send"})
     public void sendToRoom(@DestinationVariable String roomId,
                            @Payload ChatSendDto dto,
                            Principal principal,

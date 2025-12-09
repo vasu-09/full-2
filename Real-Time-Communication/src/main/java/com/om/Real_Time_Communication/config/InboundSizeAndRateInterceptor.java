@@ -90,12 +90,26 @@ public class InboundSizeAndRateInterceptor implements ChannelInterceptor {
     }
     private static String parseRoomId(String dest) {
         if (dest == null) return "-1";
-        String prefix = "/app/rooms/";
-        if (dest.startsWith(prefix)) {
-            int end = dest.indexOf('/', prefix.length());
+        String slashPrefix = "/app/rooms/";
+        if (dest.startsWith(slashPrefix)) {
+            int end = dest.indexOf('/', slashPrefix.length());
             if (end > 0) {
-                return dest.substring(prefix.length(), end);
+                return dest.substring(slashPrefix.length(), end);
             }
+            return dest.substring(slashPrefix.length());
+        }
+        String dottedPrefix = "/app/rooms."; // legacy Expo client path
+        if (dest.startsWith(dottedPrefix)) {
+            String remainder = dest.substring(dottedPrefix.length());
+            int dot = remainder.indexOf('.');
+            if (dot > 0) {
+                return remainder.substring(0, dot);
+            }
+            int slash = remainder.indexOf('/');
+            if (slash > 0) {
+                return remainder.substring(0, slash);
+            }
+            return remainder;
         }
         return "-1";
     }

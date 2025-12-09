@@ -144,13 +144,7 @@ public class StompSecurityInterceptor implements ChannelInterceptor {
                     // newer application prefix so ACL checks still run and errors are surfaced
                     // instead of silently dropping the frame.
                     String roomKey = null;
-                    if (dest != null) {
-                        if (dest.startsWith("/app/rooms/")) {
-                            roomKey = dest.substring("/app/rooms/".length()).split("/")[0];
-                        } else if (dest.startsWith("/topic/room/")) {
-                            roomKey = dest.substring("/topic/room/".length()).split("/")[0];
-                        }
-                    }
+                    roomKey = extractRoomKey(dest);
 
                     if (roomKey != null) {
                         Long roomId = resolveRoomId(roomKey);
@@ -257,6 +251,36 @@ public class StompSecurityInterceptor implements ChannelInterceptor {
         }
         return trimmed;
     }
+
+    private static String extractRoomKey(String dest) {
+        if (dest == null) {
+            return null;
+        }
+
+        if (dest.startsWith("/app/rooms/")) {
+            return dest.substring("/app/rooms/".length()).split("/")[0];
+        }
+
+        if (dest.startsWith("/app/rooms.")) {
+            String remainder = dest.substring("/app/rooms.".length());
+            int end = findSeparator(remainder);
+            return end > 0 ? remainder.substring(0, end) : remainder;
+        }
+
+        if (dest.startsWith("/topic/room/")) {
+            return dest.substring("/topic/room/".length()).split("/")[0];
+        }
+
+        return null;
+    }
+
+    private static int findSeparator(String value) {
+        int slash = value.indexOf('/') < 0 ? Integer.MAX_VALUE : value.indexOf('/');
+        int dot = value.indexOf('.') < 0 ? Integer.MAX_VALUE : value.indexOf('.');
+        int min = Math.min(slash, dot);
+        return min == Integer.MAX_VALUE ? -1 : min;
+    }
+
 
     /**
      * Minimal Principal that carries userId as name for STOMP APIs.
