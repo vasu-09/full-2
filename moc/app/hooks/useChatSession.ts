@@ -500,7 +500,7 @@ export const useChatSession = ({
               ? {
                   ciphertext,
                   iv,
-                  aad,
+                  aad: aad ?? undefined,
                 }
               : null;
           if (dto.e2ee && ciphertext && aad && iv && dto.keyRef) {
