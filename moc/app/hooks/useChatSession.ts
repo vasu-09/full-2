@@ -354,7 +354,10 @@ export const useChatSession = ({
             keyRef: msg.keyRef as string,
           };
           const fromSelf = currentUserId != null && msg.senderId === currentUserId;
-          const text = await e2eeClient.decryptEnvelope(envelope, Boolean(fromSelf));
+          const text = await e2eeClient.decryptEnvelope(envelope, Boolean(fromSelf), {
+            senderId: msg.senderId ?? undefined,
+            sessionId: msg.keyRef ?? null,
+          });
           updates[msg.messageId] = { text, failed: false };
         } catch (err) {
           console.warn('Failed to decrypt cached envelope', { messageId: msg.messageId }, err);
@@ -514,7 +517,10 @@ export const useChatSession = ({
             const fromSelf = currentUserId != null && dto.senderId === currentUserId;
             if (client) {
               try {
-                text = await client.decryptEnvelope(envelope, Boolean(fromSelf));
+                  text = await client.decryptEnvelope(envelope, Boolean(fromSelf), {
+                  senderId: dto.senderId,
+                  sessionId: dto.keyRef ?? null,
+                });
               } catch (decryptErr) {
                 console.warn('Failed to decrypt history message', decryptErr);
                 text = dto.body ?? 'Unable to decrypt message';
@@ -767,7 +773,10 @@ export const useChatSession = ({
           };
           if (e2eeClient) {
             e2eeClient
-              .decryptEnvelope(envelope, false)
+                .decryptEnvelope(envelope, false, {
+                senderId: base.senderId ?? undefined,
+                sessionId: payload.keyRef ?? null,
+              })
               .then(text => finalize(text))
               .catch(err => {
                 console.warn('Failed to decrypt incoming message', err);
@@ -1034,7 +1043,10 @@ export const useChatSession = ({
             keyRef: message.raw.keyRef,
           };
           const fromSelf = currentUserId != null && message.senderId === currentUserId;
-          decrypted = await client.decryptEnvelope(envelope, Boolean(fromSelf));
+          decrypted = await client.decryptEnvelope(envelope, Boolean(fromSelf), {
+            senderId: message.senderId,
+            sessionId: message.raw.keyRef ?? null,
+          });
         } else if (keyToUse && message.raw?.ciphertext && message.raw?.iv) {
           decrypted = await decryptMessage(
             {

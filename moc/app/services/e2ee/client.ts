@@ -28,6 +28,11 @@ type Envelope = {
   ciphertext: string;
   keyRef: string;
 };
+type DecryptContext = {
+  senderId?: number;
+  senderDeviceId?: string | null;
+  sessionId?: string | null;
+};
 
 type EncryptResult = {
   envelope: {
@@ -386,6 +391,9 @@ export class E2EEClient {
   getDeviceId() {
     return this.state.deviceId;
   }
+  private logDecryptTelemetry(event: string, details: Record<string, unknown>) {
+    console.log(`[E2EE] ${event}`, details);
+  }
 
   private async withState(update: (state: DeviceState) => Promise<DeviceState> | DeviceState): Promise<void> {
     this.ready = this.ready.then(async () => {
@@ -398,6 +406,65 @@ export class E2EEClient {
 
   private findPrekey(publicKey: string): StoredPrekey | undefined {
     return this.state.oneTimePrekeys.find(pk => pk.publicKey === publicKey);
+  }
+
+  private async rebuildSession(targetUserId?: number, expectedDeviceId?: string | null): Promise<boolean> {
+    try {
+      const refreshed = await ensureDeviceState();
+      const registered = await registerIfNeeded(refreshed);
+      const replenished = await replenishPrekeys(registered);
+      await this.withState(() => ({ ...replenished, sentMessageKeys: this.state.sentMessageKeys }));
+
+      if (targetUserId == null) {
+        return true;
+      }
+
+      const bundles = await listDeviceBundles(targetUserId);
+      const validated = await Promise.all(
+        bundles.map(async bundle => ({
+          bundle,
+          valid: await hasValidPrekeySignature(
+            bundle.identityKeyPub,
+            bundle.signedPrekeyPub,
+            bundle.signedPrekeySig,
+          ),
+        })),
+      );
+      const candidates = validated.filter(item => item.valid).map(item => item.bundle);
+      if (!candidates.length) {
+        return false;
+      }
+
+      const target =
+        (expectedDeviceId && candidates.find(item => item.deviceId === expectedDeviceId)) ?? candidates[0];
+      const bundle = await claimPrekey(targetUserId, target.deviceId);
+      const bundleValid = await hasValidPrekeySignature(
+        bundle.identityKeyPub,
+        bundle.signedPrekeyPub,
+        bundle.signedPrekeySig,
+      );
+      if (!bundleValid) {
+        return false;
+      }
+
+      const fingerprint = buildFingerprint(bundle, Date.now());
+      await this.withState(current => ({
+        ...current,
+        peerFingerprints: {
+          ...(current.peerFingerprints ?? {}),
+          [targetUserId]: fingerprint,
+        },
+      }));
+
+      this.logDecryptTelemetry('session-rebuilt', {
+        senderId: targetUserId,
+        deviceId: fingerprint.deviceId,
+      });
+      return true;
+    } catch (err) {
+      console.warn('[E2EE] Failed to rebuild session', { targetUserId, expectedDeviceId }, err);
+      return false;
+    }
   }
 
   async encryptForUser(targetUserId: number, messageId: string, plaintext: string): Promise<EncryptResult | null> {
@@ -475,43 +542,123 @@ export class E2EEClient {
     return envelope;
   }
 
-  async decryptEnvelope(envelope: Envelope, fromSelf: boolean): Promise<string> {
-    if (fromSelf) {
-      const entry = this.state.sentMessageKeys.find(item => item.messageId === envelope.messageId);
-      if (!entry) {
-        throw new Error('Missing local key');
-      }
-      const key = base64ToBytes(entry.key);
-      return decryptPayload(key, envelope);
-    }
+   async decryptEnvelope(
+    envelope: Envelope,
+    fromSelf: boolean,
+    context: DecryptContext = {},
+  ): Promise<string> {
+    const attemptDecrypt = async (retrying: boolean): Promise<string> => {
+      const sessionId = context.sessionId ?? envelope.keyRef ?? 'unknown';
+      const senderId = context.senderId ?? null;
+      const senderDeviceId = context.senderDeviceId ?? null;
 
-    const aadBytes = base64ToBytes(envelope.aad ?? '');
-    let meta: { e: string; t: string } | null = null;
-    try {
-      meta = JSON.parse(bytesToUtf8(aadBytes));
-    } catch {
-      throw new Error('Invalid metadata');
-    }
-    if (!meta || typeof meta.e !== 'string') {
-      throw new Error('Missing ephemeral key');
-    }
+      try {
+        if (fromSelf) {
+          const entry = this.state.sentMessageKeys.find(item => item.messageId === envelope.messageId);
+          if (!entry) {
+            throw new Error('Missing local key');
+          }
+          const key = base64ToBytes(entry.key);
+          this.logDecryptTelemetry('decrypt-self', {
+            senderId,
+            senderDeviceId,
+            sessionId,
+            retrying,
+          });
+          return decryptPayload(key, envelope);
+        }
 
-    let shared: Uint8Array | null = null;
-    if (envelope.keyRef?.startsWith('otk:')) {
-      const key = envelope.keyRef.slice(4);
-      const record = this.findPrekey(key);
-      if (!record) {
-        throw new Error('Unknown prekey');
-      }
-      shared = computeFromEphemeral(record.privateKey, meta.e);
-      await this.withState(async current => {
-        const marked = markPrekeyConsumed(current, key);
-        return replenishPrekeys(marked);
-      });
-    } else {
-      shared = computeFromEphemeral(this.state.signedPrekey.privateKey, meta.e);
+        const aadBytes = base64ToBytes(envelope.aad ?? '');
+        let meta: { e: string; t: string } | null = null;
+        try {
+          meta = JSON.parse(bytesToUtf8(aadBytes));
+        } catch {
+          throw new Error('Invalid metadata');
+        }
+        if (!meta || typeof meta.e !== 'string') {
+          throw new Error('Missing ephemeral key');
+        }
+
+        const cachedFingerprint = senderId != null ? this.state.peerFingerprints?.[senderId] : null;
+        if (cachedFingerprint && !isFingerprintFresh(cachedFingerprint)) {
+          this.logDecryptTelemetry('stale-session', {
+            senderId,
+            senderDeviceId,
+            cachedDeviceId: cachedFingerprint.deviceId,
+            sessionId,
+          });
+          await this.rebuildSession(senderId ?? undefined, senderDeviceId ?? cachedFingerprint.deviceId);
+        }
+
+        if (
+          senderDeviceId &&
+          cachedFingerprint &&
+          cachedFingerprint.deviceId !== senderDeviceId &&
+          !retrying
+        ) {
+          this.logDecryptTelemetry('duplicate-device', {
+            senderId,
+            expectedDevice: senderDeviceId,
+            cachedDevice: cachedFingerprint.deviceId,
+            sessionId,
+          });
+          throw new Error('Device fingerprint mismatch');
+        }
+
+        let shared: Uint8Array | null = null;
+        const prekeyPath = envelope.keyRef?.startsWith('otk:');
+        if (prekeyPath) {
+          const key = envelope.keyRef.slice(4);
+          const record = this.findPrekey(key);
+          this.logDecryptTelemetry('lookup-prekey', {
+            senderId,
+            senderDeviceId,
+            sessionId,
+            found: Boolean(record),
+          });
+          if (!record) {
+            throw new Error('Unknown prekey');
+          }
+          shared = computeFromEphemeral(record.privateKey, meta.e);
+          await this.withState(async current => {
+            const marked = markPrekeyConsumed(current, key);
+            return replenishPrekeys(marked);
+          });
+        } else {
+          this.logDecryptTelemetry('decrypt-with-session', {
+            senderId,
+            senderDeviceId,
+            sessionId,
+          });
+          shared = computeFromEphemeral(this.state.signedPrekey.privateKey, meta.e);
+        }
+        return decryptPayload(shared, envelope);
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : 'unknown';
+        this.logDecryptTelemetry('decrypt-failed', {
+          senderId,
+          senderDeviceId,
+          sessionId,
+          retrying,
+          reason,
+        });
+        const recoverable =
+          !fromSelf &&
+          !retrying &&
+          ['Unknown prekey', 'Device fingerprint mismatch'].includes(reason);
+
+        if (recoverable) {
+          const rebuilt = await this.rebuildSession(senderId ?? undefined, senderDeviceId);
+          if (rebuilt) {
+            return attemptDecrypt(true);
+          }
+        }
+
+        throw err;
+      };
     }
-    return decryptPayload(shared, envelope);
+         return attemptDecrypt(false);
+    
   }
 }
 

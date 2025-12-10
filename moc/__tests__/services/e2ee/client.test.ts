@@ -1,9 +1,9 @@
-import { claimPrekey, getPrekeyStock, listDeviceBundles, uploadPrekeys } from '../../../app/services/e2ee/api';
+import { claimPrekey, getPrekeyStock, listDeviceBundles, registerDevice, uploadPrekeys, } from '../../../app/services/e2ee/api';
 import { E2EEClient } from '../../../app/services/e2ee/client';
 import { generateDhKeyPair } from '../../../app/services/e2ee/dh';
 import { generateKeyPair as generateEd25519KeyPair, sign as signEd25519 } from '../../../app/services/e2ee/ed25519';
 import { base64ToBytes, bytesToBase64 } from '../../../app/services/e2ee/encoding';
-import type { DeviceState } from '../../../app/services/e2ee/storage';
+import { loadDeviceState, type DeviceState } from '../../../app/services/e2ee/storage';
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
   getItem: jest.fn(async () => null),
@@ -48,6 +48,8 @@ const mockClaimPrekey = claimPrekey as jest.MockedFunction<typeof claimPrekey>;
 const mockListDeviceBundles = listDeviceBundles as jest.MockedFunction<typeof listDeviceBundles>;
 const mockGetPrekeyStock = getPrekeyStock as jest.MockedFunction<typeof getPrekeyStock>;
 const mockUploadPrekeys = uploadPrekeys as jest.MockedFunction<typeof uploadPrekeys>;
+const mockRegisterDevice = registerDevice as jest.MockedFunction<typeof registerDevice>;
+const mockLoadDeviceState = loadDeviceState as jest.MockedFunction<typeof loadDeviceState>;
 
 const buildSenderState = (): DeviceState => {
   const identity = generateEd25519KeyPair();
@@ -109,6 +111,8 @@ describe('E2EEClient device fingerprint handling', () => {
     jest.clearAllMocks();
     mockGetPrekeyStock.mockResolvedValue(10);
     mockUploadPrekeys.mockResolvedValue();
+    mockRegisterDevice.mockResolvedValue();
+    mockLoadDeviceState.mockResolvedValue(null);
   });
 
   it('refreshes sessions when the recipient reinstalls with new keys', async () => {
@@ -202,5 +206,165 @@ describe('E2EEClient device fingerprint handling', () => {
     expect(warnSpy).toHaveBeenCalled();
 
     warnSpy.mockRestore();
+  });
+   it('decrypts envelopes with an existing session', async () => {
+    const targetUserId = 7;
+    const recipientDeviceId = 'recipient-dev';
+
+    const recipientIdentity = generateEd25519KeyPair();
+    const recipientSignedPrekey = generateDhKeyPair();
+    const recipientOtk = generateDhKeyPair();
+    const recipientSig = signPrekey(recipientIdentity.privateKey, recipientSignedPrekey.publicKey);
+
+    mockListDeviceBundles.mockResolvedValue([
+      {
+        deviceId: recipientDeviceId,
+        identityKeyPub: bytesToBase64(recipientIdentity.publicKey),
+        signedPrekeyPub: recipientSignedPrekey.publicKey,
+        signedPrekeySig: recipientSig,
+        oneTimePrekeyPub: recipientOtk.publicKey,
+      },
+    ]);
+    mockClaimPrekey.mockResolvedValue({
+      deviceId: recipientDeviceId,
+      identityKeyPub: bytesToBase64(recipientIdentity.publicKey),
+      signedPrekeyPub: recipientSignedPrekey.publicKey,
+      signedPrekeySig: recipientSig,
+      oneTimePrekeyPub: recipientOtk.publicKey,
+    });
+
+    const sender = new E2EEClient(buildSenderState());
+    const recipient = new E2EEClient(
+      buildRecipientState(recipientDeviceId, recipientIdentity, recipientSignedPrekey, recipientSig, recipientOtk),
+    );
+
+    const encrypted = await sender.encryptForUser(targetUserId, 'm-valid', 'hello-session');
+    expect(encrypted).not.toBeNull();
+
+    const plaintext = await recipient.decryptEnvelope(
+      { ...encrypted!.envelope, messageId: 'm-valid' },
+      false,
+      { senderId: targetUserId, sessionId: encrypted!.envelope.keyRef },
+    );
+
+    expect(plaintext).toBe('hello-session');
+  });
+
+  it('rebuilds and retries decryption when no matching session exists', async () => {
+    const targetUserId = 101;
+    const recipientDeviceId = 'missing-session-device';
+
+    const recipientIdentity = generateEd25519KeyPair();
+    const recipientSignedPrekey = generateDhKeyPair();
+    const recipientOtk = generateDhKeyPair();
+    const recipientSig = signPrekey(recipientIdentity.privateKey, recipientSignedPrekey.publicKey);
+
+    mockListDeviceBundles.mockResolvedValue([
+      {
+        deviceId: recipientDeviceId,
+        identityKeyPub: bytesToBase64(recipientIdentity.publicKey),
+        signedPrekeyPub: recipientSignedPrekey.publicKey,
+        signedPrekeySig: recipientSig,
+        oneTimePrekeyPub: recipientOtk.publicKey,
+      },
+    ]);
+    mockClaimPrekey.mockResolvedValue({
+      deviceId: recipientDeviceId,
+      identityKeyPub: bytesToBase64(recipientIdentity.publicKey),
+      signedPrekeyPub: recipientSignedPrekey.publicKey,
+      signedPrekeySig: recipientSig,
+      oneTimePrekeyPub: recipientOtk.publicKey,
+    });
+
+    const sender = new E2EEClient(buildSenderState());
+    const recipientState = buildRecipientState(
+      recipientDeviceId,
+      recipientIdentity,
+      recipientSignedPrekey,
+      recipientSig,
+      recipientOtk,
+    );
+    const recipient = new E2EEClient({ ...recipientState, oneTimePrekeys: [] });
+    mockLoadDeviceState.mockResolvedValue(recipientState);
+
+    const encrypted = await sender.encryptForUser(targetUserId, 'm-recover', 'rebuild-me');
+    expect(encrypted).not.toBeNull();
+
+    mockListDeviceBundles.mockClear();
+    mockClaimPrekey.mockClear();
+
+    const plaintext = await recipient.decryptEnvelope(
+      { ...encrypted!.envelope, messageId: 'm-recover' },
+      false,
+      { senderId: targetUserId, sessionId: encrypted!.envelope.keyRef },
+    );
+
+    expect(plaintext).toBe('rebuild-me');
+    expect(mockListDeviceBundles).toHaveBeenCalledWith(targetUserId);
+    expect(mockClaimPrekey).toHaveBeenCalled();
+  });
+
+  it('refreshes stale fingerprints when a different device ID arrives', async () => {
+    const targetUserId = 202;
+    const cachedDevice = 'old-device';
+    const newDevice = 'new-device';
+
+    const recipientIdentity = generateEd25519KeyPair();
+    const recipientSignedPrekey = generateDhKeyPair();
+    const recipientOtk = generateDhKeyPair();
+    const recipientSig = signPrekey(recipientIdentity.privateKey, recipientSignedPrekey.publicKey);
+
+    mockListDeviceBundles.mockResolvedValue([
+      {
+        deviceId: newDevice,
+        identityKeyPub: bytesToBase64(recipientIdentity.publicKey),
+        signedPrekeyPub: recipientSignedPrekey.publicKey,
+        signedPrekeySig: recipientSig,
+        oneTimePrekeyPub: recipientOtk.publicKey,
+      },
+    ]);
+    mockClaimPrekey.mockResolvedValue({
+      deviceId: newDevice,
+      identityKeyPub: bytesToBase64(recipientIdentity.publicKey),
+      signedPrekeyPub: recipientSignedPrekey.publicKey,
+      signedPrekeySig: recipientSig,
+      oneTimePrekeyPub: recipientOtk.publicKey,
+    });
+
+    const sender = new E2EEClient(buildSenderState());
+    const recipient = new E2EEClient(
+      buildRecipientState(newDevice, recipientIdentity, recipientSignedPrekey, recipientSig, recipientOtk),
+    );
+
+    mockLoadDeviceState.mockResolvedValue(
+      buildRecipientState(newDevice, recipientIdentity, recipientSignedPrekey, recipientSig, recipientOtk),
+    );
+
+    const encrypted = await sender.encryptForUser(targetUserId, 'm-duplicate', 'fresh-device');
+    expect(encrypted).not.toBeNull();
+
+    (recipient as unknown as { state: DeviceState }).state.peerFingerprints = {
+      [targetUserId]: {
+        deviceId: cachedDevice,
+        identityKey: 'stale',
+        signedPrekey: 'stale',
+        updatedAt: Date.now(),
+      },
+    };
+
+    mockListDeviceBundles.mockClear();
+    mockClaimPrekey.mockClear();
+
+    const plaintext = await recipient.decryptEnvelope(
+      { ...encrypted!.envelope, messageId: 'm-duplicate' },
+      false,
+      { senderId: targetUserId, senderDeviceId: newDevice, sessionId: encrypted!.envelope.keyRef },
+    );
+
+    expect(plaintext).toBe('fresh-device');
+    expect(mockListDeviceBundles).toHaveBeenCalledWith(targetUserId);
+    expect((recipient as unknown as { state: DeviceState }).state.peerFingerprints?.[targetUserId]?.deviceId).toBe(
+      newDevice,
+    );
   });
 });
