@@ -21,6 +21,7 @@ import {
   updateMessageFlagsInDb,
 } from '../services/database';
 import { E2EEClient, E2EEEnvelope, getE2EEClient } from '../services/e2ee';
+import { bytesToBase64 } from '../services/e2ee/encoding';
 import {
   decryptMessage,
   encryptMessage,
@@ -72,6 +73,19 @@ const formatTime = (iso?: string | null) => {
   } catch {
     return '';
   }
+};
+
+const normalizeBinary = (value: unknown): string | null => {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (value instanceof Uint8Array) {
+    return bytesToBase64(value);
+  }
+  if (Array.isArray(value) && value.every(n => typeof n === 'number')) {
+    return bytesToBase64(Uint8Array.from(value));
+  }
+  return null;
 };
 
 const toInternalMessage = (dto: ChatMessageDto): InternalMessage => ({
@@ -475,23 +489,26 @@ export const useChatSession = ({
       const processed: InternalMessage[] = await Promise.all(
         ordered.map(async dto => {
           const base = toInternalMessage(dto);
+          const aad = normalizeBinary(dto.aad);
+          const iv = normalizeBinary(dto.iv);
+          const ciphertext = normalizeBinary(dto.ciphertext);
           let text = dto.body ?? null;
           let failed = false;
           let debugBody: string | null = null;
           const encryptedPayload: EncryptedPayload | null =
-            dto.ciphertext && dto.iv
+            ciphertext && iv
               ? {
-                  ciphertext: dto.ciphertext,
-                  iv: dto.iv,
-                  aad: dto.aad,
+                  ciphertext,
+                  iv,
+                  aad,
                 }
               : null;
-          if (dto.e2ee && dto.ciphertext && dto.aad && dto.iv && dto.keyRef) {
+          if (dto.e2ee && ciphertext && aad && iv && dto.keyRef) {
             const envelope: E2EEEnvelope = {
               messageId: dto.messageId,
-              aad: dto.aad,
-              iv: dto.iv,
-              ciphertext: dto.ciphertext,
+              aad,
+              iv,
+              ciphertext,
               keyRef: dto.keyRef,
             };
             const fromSelf = currentUserId != null && dto.senderId === currentUserId;
@@ -524,9 +541,9 @@ export const useChatSession = ({
             body: text,
             decryptionFailed: failed,
             debugBody,
-            ciphertext: dto.ciphertext ?? null,
-            iv: dto.iv ?? null,
-            aad: dto.aad ?? null,
+            ciphertext: ciphertext ?? null,
+            iv: iv ?? null,
+            aad: aad ?? null,
             keyRef: dto.keyRef ?? null,
           };
         }),
@@ -539,7 +556,7 @@ export const useChatSession = ({
         return merged;
       });
       if (roomId) {
-        const records = processed.map((msg, idx) => toDbRecord(msg, ordered[idx]));
+        const records = processed.map(msg => toDbRecord(msg));
         try {
           await saveMessagesToDb(records);
         } catch (dbErr) {
@@ -666,6 +683,16 @@ export const useChatSession = ({
         typeof payload.roomId === 'number' ? payload.roomId : Number(payload.roomId ?? roomId);
       const normalizedRoomId =
         payloadRoomId != null && !Number.isNaN(payloadRoomId) ? payloadRoomId : roomId;
+        const payloadCiphertext = normalizeBinary(payload.ciphertext);
+      const payloadIv = normalizeBinary(payload.iv);
+      const payloadAad = normalizeBinary(payload.aad);
+      const normalizedPayload = {
+        ciphertext: payloadCiphertext ?? undefined,
+        iv: payloadIv ?? undefined,
+        aad: payloadAad ?? undefined,
+        keyRef: payload.keyRef ?? undefined,
+        e2ee: payload.e2ee,
+      } as Partial<ChatMessageDto>;
       const base: InternalMessage = {
         messageId: payload.messageId,
         roomId: normalizedRoomId,
@@ -686,13 +713,13 @@ export const useChatSession = ({
           body: text,
           decryptionFailed: failed,
           debugBody: failed ? debugText : null,
-          ciphertext: payload.ciphertext ?? null,
-          iv: payload.iv ?? null,
-          aad: payload.aad ?? null,
+          ciphertext: payloadCiphertext ?? null,
+          iv: payloadIv ?? null,
+          aad: payloadAad ?? null,
           keyRef: payload.keyRef ?? null,
         } as InternalMessage;
         mergeMessage(merged);
-        saveMessagesToDb([toDbRecord(merged, payload)]).catch(err =>
+        saveMessagesToDb([toDbRecord(merged, normalizedPayload)]).catch(err =>
           console.warn('Failed to persist incoming message', err),
         );
         latestMessageIdRef.current = base.messageId;
@@ -722,20 +749,20 @@ export const useChatSession = ({
           const selfUpdate: InternalMessage = {
             ...base,
             body: fallbackBody,
-            ciphertext: payload.ciphertext ?? null,
-            iv: payload.iv ?? null,
-            aad: payload.aad ?? null,
+            ciphertext: payloadCiphertext ?? null,
+            iv: payloadIv ?? null,
+            aad: payloadAad ?? null,
             keyRef: payload.keyRef ?? null,
           };
           mergeMessage(selfUpdate);
           return;
         }
-        if (payload.ciphertext && payload.aad && payload.iv && payload.keyRef) {
+        if (payloadCiphertext && payloadAad && payloadIv && payload.keyRef) {
           const envelope: E2EEEnvelope = {
             messageId: String(payload.messageId ?? ''),
-            aad: payload.aad,
-            iv: payload.iv,
-            ciphertext: payload.ciphertext,
+            aad: payloadAad,
+            iv: payloadIv,
+            ciphertext: payloadCiphertext,
             keyRef: payload.keyRef,
           };
           if (e2eeClient) {
@@ -768,24 +795,24 @@ export const useChatSession = ({
               body: fallbackBody,
               decryptionFailed: Boolean(payload.ciphertext),
               debugBody: fallbackBody,
-              ciphertext: payload.ciphertext ?? null,
-              iv: payload.iv ?? null,
-              aad: payload.aad ?? null,
+              ciphertext: payloadCiphertext ?? null,
+              iv: payloadIv ?? null,
+              aad: payloadAad ?? null,
               keyRef: payload.keyRef ?? null,
             };
             mergeMessage(merged);
-            saveMessagesToDb([toDbRecord(merged, payload)]).catch(err =>
+            saveMessagesToDb([toDbRecord(merged, normalizedPayload)]).catch(err =>
               console.warn('Failed to persist incoming message', err),
             );
           }
           return;
         }
 
-        if (payload.ciphertext && payload.iv && sharedRoomKey) {
+        if (payloadCiphertext && payloadIv && sharedRoomKey) {
           const encrypted: EncryptedPayload = {
-            ciphertext: payload.ciphertext,
-            iv: payload.iv,
-            aad: payload.aad,
+            ciphertext: payloadCiphertext,
+            iv: payloadIv,
+            aad: payloadAad ?? undefined,
           };
           decryptMessage(encrypted, sharedRoomKey)
             .then(text => finalize(text))
@@ -806,13 +833,13 @@ export const useChatSession = ({
           body: fallbackBody,
           decryptionFailed: Boolean(payload.ciphertext),
           debugBody: fallbackBody,
-          ciphertext: payload.ciphertext ?? null,
-          iv: payload.iv ?? null,
-          aad: payload.aad ?? null,
+          ciphertext: payloadCiphertext ?? null,
+          iv: payloadIv ?? null,
+          aad: payloadAad ?? null,
           keyRef: payload.keyRef ?? null,
         };
         mergeMessage(merged);
-        saveMessagesToDb([toDbRecord(merged, payload)]).catch(err =>
+        saveMessagesToDb([toDbRecord(merged, normalizedPayload)]).catch(err =>
           console.warn('Failed to persist incoming message', err),
         );
         return;

@@ -186,7 +186,9 @@ const isAndroidEmulator = () => {
 
 const resolveLocalhost = () => {
   const port = getApiPort();
+  
   if (Platform.OS === 'android') {
+    
     return isAndroidEmulator() ? `http://10.0.2.2:${port}` : `http://127.0.0.1:${port}`;
   }
 
@@ -350,6 +352,14 @@ const extractDeveloperHost = (value: DeveloperLike) => {
 };
 
 const getLocalNetworkHost = () => {
+  const envHosts = [process.env.EXPO_DEV_SERVER_HOST, process.env.EXPO_SERVER_HOSTNAME];
+  for (const candidate of envHosts) {
+    const host = extractHost(candidate ?? undefined);
+    if (host && !isLoopbackHost(host) && !isExpoHosted(host)) {
+      return host;
+    }
+  }
+
   const developerSources: DeveloperLike[] = [
     manifest2?.extra?.expoGo?.developer,
     manifest2?.extra?.expoClient?.developer,
