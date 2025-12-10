@@ -1044,7 +1044,7 @@ export const useChatSession = ({
           };
           const fromSelf = currentUserId != null && message.senderId === currentUserId;
           decrypted = await client.decryptEnvelope(envelope, Boolean(fromSelf), {
-            senderId: message.senderId,
+            senderId: message.senderId ?? undefined,
             sessionId: message.raw.keyRef ?? null,
           });
         } else if (keyToUse && message.raw?.ciphertext && message.raw?.iv) {

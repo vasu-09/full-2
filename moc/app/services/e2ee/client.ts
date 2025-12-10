@@ -435,8 +435,9 @@ export class E2EEClient {
         return false;
       }
 
-      const target =
-        (expectedDeviceId && candidates.find(item => item.deviceId === expectedDeviceId)) ?? candidates[0];
+      const target = expectedDeviceId
+        ? candidates.find(item => item.deviceId === expectedDeviceId) ?? candidates[0]
+        : candidates[0];
       const bundle = await claimPrekey(targetUserId, target.deviceId);
       const bundleValid = await hasValidPrekeySignature(
         bundle.identityKeyPub,
@@ -568,8 +569,8 @@ export class E2EEClient {
           return decryptPayload(key, envelope);
         }
 
-        const aadBytes = base64ToBytes(envelope.aad ?? '');
-        let meta: { e: string; t: string } | null = null;
+          const aadBytes = base64ToBytes(envelope.aad ?? '');
+          let meta: { e: string; t: string } | null = null;
         try {
           meta = JSON.parse(bytesToUtf8(aadBytes));
         } catch {
@@ -580,15 +581,17 @@ export class E2EEClient {
         }
 
         const cachedFingerprint = senderId != null ? this.state.peerFingerprints?.[senderId] : null;
-        if (cachedFingerprint && !isFingerprintFresh(cachedFingerprint)) {
-          this.logDecryptTelemetry('stale-session', {
-            senderId,
-            senderDeviceId,
-            cachedDeviceId: cachedFingerprint.deviceId,
-            sessionId,
-          });
-          await this.rebuildSession(senderId ?? undefined, senderDeviceId ?? cachedFingerprint.deviceId);
-        }
+          const fingerprintIsFresh = Boolean(isFingerprintFresh(cachedFingerprint));
+          const staleFingerprint = cachedFingerprint && !fingerprintIsFresh ? cachedFingerprint : null;
+          if (staleFingerprint) {
+            this.logDecryptTelemetry('stale-session', {
+              senderId,
+              senderDeviceId,
+              cachedDeviceId: staleFingerprint.deviceId,
+              sessionId,
+            });
+            await this.rebuildSession(senderId ?? undefined, senderDeviceId ?? staleFingerprint.deviceId);
+          }
 
         if (
           senderDeviceId &&
