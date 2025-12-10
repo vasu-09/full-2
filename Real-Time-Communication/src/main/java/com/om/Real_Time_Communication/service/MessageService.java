@@ -115,27 +115,36 @@ public class MessageService {
         msg.setType(dto.getType());
         msg.setServerTs(Instant.now());
 
-        boolean e2ee = dto.isE2ee(); // <- your ChatSendDto should expose isE2ee() (primitive boolean)
-        if (e2ee) {
-            if (dto.getBody() != null && !dto.getBody().isBlank()) {
-                log.warn("Dropping plaintext body for e2ee messageId={} roomId={}", dto.getMessageId(), roomId);
-            }
-            msg.setE2ee(true);
-            msg.setE2eeVer(dto.getE2eeVer() == null ? 1 : dto.getE2eeVer());
-            msg.setAlgo(dto.getAlgo());
-            msg.setAad(dto.getAad());
-            msg.setIv(dto.getIv());
-            msg.setCiphertext(dto.getCiphertext());
-            msg.setKeyRef(dto.getKeyRef());
-            msg.setBody(null);
-        } else {
-            msg.setE2ee(false);
-            msg.setBody(dto.getBody());
-            // (Optional) basic size check to avoid giant frames:
-            if (msg.getBody() != null && msg.getBody().length() > 10_000) {
-                throw new IllegalArgumentException("Message too large");
-            }
+        boolean e2ee = dto.isE2ee() || (dto.getCiphertext() != null && dto.getCiphertext().length > 0);
+        if (!e2ee) {
+            throw new IllegalArgumentException("Encrypted payload required for chat messages");
         }
+
+        if (dto.getCiphertext() == null || dto.getCiphertext().length == 0) {
+            throw new IllegalArgumentException("ciphertext required when e2ee is enabled");
+        }
+        if (dto.getIv() == null || dto.getIv().length == 0) {
+            throw new IllegalArgumentException("iv required when e2ee is enabled");
+        }
+        if (dto.getAlgo() == null || dto.getAlgo().isBlank()) {
+            throw new IllegalArgumentException("algo required when e2ee is enabled");
+        }
+        if (dto.getKeyRef() == null || dto.getKeyRef().isBlank()) {
+            throw new IllegalArgumentException("keyRef required when e2ee is enabled");
+        }
+
+        if (dto.getBody() != null && !dto.getBody().isBlank()) {
+            log.warn("Dropping plaintext body for e2ee messageId={} roomId={}", dto.getMessageId(), roomId);
+        }
+
+        msg.setE2ee(true);
+        msg.setE2eeVer(dto.getE2eeVer() == null ? 1 : dto.getE2eeVer());
+        msg.setAlgo(dto.getAlgo());
+        msg.setAad(dto.getAad());
+        msg.setIv(dto.getIv());
+        msg.setCiphertext(dto.getCiphertext());
+        msg.setKeyRef(dto.getKeyRef());
+        msg.setBody(null);
 
         // 5) Persist (tolerate race duplicates)
         ChatMessage saved;
