@@ -1,10 +1,14 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
+import { roomTopic } from '../constants/stompEndpoints';
+import { getStoredUserId } from '../services/authStorage';
 import {
   getRecentConversationsFromDb,
   setConversationUnreadInDb,
   upsertConversationInDb,
 } from '../services/database';
+import { ChatMessageDto } from '../services/roomsService';
+import stompClient from '../services/stompClient';
 
 export type RoomLastMessage = {
   messageId: string;
@@ -43,6 +47,19 @@ const sortRooms = (rooms: RoomSummary[]) => {
 
 export const ChatProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+  const subscriptionsRef = useRef<Record<string, () => void>>({});
+
+  useEffect(() => {
+    getStoredUserId()
+      .then(value => {
+        if (value != null) {
+          const parsed = Number(value);
+          setCurrentUserId(Number.isNaN(parsed) ? null : parsed);
+        }
+      })
+      .catch(() => setCurrentUserId(null));
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -138,7 +155,7 @@ export const ChatProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
     });
   }, [persistConversation]);
 
- const incrementUnread = useCallback((roomKey: string) => {
+  const incrementUnread = useCallback((roomKey: string) => {
     setRooms(prev => {
       const idx = prev.findIndex(r => r.roomKey === roomKey);
       if (idx === -1) {
@@ -181,6 +198,100 @@ export const ChatProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
     [rooms, upsertRoom, updateRoomActivity, incrementUnread, resetUnread],
   );
 
+  useEffect(() => {
+    const existingSubs = subscriptionsRef.current;
+    const activeKeys = new Set(rooms.map(room => room.roomKey));
+
+    Object.entries(existingSubs).forEach(([key, unsubscribe]) => {
+      if (!activeKeys.has(key)) {
+        try {
+          unsubscribe();
+        } catch {
+          // ignore
+        }
+        delete existingSubs[key];
+      }
+    });
+
+    if (!rooms.length) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    stompClient
+      .ensureConnected()
+      .then(() => {
+        rooms.forEach(room => {
+          const key = room.roomKey;
+          if (!key || existingSubs[key]) {
+            return;
+          }
+
+          const unsubscribe = stompClient.subscribe(roomTopic(key), frame => {
+            if (cancelled) {
+              return;
+            }
+
+            let payload: ChatMessageDto | null = null;
+            try {
+              payload = frame.body ? JSON.parse(frame.body) : null;
+            } catch (err) {
+              console.warn('Failed to parse inbound message frame', err);
+              return;
+            }
+
+            if (!payload) {
+              return;
+            }
+
+            const lastMessage = {
+              messageId: payload.messageId,
+              text: payload.body ?? payload.ciphertext ?? null,
+              at: payload.serverTs ?? new Date().toISOString(),
+              senderId: payload.senderId ?? null,
+            };
+
+            updateRoomActivity(key, lastMessage);
+
+            if (payload.roomId != null && payload.roomId !== room.id) {
+              upsertRoom({
+                ...room,
+                id: payload.roomId,
+                roomKey: key,
+              });
+            }
+
+            if (currentUserId == null || payload.senderId !== currentUserId) {
+              incrementUnread(key);
+            }
+          });
+
+          existingSubs[key] = unsubscribe;
+        });
+      })
+      .catch(err => console.warn('Global chat listener failed to connect', err));
+
+    return () => {
+      cancelled = true;
+    };
+  }, [rooms, incrementUnread, updateRoomActivity, upsertRoom, currentUserId]);
+
+  useEffect(
+    () => () => {
+      const subs = subscriptionsRef.current;
+      Object.values(subs).forEach(unsubscribe => {
+        try {
+          unsubscribe();
+        } catch {
+      
+          // ignore
+        }
+      });
+      subscriptionsRef.current = {};
+    },
+    [],
+  );
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
 };
 
