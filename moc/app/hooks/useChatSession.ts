@@ -41,7 +41,7 @@ export type { InternalMessage } from './messageMerging';
 export type DisplayMessage = {
   id: string;
   messageId: string;
-  roomId: number;
+  roomId: number | string | null;
   senderId: number | null;
   sender: 'me' | 'other';
   text?: string | null;
