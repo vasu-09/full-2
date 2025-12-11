@@ -846,11 +846,20 @@ export const useChatSession = ({
 
     const ackSub = stompClient.subscribe(ackQueue, frame => {
       const payload = parseFrameBody(frame);
-      if (!payload || payload.roomId !== resolvedRoomKey) {
+       if (!payload) {
+        return;
+      }
+      const payloadRoomId =
+        typeof payload.roomId === 'number' ? String(payload.roomId) : payload.roomId ?? null;
+      if (!payloadRoomId || payloadRoomId !== resolvedRoomKey) {
+        return;
+      }
+      const ackMessageId = payload.messageId ? String(payload.messageId) : null;
+      if (!ackMessageId) {
         return;
       }
       mergeMessage({
-        messageId: payload.messageId,
+        messageId: ackMessageId,
         roomId: roomId,
         senderId: currentUserId,
         type: MESSAGE_TYPE_TEXT,
@@ -858,11 +867,9 @@ export const useChatSession = ({
         pending: false,
         error: false,
       });
-      if (payload.messageId) {
-        updateMessageFlagsInDb(String(payload.messageId), { pending: false, error: false }).catch(err =>
-          console.warn('Failed to clear pending flag for message', err),
-        );
-      }
+      updateMessageFlagsInDb(ackMessageId, { pending: false, error: false }).catch(err =>
+        console.warn('Failed to clear pending flag for message', err),
+      );
     });
 
     const typingSub = stompClient.subscribe(roomTypingTopic(roomId), frame => {
