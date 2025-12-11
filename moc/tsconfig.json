@@ -27,5 +27,5 @@
     ".expo/types/**/*.ts",
      "expo-env.d.ts",
     "app/screens/CameraScreen.js"
-, "app/screens/PremissionsScreen.js"  ]
+, "app/screens/PermissionsScreen.js"  ]
 }

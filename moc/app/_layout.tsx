@@ -23,9 +23,9 @@ export default function RootLayout() {
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <SafeAreaProvider>
         <ChatProvider>
-          <Stack initialRouteName="screens/PremissionsScreen" screenOptions={{ headerShown: false }}>
+          <Stack initialRouteName="screens/PermissionsScreen" screenOptions={{ headerShown: false }}>
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="screens/PremissionsScreen" options={{ headerShown: false }} />
+            <Stack.Screen name="screens/PermissionsScreen" options={{ headerShown: false }} />
             <Stack.Screen name="screens/LoginScreen" options={{ headerShown: false }} />
             <Stack.Screen name="screens/OtpScreen" options={{ headerShown: false }} />
             <Stack.Screen name="screens/CameraScreen" options={{ presentation: 'fullScreenModal' }} />

@@ -175,6 +175,10 @@ export const useChatSession = ({
     () => roomKey ?? (roomId != null ? String(roomId) : null),
     [roomId, roomKey],
   );
+  const chatTitle = useMemo(
+    () => title ?? resolvedRoomKey ?? `Room ${roomId ?? ''}`,
+    [title, resolvedRoomKey, roomId],
+  );
   const typingSentRef = useRef(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const subscriptionsRef = useRef<(() => void)[]>([]);
@@ -572,12 +576,21 @@ export const useChatSession = ({
       const last = ordered[ordered.length - 1];
       if (last && resolvedRoomKey) {
         latestMessageIdRef.current = last.messageId;
-        updateRoomActivity(resolvedRoomKey, {
-          messageId: last.messageId,
-          text: last.body ?? 'Encrypted message',
-          at: last.serverTs ?? new Date().toISOString(),
-          senderId: last.senderId,
-        });
+        updateRoomActivity(
+          resolvedRoomKey,
+          {
+            messageId: last.messageId,
+            text: last.body ?? 'Encrypted message',
+            at: last.serverTs ?? new Date().toISOString(),
+            senderId: last.senderId,
+          },
+          {
+            id: roomId ?? undefined,
+            title: title ?? resolvedRoomKey,
+            peerId: peerId ?? null,
+            roomKey: resolvedRoomKey,
+          },
+        );
       }
       if (resolvedRoomKey) {
         resetUnread(resolvedRoomKey);
@@ -729,14 +742,28 @@ export const useChatSession = ({
           console.warn('Failed to persist incoming message', err),
         );
         latestMessageIdRef.current = base.messageId;
-        updateRoomActivity(resolvedRoomKey, {
-          messageId: base.messageId,
-          text: text ?? 'Encrypted message',
-          at: base.serverTs ?? new Date().toISOString(),
-          senderId: base.senderId ?? null,
-        });
+        updateRoomActivity(
+          resolvedRoomKey,
+          {
+            messageId: base.messageId,
+            text: text ?? 'Encrypted message',
+            at: base.serverTs ?? new Date().toISOString(),
+            senderId: base.senderId ?? null,
+          },
+          {
+            id: normalizedRoomId ?? roomId ?? undefined,
+            title: title ?? resolvedRoomKey,
+            peerId: peerId ?? null,
+            roomKey: resolvedRoomKey,
+          },
+        );
         if (base.senderId != null && currentUserId != null && base.senderId !== currentUserId) {
-          incrementUnread(resolvedRoomKey);
+          incrementUnread(resolvedRoomKey, {
+            id: normalizedRoomId ?? roomId ?? undefined,
+            title: title ?? resolvedRoomKey,
+            peerId: peerId ?? null,
+            roomKey: resolvedRoomKey,
+          });
           const ackId = Number(payload.messageId);
           if (!Number.isNaN(ackId)) {
             stompClient
@@ -1213,12 +1240,21 @@ export const useChatSession = ({
       };
       mergeMessage(optimistic);
       latestMessageIdRef.current = messageId;
-      updateRoomActivity(resolvedRoomKey, {
-        messageId,
-        text: body,
-        at: nowIso,
-        senderId: currentUserId ?? undefined,
-      });
+      updateRoomActivity(
+        resolvedRoomKey,
+        {
+          messageId,
+          text: body,
+          at: nowIso,
+          senderId: currentUserId ?? undefined,
+        },
+        {
+          id: roomId ?? undefined,
+          title: chatTitle,
+          peerId: peerId ?? null,
+          roomKey: resolvedRoomKey,
+        },
+      );
       resetUnread(resolvedRoomKey);
       try {
         let payload: Record<string, unknown> | null = null;

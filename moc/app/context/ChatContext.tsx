@@ -26,8 +26,12 @@ export type RoomSummary = {
 type ChatContextValue = {
   rooms: RoomSummary[];
   upsertRoom: (room: Partial<RoomSummary> & { id: number; roomKey: string }) => void;
-  updateRoomActivity: (roomKey: string, message: RoomLastMessage) => void;
-  incrementUnread: (roomKey: string) => void;
+  updateRoomActivity: (
+    roomKey: string,
+    message: RoomLastMessage,
+    seed?: Partial<RoomSummary> & { id?: number },
+  ) => void;
+  incrementUnread: (roomKey: string, seed?: Partial<RoomSummary> & { id?: number }) => void;
   resetUnread: (roomKey: string) => void;
 };
 
@@ -44,7 +48,47 @@ const sortRooms = (rooms: RoomSummary[]) => {
 export const ChatProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
 
-   useEffect(() => {
+  const persistConversation = useCallback((summary: RoomSummary) => {
+    upsertConversationInDb({
+      id: summary.id,
+      roomKey: summary.roomKey,
+      title: summary.title,
+      avatar: summary.avatar,
+      peerId: summary.peerId,
+      unreadCount: summary.unreadCount,
+      updatedAt: summary.lastMessage?.at,
+    }).catch(err => console.warn('Failed to persist conversation', summary.id, err));
+  }, []);
+
+  const ensureRoom = useCallback(
+    (existing: RoomSummary[] = [], roomKey: string, seed?: Partial<RoomSummary> & { id?: number }) => {
+      const idx = existing.findIndex(r => r.roomKey === roomKey);
+      if (idx >= 0) {
+        return { list: existing, room: existing[idx], index: idx } as const;
+      }
+
+      if (seed?.id == null) {
+        return { list: existing, room: null, index: -1 } as const;
+      }
+
+      const created: RoomSummary = {
+        id: seed.id,
+        roomKey,
+        title: seed.title ?? roomKey,
+        avatar: seed.avatar ?? null,
+        peerId: seed.peerId ?? null,
+        lastMessage: seed.lastMessage ?? null,
+        unreadCount: seed.unreadCount ?? 0,
+      };
+
+      persistConversation(created);
+      const next = sortRooms([...existing, created]);
+      return { list: next, room: created, index: next.findIndex(r => r.roomKey === roomKey) } as const;
+    },
+    [persistConversation],
+  );
+
+  useEffect(() => {
     let cancelled = false;
 
     getRecentConversationsFromDb()
@@ -75,18 +119,6 @@ export const ChatProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
     return () => {
       cancelled = true;
     };
-  }, []);
-
-  const persistConversation = useCallback((summary: RoomSummary) => {
-    upsertConversationInDb({
-      id: summary.id,
-      roomKey: summary.roomKey,
-      title: summary.title,
-      avatar: summary.avatar,
-      peerId: summary.peerId,
-      unreadCount: summary.unreadCount,
-      updatedAt: summary.lastMessage?.at,
-    }).catch(err => console.warn('Failed to persist conversation', summary.id, err));
   }, []);
 
   const upsertRoom = useCallback(
@@ -122,40 +154,51 @@ export const ChatProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
     [persistConversation],
   );
 
-  const updateRoomActivity = useCallback((roomKey: string, message: RoomLastMessage) => {
-    setRooms(prev => {
-      const idx = prev.findIndex(r => r.roomKey === roomKey);
-      if (idx === -1) {
-        return prev;
-      }
-      const next = [...prev];
-      next[idx] = {
-        ...next[idx],
-        lastMessage: message,
-      };
-      persistConversation(next[idx]);
-      return sortRooms(next);
-    });
-  }, [persistConversation]);
+  const updateRoomActivity = useCallback(
+    (roomKey: string, message: RoomLastMessage, seed?: Partial<RoomSummary> & { id?: number }) => {
+      setRooms(prev => {
+        const { list, room, index } = ensureRoom(prev, roomKey, seed);
+        if (!room) {
+          return prev;
+        }
+        const next = [...list];
+        const targetIndex = index >= 0 ? index : next.findIndex(r => r.roomKey === roomKey);
+        const current = targetIndex >= 0 ? next[targetIndex] : room;
+        next[targetIndex >= 0 ? targetIndex : next.length] = {
+          ...current,
+          lastMessage: message,
+        };
+        persistConversation(next[targetIndex >= 0 ? targetIndex : next.length - 1]);
+        return sortRooms(next);
+      });
+    },
+    [ensureRoom, persistConversation],
+  );
 
-  const incrementUnread = useCallback((roomKey: string) => {
-    setRooms(prev => {
-      const idx = prev.findIndex(r => r.roomKey === roomKey);
-      if (idx === -1) {
-        return prev;
-      }
-      const next = [...prev];
-      next[idx] = {
-        ...next[idx],
-        unreadCount: next[idx].unreadCount + 1,
-      };
-      setConversationUnreadInDb(next[idx].roomKey, next[idx].unreadCount).catch(err =>
-        console.warn('Failed to increment unread counter in DB', err),
-      );
-      persistConversation(next[idx]);
-      return next;
-    });
-  }, [persistConversation]);
+ const incrementUnread = useCallback(
+    (roomKey: string, seed?: Partial<RoomSummary> & { id?: number }) => {
+      setRooms(prev => {
+        const { list, room, index } = ensureRoom(prev, roomKey, seed);
+        if (!room) {
+          return prev;
+        }
+        const next = [...list];
+        const targetIndex = index >= 0 ? index : next.findIndex(r => r.roomKey === roomKey);
+        const current = targetIndex >= 0 ? next[targetIndex] : room;
+        const updated = {
+          ...current,
+          unreadCount: (current.unreadCount ?? 0) + 1,
+        };
+        next[targetIndex >= 0 ? targetIndex : next.length] = updated;
+        setConversationUnreadInDb(updated.roomKey, updated.unreadCount).catch(err =>
+          console.warn('Failed to increment unread counter in DB', err),
+        );
+        persistConversation(updated);
+        return next;
+      });
+    },
+    [ensureRoom, persistConversation],
+  );
 
   const resetUnread = useCallback((roomKey: string) => {
     setRooms(prev => {

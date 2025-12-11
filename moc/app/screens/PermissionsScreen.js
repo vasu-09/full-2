@@ -9,39 +9,40 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from 'react-native';
 
-
-const androidPhonePermission =
-  PermissionsAndroid?.PERMISSIONS?.READ_PHONE_STATE ??
-  PermissionsAndroid?.PERMISSIONS?.CALL_PHONE ??
-  null;
-
+// Request CALL_PHONE explicitly (simpler & safer)
+const ANDROID_PHONE_PERMISSION = PermissionsAndroid?.PERMISSIONS?.CALL_PHONE ?? null;
 
 const PermissionsScreen = () => {
   const router = useRouter();
   const [isRequesting, setIsRequesting] = useState(false);
   const [contactsStatus, setContactsStatus] = useState('undetermined');
-  const [phoneStatus, setPhoneStatus] = useState('undetermined');
+  const [phoneStatus, setPhoneStatus] = useState(
+  Platform.OS === 'android' ? 'undetermined' : 'granted'
+);
+
   const [error, setError] = useState('');
 
   const handleNavigation = useCallback(() => {
     const contactsGranted = contactsStatus === 'granted';
-    const phoneGranted = Platform.OS === 'android' ? phoneStatus === 'granted' : true;
+    // phone is nice to have but don't hard-block login on it
+    const phoneGranted = phoneStatus === 'granted' || Platform.OS !== 'android';
 
     if (contactsGranted && phoneGranted) {
       router.replace('/screens/LoginScreen');
     }
   }, [contactsStatus, phoneStatus, router]);
 
+  // Initial permission check on mount
   useEffect(() => {
     const checkPermissions = async () => {
       const contacts = await Contacts.getPermissionsAsync();
-      setContactsStatus(contacts.status);
+      setContactsStatus(contacts.status === 'granted' ? 'granted' : 'undetermined');
 
-      if (Platform.OS === 'android' && androidPhonePermission) {
-        const granted = await PermissionsAndroid.check(androidPhonePermission);
+      if (Platform.OS === 'android' && ANDROID_PHONE_PERMISSION) {
+        const granted = await PermissionsAndroid.check(ANDROID_PHONE_PERMISSION);
         setPhoneStatus(granted ? 'granted' : 'undetermined');
       } else {
         setPhoneStatus('granted');
@@ -51,6 +52,7 @@ const PermissionsScreen = () => {
     void checkPermissions();
   }, []);
 
+  // Navigate whenever both are effectively granted
   useEffect(() => {
     handleNavigation();
   }, [handleNavigation]);
@@ -60,28 +62,50 @@ const PermissionsScreen = () => {
     setError('');
 
     try {
+      // 1) Contacts permission
       const contactsResult = await Contacts.requestPermissionsAsync();
-      setContactsStatus(contactsResult.status);
+      const contactsGranted = contactsResult.status === 'granted';
+      setContactsStatus(contactsGranted ? 'granted' : 'denied');
 
-      let phonePermission = 'granted';
+      // 2) Phone permission (Android only, best-effort)
+      let phoneGranted = true;
 
-      if (Platform.OS === 'android' && androidPhonePermission) {
-        const result = await PermissionsAndroid.request(androidPhonePermission, {
-          title: 'Allow phone access',
-          message: 'MoC needs phone access to verify your account and enable calling features.',
-          buttonPositive: 'Allow',
-          buttonNegative: "Don't allow",
-        });
+      if (Platform.OS === 'android' && ANDROID_PHONE_PERMISSION) {
+        try {
+          const result = await PermissionsAndroid.request(ANDROID_PHONE_PERMISSION, {
+            title: 'Allow phone access',
+            message:
+              'MoC needs phone access to verify your account and enable additional calling features.',
+            buttonPositive: 'Allow',
+            buttonNegative: "Don\'t allow",
+          });
 
-        phonePermission = result === PermissionsAndroid.RESULTS.GRANTED ? 'granted' : 'denied';
-        setPhoneStatus(phonePermission);
+          phoneGranted = result === PermissionsAndroid.RESULTS.GRANTED;
+          setPhoneStatus(phoneGranted ? 'granted' : 'denied');
+        } catch (phoneErr) {
+          console.warn('Phone permission error:', phoneErr);
+          phoneGranted = false;
+          setPhoneStatus('denied');
+        }
       }
 
-      if (contactsResult.status === 'granted' && phonePermission === 'granted') {
+      // 3) Decide navigation
+      if (contactsGranted) {
+        // Contacts are mandatory, phone is optional for now
         router.replace('/screens/LoginScreen');
       } else {
         setError(
-          "You'll need to allow both permissions to continue. You can also enable them later in your device settings."
+          "You’ll need to allow Contacts access to continue. You can also enable it later in your device settings."
+        );
+      }
+
+      if (!phoneGranted && Platform.OS === 'android') {
+        // Optional warning text
+        setError(prev =>
+          prev
+            ? prev +
+              '\n\nPhone permission was denied. Some calling features may not work until you allow it in settings.'
+            : 'Phone permission was denied. Some calling features may not work until you allow it in settings.'
         );
       }
     } catch (err) {
@@ -96,16 +120,18 @@ const PermissionsScreen = () => {
     void Linking.openSettings();
   };
 
-  const renderPermissionStatus = (status) => {
-    switch (status) {
-      case 'granted':
-        return 'Allowed';
-      case 'denied':
-        return 'Denied';
-      default:
-        return 'Required';
-    }
-  };
+  
+
+const renderPermissionStatus = (status) => {
+  switch (status) {
+    case 'granted':
+      return 'Allowed';
+    case 'denied':
+      return 'Denied';
+    default:
+      return 'Required';
+  }
+};
 
   return (
     <View style={styles.container}>
@@ -149,11 +175,7 @@ const PermissionsScreen = () => {
         onPress={requestPermissions}
         disabled={isRequesting}
       >
-        {isRequesting ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.primaryButtonText}>Allow access</Text>
-        )}
+        {isRequesting ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>Allow access</Text>}
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.secondaryButton} onPress={openSettings}>
