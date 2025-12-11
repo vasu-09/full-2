@@ -28,12 +28,8 @@ const PermissionsScreen = () => {
   const handleNavigation = useCallback(() => {
     const contactsGranted = contactsStatus === 'granted';
     // phone is nice to have but don't hard-block login on it
-    const phoneGranted = phoneStatus === 'granted' || Platform.OS !== 'android';
-
-    if (contactsGranted && phoneGranted) {
-      router.replace('/screens/LoginScreen');
-    }
-  }, [contactsStatus, phoneStatus, router]);
+     if (contactsGranted) router.replace('/screens/LoginScreen');
+  }, [contactsStatus, router]);
 
   // Initial permission check on mount
   useEffect(() => {
