@@ -1197,6 +1197,16 @@ export const useChatSession = ({
       const body = text.trim();
       const messageId = generateMessageId();
       const nowIso = new Date().toISOString();
+      let derivedSharedKey = sharedRoomKey;
+
+      if (!derivedSharedKey && resolvedRoomKey) {
+        try {
+          derivedSharedKey = await ensureSharedRoomKey(resolvedRoomKey);
+          setSharedRoomKey(current => current ?? derivedSharedKey);
+        } catch (keyErr) {
+          console.warn('Failed to derive shared key before sending', keyErr);
+        }
+      }
       const optimistic: InternalMessage = {
         messageId,
         roomId: normalizedRoomId,
@@ -1207,7 +1217,7 @@ export const useChatSession = ({
         pending: true,
         error: false,
         readByPeer: false,
-        e2ee: Boolean((peerId && e2eeClient) || sharedRoomKey),
+        e2ee: Boolean((peerId && e2eeClient) || derivedSharedKey),
       };
       mergeMessage(optimistic);
       latestMessageIdRef.current = messageId;
@@ -1240,9 +1250,9 @@ export const useChatSession = ({
           } catch (encryptErr) {
             console.warn('Failed to encrypt message', encryptErr);
           }
-           } else if (sharedRoomKey) {
+        } else if (derivedSharedKey) {
           try {
-            const encrypted = await encryptMessage(body, sharedRoomKey);
+            const encrypted = await encryptMessage(body, derivedSharedKey);
             payload = {
               messageId,
               type: MESSAGE_TYPE_TEXT,
@@ -1257,12 +1267,7 @@ export const useChatSession = ({
           }
         }
         if (!payload) {
-          payload = {
-            messageId,
-            type: MESSAGE_TYPE_TEXT,
-            body,
-            e2ee: false,
-          };
+          throw new Error('Unable to encrypt message payload');
         }
 
         try {
@@ -1295,7 +1300,7 @@ export const useChatSession = ({
         );
       }
     },
-   [
+    [
       roomId,
       resolvedRoomKey,
       currentUserId,
