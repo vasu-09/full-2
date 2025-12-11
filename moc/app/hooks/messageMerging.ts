@@ -1,6 +1,6 @@
 export type InternalMessage = {
   messageId: string;
-  roomId: number;
+  roomId: number | null;
   senderId: number | null;
   type: string;
   body?: string | null;

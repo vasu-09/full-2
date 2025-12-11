@@ -120,7 +120,7 @@ export type StoredConversationSummary = ConversationRecordInput & {
 
 export type MessageRecordInput = {
   id: string;
-  conversationId: number;
+  conversationId: number | null;
   senderId?: number | null;
   plaintext?: string | null;
   ciphertext?: string | null;

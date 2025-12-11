@@ -19,6 +19,7 @@ import {
   getMessagesForConversationFromDb,
   saveMessagesToDb,
   updateMessageFlagsInDb,
+  type MessageRecordInput,
 } from '../services/database';
 import { E2EEClient, E2EEEnvelope, getE2EEClient } from '../services/e2ee';
 import { bytesToBase64 } from '../services/e2ee/encoding';
@@ -108,21 +109,7 @@ const generateMessageId = () => {
   return `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
 };
 
-const toStoredMessage = (record: {
-  id: string;
-  conversationId: number;
-  senderId?: number | null;
-  plaintext?: string | null;
-  ciphertext?: string | null;
-  aad?: string | null;
-  iv?: string | null;
-  keyRef?: string | null;
-  e2ee?: boolean;
-  createdAt?: string | null;
-  pending?: boolean;
-  error?: boolean;
-  readByPeer?: boolean;
-}): InternalMessage => ({
+const toStoredMessage = (record: MessageRecordInput): InternalMessage => ({
   messageId: record.id,
   roomId: record.conversationId,
   senderId: record.senderId ?? null,
@@ -183,9 +170,10 @@ export const useChatSession = ({
     (
       message: InternalMessage,
       payload?: Partial<ChatMessageDto> & { ciphertext?: string; aad?: string; iv?: string; keyRef?: string; e2ee?: boolean },
+      roomIdOverride?: number | null,
     ) => ({
       id: message.messageId,
-      conversationId: message.roomId,
+      conversationId: roomIdOverride ?? message.roomId ?? null,
       senderId: message.senderId ?? null,
       plaintext: message.body ?? null,
       ciphertext: payload?.ciphertext ?? null,
@@ -1193,15 +1181,18 @@ export const useChatSession = ({
 
   const sendTextMessage = useCallback(
     async (text: string) => {
-      if (!roomId || !resolvedRoomKey || !text.trim()) {
+      if (!resolvedRoomKey || !text.trim()) {
         return;
       }
+      const resolvedRoomId =
+        roomId ?? (resolvedRoomKey ? Number(resolvedRoomKey) : null);
+      const normalizedRoomId = Number.isNaN(resolvedRoomId ?? NaN) ? null : resolvedRoomId;
       const body = text.trim();
       const messageId = generateMessageId();
       const nowIso = new Date().toISOString();
       const optimistic: InternalMessage = {
         messageId,
-        roomId,
+        roomId: normalizedRoomId,
         senderId: currentUserId,
         type: MESSAGE_TYPE_TEXT,
         body,
@@ -1268,7 +1259,9 @@ export const useChatSession = ({
         }
 
         try {
-          await saveMessagesToDb([toDbRecord({ ...optimistic, body }, payload ?? undefined)]);
+          await saveMessagesToDb([
+            toDbRecord({ ...optimistic, body }, payload ?? undefined, normalizedRoomId),
+          ]);
         } catch (dbErr) {
           console.warn('Failed to persist outgoing message', dbErr);
         }
