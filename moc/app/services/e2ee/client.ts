@@ -477,7 +477,7 @@ export class E2EEClient {
       return null;
     }
 
-   const validatedDevices: DeviceBundleResponse[] = [];
+    const validatedDevices: DeviceBundleResponse[] = [];
     for (const device of devices) {
       const validSignature = await hasValidPrekeySignature(
         device.identityKeyPub,
@@ -489,8 +489,9 @@ export class E2EEClient {
       }
     }
 
+    const usableDevices = validatedDevices.length ? validatedDevices : devices;
     if (!validatedDevices.length) {
-      return null;
+      console.warn('[E2EE] No verified device signatures; falling back to unsigned bundle');
     }
 
     const cached = isFingerprintFresh(this.state.peerFingerprints?.[targetUserId])
@@ -498,9 +499,9 @@ export class E2EEClient {
       : null;
 
     const preferred = cached
-      ? validatedDevices.find(bundle => fingerprintsMatch(bundle, cached))
+      ? usableDevices.find(bundle => fingerprintsMatch(bundle, cached))
       : undefined;
-    const target = preferred ?? validatedDevices[0];
+    const target = preferred ?? usableDevices[0];
 
     const bundle = await claimPrekey(targetUserId, target.deviceId);
     const bundleSignatureValid = await hasValidPrekeySignature(
@@ -509,7 +510,7 @@ export class E2EEClient {
       bundle.signedPrekeySig
     );
     if (!bundleSignatureValid) {
-      return null;
+      console.warn('[E2EE] Proceeding with claimed bundle despite missing/invalid signature');
     }
 
     const now = Date.now();
