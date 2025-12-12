@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import { inboxQueue, roomTopic } from '../constants/stompEndpoints';
-import { getStoredUserId } from '../services/authStorage';
+import { getAccessToken, getStoredUserId } from '../services/authStorage';
 import {
   getRecentConversationsFromDb,
   setConversationUnreadInDb,
@@ -49,7 +49,47 @@ export const ChatProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const subscriptionsRef = useRef<Record<string, () => void>>({});
+  const [sessionReady, setSessionReady] = useState(false);
   const roomsRef = useRef<RoomSummary[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const ensureSession = async () => {
+      try {
+        const [token, storedUserId] = await Promise.all([getAccessToken(), getStoredUserId()]);
+
+        if (cancelled) return;
+
+        if (storedUserId != null) {
+          const parsed = Number(storedUserId);
+          setCurrentUserId(Number.isNaN(parsed) ? null : parsed);
+        }
+
+        if (token) {
+          setSessionReady(true);
+          return;
+        }
+      } catch {
+        // ignore and retry
+      }
+
+      if (!cancelled) {
+        retryTimer = setTimeout(ensureSession, 1500);
+      }
+    };
+
+    ensureSession();
+
+    return () => {
+      cancelled = true;
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+      }
+    };
+  }, []);
+
 
   useEffect(() => {
     getStoredUserId()
@@ -204,6 +244,9 @@ export const ChatProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
   }, [rooms]);
 
   useEffect(() => {
+    if (!sessionReady) {
+      return undefined;
+    }
     let cancelled = false;
     let unsubscribe: (() => void) | null = null;
 
@@ -274,11 +317,14 @@ export const ChatProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
         } catch {
           // ignore
         }
-      }
-    };
-  }, [incrementUnread, upsertRoom, currentUserId]);
+        }
+      };
+    }, [incrementUnread, upsertRoom, currentUserId, sessionReady]);
 
   useEffect(() => {
+     if (!sessionReady) {
+      return undefined;
+    }
     const existingSubs = subscriptionsRef.current;
     const activeKeys = new Set(rooms.map(room => room.roomKey));
 
@@ -340,7 +386,7 @@ export const ChatProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
     return () => {
       cancelled = true;
     };
-  }, [rooms, incrementUnread, updateRoomActivity, upsertRoom, currentUserId]);
+  }, [rooms, incrementUnread, updateRoomActivity, upsertRoom, currentUserId, sessionReady]);
 
   useEffect(
     () => () => {
