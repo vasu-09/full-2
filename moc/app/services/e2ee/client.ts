@@ -240,6 +240,24 @@ const toUploadablePrekeys = (prekeys: StoredPrekey[]): OneTimePrekeyPayload[] =>
 
 const registerIfNeeded = async (state: DeviceState): Promise<DeviceState> => {
   const pendingUpload = state.oneTimePrekeys.filter(pk => !pk.uploaded);
+  if (state.lastRegisteredAt) {
+    if (!pendingUpload.length) {
+      return state;
+    }
+
+    const uploads = toUploadablePrekeys(pendingUpload);
+    await uploadPrekeys(state.deviceId, uploads);
+    const refreshed: DeviceState = {
+      ...state,
+      oneTimePrekeys: state.oneTimePrekeys.map(pk =>
+        pendingUpload.find(item => item.publicKey === pk.publicKey)
+          ? { ...pk, uploaded: true }
+          : pk,
+      ),
+    };
+    await saveDeviceState(refreshed);
+    return refreshed;
+  }
   await registerDevice({
     deviceId: state.deviceId,
     name: 'MoC Mobile',
@@ -247,7 +265,7 @@ const registerIfNeeded = async (state: DeviceState): Promise<DeviceState> => {
     identityKeyPub: state.identity.publicKey,
     signedPrekeyPub: state.signedPrekey.publicKey,
     signedPrekeySig: state.signedPrekey.signature,
-     oneTimePrekeys: toUploadablePrekeys(pendingUpload),
+    oneTimePrekeys: toUploadablePrekeys(pendingUpload),
   });
   const updated: DeviceState = {
     ...state,

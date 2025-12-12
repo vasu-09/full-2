@@ -442,9 +442,17 @@ class StompManager {
   }
 
   async ensureConnected(): Promise<SimpleStompClient> {
-    this.desired = true;
     const latestToken = await getAccessToken();
-    if (this.client && this.client.isConnected() && this.lastToken === (latestToken ?? null)) {
+
+    // ✅ Do not connect before login
+    if (!latestToken) {
+      this.desired = false; // prevent reconnect loop while logged out
+      throw new Error('No access token yet; skip STOMP connect until login');
+    }
+
+    this.desired = true;
+
+    if (this.client && this.client.isConnected() && this.lastToken === latestToken) {
       return this.client;
     }
 
@@ -454,9 +462,10 @@ class StompManager {
       this.initPromise = null;
       this.lastToken = null;
     }
-    
+
     return this.initClient(latestToken);
   }
+
 
   async disconnect(): Promise<void> {
     this.desired = false;

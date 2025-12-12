@@ -199,83 +199,66 @@ export const ChatProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
   );
 
   useEffect(() => {
-    const existingSubs = subscriptionsRef.current;
-    const activeKeys = new Set(rooms.map(room => room.roomKey));
+  const existingSubs = subscriptionsRef.current;
+  const activeKeys = new Set(rooms.map(room => room.roomKey));
 
-    Object.entries(existingSubs).forEach(([key, unsubscribe]) => {
-      if (!activeKeys.has(key)) {
-        try {
-          unsubscribe();
-        } catch {
-          // ignore
-        }
-        delete existingSubs[key];
-      }
-    });
-
-    if (!rooms.length) {
-      return undefined;
+  Object.entries(existingSubs).forEach(([key, unsubscribe]) => {
+    if (!activeKeys.has(key)) {
+      try { unsubscribe(); } catch {}
+      delete existingSubs[key];
     }
+  });
 
-    let cancelled = false;
+  let cancelled = false;
 
-    stompClient
-      .ensureConnected()
-      .then(() => {
-        rooms.forEach(room => {
-          const key = room.roomKey;
-          if (!key || existingSubs[key]) {
+  // ✅ Always connect, even when rooms is empty
+  stompClient
+    .ensureConnected()
+    .then(() => {
+      // Only subscribe to room topics when we actually have rooms
+      rooms.forEach(room => {
+        const key = room.roomKey;
+        if (!key || existingSubs[key]) return;
+
+        const unsubscribe = stompClient.subscribe(roomTopic(key), frame => {
+          if (cancelled) return;
+
+          let payload: ChatMessageDto | null = null;
+          try {
+            payload = frame.body ? JSON.parse(frame.body) : null;
+          } catch (err) {
+            console.warn('Failed to parse inbound message frame', err);
             return;
           }
+          if (!payload) return;
 
-          const unsubscribe = stompClient.subscribe(roomTopic(key), frame => {
-            if (cancelled) {
-              return;
-            }
+          const lastMessage = {
+            messageId: payload.messageId,
+            text: payload.body ?? payload.ciphertext ?? null,
+            at: payload.serverTs ?? new Date().toISOString(),
+            senderId: payload.senderId ?? null,
+          };
 
-            let payload: ChatMessageDto | null = null;
-            try {
-              payload = frame.body ? JSON.parse(frame.body) : null;
-            } catch (err) {
-              console.warn('Failed to parse inbound message frame', err);
-              return;
-            }
+          updateRoomActivity(key, lastMessage);
 
-            if (!payload) {
-              return;
-            }
+          if (payload.roomId != null && payload.roomId !== room.id) {
+            upsertRoom({ ...room, id: payload.roomId, roomKey: key });
+          }
 
-            const lastMessage = {
-              messageId: payload.messageId,
-              text: payload.body ?? payload.ciphertext ?? null,
-              at: payload.serverTs ?? new Date().toISOString(),
-              senderId: payload.senderId ?? null,
-            };
-
-            updateRoomActivity(key, lastMessage);
-
-            if (payload.roomId != null && payload.roomId !== room.id) {
-              upsertRoom({
-                ...room,
-                id: payload.roomId,
-                roomKey: key,
-              });
-            }
-
-            if (currentUserId == null || payload.senderId !== currentUserId) {
-              incrementUnread(key);
-            }
-          });
-
-          existingSubs[key] = unsubscribe;
+          if (currentUserId == null || payload.senderId !== currentUserId) {
+            incrementUnread(key);
+          }
         });
-      })
-      .catch(err => console.warn('Global chat listener failed to connect', err));
 
-    return () => {
-      cancelled = true;
-    };
-  }, [rooms, incrementUnread, updateRoomActivity, upsertRoom, currentUserId]);
+        existingSubs[key] = unsubscribe;
+      });
+    })
+    .catch(err => console.warn('Global chat listener failed to connect', err));
+
+  return () => {
+    cancelled = true;
+  };
+}, [rooms, incrementUnread, updateRoomActivity, upsertRoom, currentUserId]);
 
   useEffect(
     () => () => {

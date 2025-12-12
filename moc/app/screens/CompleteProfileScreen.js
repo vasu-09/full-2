@@ -32,7 +32,6 @@ export default function CompleteProfileScreen() {
   const [isLoading, setIsLoading] = useState(true);
 
 
-
   useEffect(() => {
     let isMounted = true;
     const loadName = async () => {

@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useChatRegistry } from '../context/ChatContext';
 import { getAllContactsFromDb, searchContactsInDb, syncAndPersistContacts } from '../services/contactStorage';
+import { getE2EEClient } from '../services/e2ee';
 import { createDirectRoom } from '../services/roomsService';
 
 const windowHeight = Dimensions.get('window').height;
@@ -77,6 +78,12 @@ const MocScreen = () => {
       <View style={[styles.contactAvatar, styles.avatarPlaceholder]}>
         <Icon name="person" size={24} color="#888" />
       </View>
+    );
+  }, []);
+
+  useEffect(() => {
+    getE2EEClient().catch(err =>
+      console.warn('Failed to bootstrap E2EE client after login', err),
     );
   }, []);
 
