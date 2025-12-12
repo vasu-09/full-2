@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
-import { roomTopic } from '../constants/stompEndpoints';
+import { inboxQueue, roomTopic } from '../constants/stompEndpoints';
 import { getStoredUserId } from '../services/authStorage';
 import {
   getRecentConversationsFromDb,
@@ -49,6 +49,7 @@ export const ChatProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const subscriptionsRef = useRef<Record<string, () => void>>({});
+  const roomsRef = useRef<RoomSummary[]>([]);
 
   useEffect(() => {
     getStoredUserId()
@@ -199,66 +200,147 @@ export const ChatProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
   );
 
   useEffect(() => {
-  const existingSubs = subscriptionsRef.current;
-  const activeKeys = new Set(rooms.map(room => room.roomKey));
+    roomsRef.current = rooms;
+  }, [rooms]);
 
-  Object.entries(existingSubs).forEach(([key, unsubscribe]) => {
-    if (!activeKeys.has(key)) {
-      try { unsubscribe(); } catch {}
-      delete existingSubs[key];
-    }
-  });
+  useEffect(() => {
+    let cancelled = false;
+    let unsubscribe: (() => void) | null = null;
 
-  let cancelled = false;
-
-  // ✅ Always connect, even when rooms is empty
-  stompClient
-    .ensureConnected()
-    .then(() => {
-      // Only subscribe to room topics when we actually have rooms
-      rooms.forEach(room => {
-        const key = room.roomKey;
-        if (!key || existingSubs[key]) return;
-
-        const unsubscribe = stompClient.subscribe(roomTopic(key), frame => {
-          if (cancelled) return;
-
-          let payload: ChatMessageDto | null = null;
+    stompClient
+      .ensureConnected()
+      .then(() => {
+        if (cancelled) {
+          return;
+        }
+        unsubscribe = stompClient.subscribe(inboxQueue, frame => {
+          let payload: any = null;
           try {
             payload = frame.body ? JSON.parse(frame.body) : null;
           } catch (err) {
-            console.warn('Failed to parse inbound message frame', err);
+            console.warn('Failed to parse inbox frame', err);
             return;
           }
+
           if (!payload) return;
+          const roomKey = payload.roomKey ? String(payload.roomKey) : null;
+          const roomId =
+            typeof payload.roomId === 'number'
+              ? payload.roomId
+              : Number(payload.roomDbId ?? payload.roomId ?? NaN);
 
-          const lastMessage = {
-            messageId: payload.messageId,
-            text: payload.body ?? payload.ciphertext ?? null,
-            at: payload.serverTs ?? new Date().toISOString(),
-            senderId: payload.senderId ?? null,
-          };
-
-          updateRoomActivity(key, lastMessage);
-
-          if (payload.roomId != null && payload.roomId !== room.id) {
-            upsertRoom({ ...room, id: payload.roomId, roomKey: key });
+          if (!roomKey || !Number.isFinite(roomId)) {
+            return;
           }
 
-          if (currentUserId == null || payload.senderId !== currentUserId) {
-            incrementUnread(key);
+          const existing = roomsRef.current.find(r => r.roomKey === roomKey) ?? null;
+
+          const lastMessage = payload.messageId
+            ? {
+                messageId: String(payload.messageId),
+                text: payload.body ?? payload.ciphertext ?? null,
+                at: payload.serverTs ?? new Date().toISOString(),
+                senderId: payload.senderId ?? null,
+              }
+            : undefined;
+
+          upsertRoom({
+            id: roomId,
+            roomKey,
+            title: payload.roomName ?? payload.roomKey ?? roomKey,
+            avatar: payload.roomImage ?? null,
+            peerId: typeof payload.peerId === 'number' ? payload.peerId : existing?.peerId ?? null,
+            lastMessage: lastMessage ?? existing?.lastMessage ?? null,
+            unreadCount: existing?.unreadCount ?? 0,
+          });
+
+          const shouldIncrementUnread =
+            payload.senderId != null &&
+            payload.senderId !== currentUserId &&
+            (!existing || !subscriptionsRef.current[roomKey]);
+
+          if (shouldIncrementUnread) {
+            incrementUnread(roomKey);
           }
         });
+      })
+      .catch(err => console.warn('Inbox listener failed to connect', err));
 
-        existingSubs[key] = unsubscribe;
-      });
-    })
-    .catch(err => console.warn('Global chat listener failed to connect', err));
+       return () => {
+      cancelled = true;
+      if (unsubscribe) {
+        try {
+          unsubscribe();
+        } catch {
+          // ignore
+        }
+      }
+    };
+  }, [incrementUnread, upsertRoom, currentUserId]);
 
-  return () => {
-    cancelled = true;
-  };
-}, [rooms, incrementUnread, updateRoomActivity, upsertRoom, currentUserId]);
+  useEffect(() => {
+    const existingSubs = subscriptionsRef.current;
+    const activeKeys = new Set(rooms.map(room => room.roomKey));
+
+    Object.entries(existingSubs).forEach(([key, unsubscribe]) => {
+      if (!activeKeys.has(key)) {
+        try {
+          unsubscribe();
+        } catch {}
+        delete existingSubs[key];
+      }
+    });
+
+    let cancelled = false;
+
+    // ✅ Always connect, even when rooms is empty
+    stompClient
+      .ensureConnected()
+      .then(() => {
+        // Only subscribe to room topics when we actually have rooms
+        rooms.forEach(room => {
+          const key = room.roomKey;
+          if (!key || existingSubs[key]) return;
+
+          const unsubscribe = stompClient.subscribe(roomTopic(key), frame => {
+            if (cancelled) return;
+
+            let payload: ChatMessageDto | null = null;
+            try {
+              payload = frame.body ? JSON.parse(frame.body) : null;
+            } catch (err) {
+              console.warn('Failed to parse inbound message frame', err);
+              return;
+            }
+            if (!payload) return;
+
+            const lastMessage = {
+              messageId: payload.messageId,
+              text: payload.body ?? payload.ciphertext ?? null,
+              at: payload.serverTs ?? new Date().toISOString(),
+              senderId: payload.senderId ?? null,
+            };
+
+            updateRoomActivity(key, lastMessage);
+
+            if (payload.roomId != null && payload.roomId !== room.id) {
+              upsertRoom({ ...room, id: payload.roomId, roomKey: key });
+            }
+
+            if (currentUserId == null || payload.senderId !== currentUserId) {
+              incrementUnread(key);
+            }
+          });
+
+          existingSubs[key] = unsubscribe;
+        });
+      })
+      .catch(err => console.warn('Global chat listener failed to connect', err));
+
+    return () => {
+      cancelled = true;
+    };
+  }, [rooms, incrementUnread, updateRoomActivity, upsertRoom, currentUserId]);
 
   useEffect(
     () => () => {
