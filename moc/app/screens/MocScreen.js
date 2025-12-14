@@ -56,6 +56,11 @@ const MocScreen = () => {
 
   const hasSearchQuery = searchQuery.trim().length > 0;
 
+  useEffect(() => {
+    console.log("[MOC] rooms changed, count =", rooms.length, rooms);
+  }, [rooms]);
+
+
   const handleInvite = useCallback(async (contact) => {
     const displayName = contact?.name?.trim();
     const inviteMessage = displayName
@@ -315,7 +320,7 @@ const MocScreen = () => {
  
   const ChatsScreen = () => {
     const router = useRouter();
-    const hasChats = filteredRooms.length > 0;
+    const hasChats = rooms.length > 0;
     
     return (
       <View style={styles.chatsWrapper}>
