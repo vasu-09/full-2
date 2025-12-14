@@ -311,7 +311,7 @@ export const useChatSession = ({
   }, [rawMessages, saveMessagesToDb, sharedRoomKey, toDbRecord]);
 
   useEffect(() => {
-    if (!e2eeClient) {
+    if (!e2eeClient || currentUserId == null) {
       return;
     }
 

@@ -573,21 +573,25 @@ export class E2EEClient {
       const senderDeviceId = context.senderDeviceId ?? null;
 
       try {
-        if (fromSelf) {
-          const entry = this.state.sentMessageKeys.find(item => item.messageId === envelope.messageId);
-          if (!entry) {
-            throw new Error('Missing local key');
-          }
-          const key = base64ToBytes(entry.key);
+        const localEntry = this.state.sentMessageKeys.find(
+          item => item.messageId === envelope.messageId,
+        );
+
+        if (localEntry) {
+          const key = base64ToBytes(localEntry.key);
           this.logDecryptTelemetry('decrypt-self', {
             senderId,
             senderDeviceId,
             sessionId,
             retrying,
+            inferred: !fromSelf,
           });
           return decryptPayload(key, envelope);
         }
 
+         if (fromSelf) {
+          throw new Error('Missing local key');
+        }
           const aadBytes = base64ToBytes(envelope.aad ?? '');
           let meta: { e: string; t: string } | null = null;
         try {
