@@ -23,11 +23,9 @@ public class ToDoItem {
 
 
     @CreationTimestamp
-    @Convert(converter = LocalDateStringAttributeConverter.class)
     private LocalDateTime createdAt;
 
     @UpdateTimestamp
-    @Convert(converter = LocalDateStringAttributeConverter.class)
     private LocalDateTime updatedAt;
 
     @Lob

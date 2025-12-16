@@ -78,6 +78,9 @@ public class MessageService {
     @Autowired
     private UndeliveredMessageStore undeliveredStore;
 
+    @Autowired
+    private InboxDeliveryService inboxDeliveryService;
+
 
     @Transactional
     public ChatMessage saveInbound(Long roomId, Long senderId, ChatSendDto dto) {
@@ -182,7 +185,7 @@ public class MessageService {
             org.slf4j.LoggerFactory.getLogger(getClass())
                     .warn("notify failure room={} msg={} err={}", roomId, dto.getMessageId(), notifyEx.toString());
         }
-
+        inboxDeliveryService.sendInboxEvent(saved);
         return saved;
     }
 

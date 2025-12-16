@@ -7,7 +7,6 @@ import com.om.Real_Time_Communication.models.ChatMessage;
 import com.om.Real_Time_Communication.models.ChatRoom;
 import com.om.Real_Time_Communication.models.MessageDelivery;
 import com.om.Real_Time_Communication.models.MessageDeliveryStatus;
-import com.om.Real_Time_Communication.security.SessionRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -26,26 +25,22 @@ public class InboxDeliveryService {
     private final ChatRoomRepository chatRoomRepository;
     private final ChatMessageRepository chatMessageRepository;
     private final RoomMembershipService membershipService;
-    private final SessionRegistry sessionRegistry;
     private final SimpMessagingTemplate messagingTemplate;
-    private final MessageService messageService;
+
 
     public InboxDeliveryService(
             MessageDeliveryRepository deliveryRepository,
             ChatRoomRepository chatRoomRepository,
             ChatMessageRepository chatMessageRepository,
             RoomMembershipService membershipService,
-            SessionRegistry sessionRegistry,
-            SimpMessagingTemplate messagingTemplate,
-            MessageService messageService
+            SimpMessagingTemplate messagingTemplate
     ) {
         this.deliveryRepository = deliveryRepository;
         this.chatRoomRepository = chatRoomRepository;
         this.chatMessageRepository = chatMessageRepository;
         this.membershipService = membershipService;
-        this.sessionRegistry = sessionRegistry;
         this.messagingTemplate = messagingTemplate;
-        this.messageService = messageService;
+
     }
 
     public void recordAndDispatch(ChatRoom room, ChatMessage saved, Map<String, Object> baseEvent, List<Long> members) {
@@ -82,18 +77,20 @@ public class InboxDeliveryService {
     }
 
     private boolean sendIfOnline(Long memberId, Map<String, Object> payload) {
-        boolean online = sessionRegistry.hasActive(memberId);
-        if (!online) {
-            log.info("[INBOX][PENDING] user={} offline; broadcasting anyway for live subscribers", memberId);
+        try {
+            log.info("[INBOX] send to user={} dest=/queue/inbox msgId={} roomKey={}",
+                    memberId, payload.get("msgId"), payload.get("roomKey"));
+            messagingTemplate.convertAndSendToUser(
+                    String.valueOf(memberId),
+                    "/queue/inbox",
+                    payload
+            );
+            return true;
+        } catch (Exception ex) {
+            log.error("[INBOX][ERROR] failed to send to user={} msgId={} err={}",
+                    memberId, payload.get("msgId"), ex.toString());
+            return false;
         }
-        log.info("[INBOX] send to user={} dest=/queue/inbox msgId={} roomKey={} online={} ",
-                memberId, payload.get("msgId"), payload.get("roomKey"), online);
-        messagingTemplate.convertAndSendToUser(
-                String.valueOf(memberId),
-                "/queue/inbox",
-                payload
-        );
-        return online;
     }
 
     public List<Map<String, Object>> pendingMessages(Long userId, Instant since) {
@@ -121,7 +118,7 @@ public class InboxDeliveryService {
             }
             List<Long> members = membershipService.memberIds(room.getId());
             Long peerId = resolvePeerId(room, members, userId);
-            Map<String, Object> base = messageService.toRoomEvent(msg);
+            Map<String, Object> base = toRoomEvent(msg);
             Map<String, Object> payload = buildInboxPayload(room, msg, base, peerId);
             payloads.add(payload);
 
@@ -145,6 +142,34 @@ public class InboxDeliveryService {
                 delivery.setDeliveredAt(Instant.now());
             }
             deliveryRepository.save(delivery);
+        });
+    }
+
+    public void sendInboxEvent(ChatMessage saved) {
+        if (saved == null || saved.getRoomId() == null) {
+            return;
+        }
+
+        chatRoomRepository.findById(saved.getRoomId()).ifPresent(room -> {
+            List<Long> members = membershipService.memberIds(room.getId());
+            Map<String, Object> baseEvent = toRoomEvent(saved);
+
+            for (Long memberId : members) {
+                if (memberId == null || memberId.equals(saved.getSenderId())) {
+                    continue;
+                }
+
+                Long peerId = resolvePeerId(room, members, memberId);
+                Map<String, Object> payload = buildInboxPayload(room, saved, baseEvent, peerId);
+                boolean sent = sendIfOnline(memberId, payload);
+                if (sent) {
+                    deliveryRepository.findByMsgIdAndUserId(saved.getMessageId(), memberId)
+                            .ifPresent(delivery -> {
+                                delivery.setStatus(MessageDeliveryStatus.SENT_TO_WS);
+                                deliveryRepository.save(delivery);
+                            });
+                }
+            }
         });
     }
 
@@ -173,5 +198,26 @@ public class InboxDeliveryService {
             inboxEvent.put("peerId", peerId);
         }
         return inboxEvent;
+    }
+
+    private Map<String, Object> toRoomEvent(ChatMessage m) {
+        Map<String, Object> e = new HashMap<>();
+        e.put("roomId", m.getRoomId());
+        e.put("messageId", m.getMessageId());
+        e.put("senderId", m.getSenderId());
+        e.put("type", m.getType().name());
+        e.put("serverTs", m.getServerTs());
+        e.put("e2ee", m.isE2ee());
+        if (m.isE2ee()) {
+            e.put("e2eeVer", m.getE2eeVer());
+            e.put("algo", m.getAlgo());
+            e.put("aad", m.getAad());
+            e.put("iv", m.getIv());
+            e.put("ciphertext", m.getCiphertext());
+            e.put("keyRef", m.getKeyRef());
+        } else {
+            e.put("body", m.getBody());
+        }
+        return e;
     }
 }
