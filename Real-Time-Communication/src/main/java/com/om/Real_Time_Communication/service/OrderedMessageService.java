@@ -87,7 +87,7 @@ public class OrderedMessageService {
                         inboxEvent.put("peerId", peerId);
                     }
                 }
-
+                log.info("Sending inbox to user {}", memberId);
                 messagingTemplate.convertAndSendToUser(
                         String.valueOf(memberId),
                         "/queue/inbox",
