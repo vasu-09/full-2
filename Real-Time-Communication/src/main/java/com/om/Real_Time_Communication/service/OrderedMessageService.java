@@ -87,7 +87,11 @@ public class OrderedMessageService {
                         inboxEvent.put("peerId", peerId);
                     }
                 }
-                log.info("Sending inbox to user {}", memberId);
+                log.info("[INBOX] send to user={} dest=/queue/inbox roomKey={} roomDbId={} msgId={}",
+                        memberId,
+                        room.getRoomId(),
+                        internalId,
+                        saved.getMessageId());
                 messagingTemplate.convertAndSendToUser(
                         String.valueOf(memberId),
                         "/queue/inbox",

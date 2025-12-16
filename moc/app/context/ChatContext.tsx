@@ -45,6 +45,14 @@ const sortRooms = (rooms: RoomSummary[]) => {
   });
 };
 
+const makeTempRoomIdFromKey = (roomKey: string) => {
+  let hash = 0;
+  for (let i = 0; i < roomKey.length; i += 1) {
+    hash = (hash * 31 + roomKey.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash) || Date.now();
+};
+
 export const ChatProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
@@ -57,68 +65,6 @@ export const ChatProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
   useEffect(() => {
     roomsRef.current = rooms;
   }, [rooms]);
-
-  // 🔴 REQUIRED: Global inbox subscription so MoCScreen updates from empty state
-useEffect(() => {
-  if (!sessionReady || currentUserId == null) return;
-
-  let cancelled = false;
-
-  (async () => {
-    try {
-      await stompClient.ensureConnected();
-
-      if (cancelled) return;
-
-      if (!inboxUnsubRef.current) {
-        console.log('[WS][INBOX] subscribing to', inboxQueue);
-
-        inboxUnsubRef.current = stompClient.subscribe(inboxQueue, frame => {
-          let payload: any;
-          try {
-            payload = JSON.parse(frame.body);
-          } catch {
-            return;
-          }
-
-          const roomKey = payload.roomKey;
-          const roomId = Number(payload.roomDbId ?? payload.roomId);
-
-          if (!roomKey || !Number.isFinite(roomId)) return;
-
-          upsertRoom({
-            id: roomId,
-            roomKey,
-            title: payload.roomName ?? roomKey,
-            avatar: payload.roomImage ?? null,
-            peerId: payload.peerId ?? null,
-            lastMessage: {
-              messageId: payload.messageId,
-              text: payload.body ?? null,
-              at: payload.serverTs ?? new Date().toISOString(),
-              senderId: payload.senderId ?? null,
-            },
-          });
-
-          if (payload.senderId !== currentUserId) {
-            incrementUnread(roomKey);
-          }
-        });
-      }
-    } catch (e) {
-      console.warn('[WS][INBOX] setup failed', e);
-    }
-  })();
-
-  return () => {
-    cancelled = true;
-    if (inboxUnsubRef.current) {
-      inboxUnsubRef.current();
-      inboxUnsubRef.current = null;
-    }
-  };
-}, [sessionReady, currentUserId]);
-
 
   useEffect(() => {
     let cancelled = false;
@@ -373,17 +319,17 @@ const resetUnread = useCallback(
                   : null;
 
           const roomIdRaw = payload.roomDbId ?? payload.roomId ?? payload.conversationId ?? payload.id;
-          const roomId =
+          const parsedRoomId =
             typeof roomIdRaw === 'number' ? roomIdRaw : Number.parseInt(String(roomIdRaw), 10);
 
-          if (!roomKey || !Number.isFinite(roomId)) {
-            console.log('[WS][INBOX] Ignoring inbox event (missing ids):', {
-              roomKey,
-              roomIdRaw,
-              payload,
-            });
+           if (!roomKey) {
+            console.warn('[WS][INBOX] missing roomKey', payload);
             return;
           }
+
+          const roomId = Number.isFinite(parsedRoomId)
+            ? parsedRoomId
+            : makeTempRoomIdFromKey(String(roomKey));
 
           const existing = roomsRef.current.find(r => r.roomKey === roomKey) ?? null;
 
