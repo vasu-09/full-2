@@ -10,7 +10,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
 import java.util.List;
@@ -25,19 +24,22 @@ public class OrderedMessageService {
     private final SimpMessagingTemplate messagingTemplate;
     private final ChatRoomRepository chatRoomRepository;
     private final RoomMembershipService membershipService;
+    private final InboxDeliveryService inboxDeliveryService;
 
     public OrderedMessageService(
             PerRoomDispatcher dispatcher,
             MessageService messageService,
             SimpMessagingTemplate messagingTemplate,
             ChatRoomRepository chatRoomRepository,
-            RoomMembershipService membershipService
+            RoomMembershipService membershipService,
+            InboxDeliveryService inboxDeliveryService
     ) {
         this.dispatcher = dispatcher;
         this.messageService = messageService;
         this.messagingTemplate = messagingTemplate;
         this.chatRoomRepository = chatRoomRepository;
         this.membershipService = membershipService;
+        this.inboxDeliveryService = inboxDeliveryService;
     }
 
     /**
@@ -71,33 +73,8 @@ public class OrderedMessageService {
             log.info("Broadcasted message {} to room {}", saved.getMessageId(), roomId);
 
             List<Long> members = membershipService.memberIds(internalId);
-            for (Long memberId : members) {
-                Map<String, Object> inboxEvent = new HashMap<>(event);
-                inboxEvent.put("roomKey", room.getRoomId());
-                inboxEvent.put("roomName", room.getName());
-                inboxEvent.put("roomImage", room.getImageUrl());
-                inboxEvent.put("roomDbId", internalId);
 
-                if (!Boolean.TRUE.equals(room.getGroup()) && members.size() == 2) {
-                    Long peerId = members.stream()
-                            .filter(id -> !id.equals(memberId))
-                            .findFirst()
-                            .orElse(null);
-                    if (peerId != null) {
-                        inboxEvent.put("peerId", peerId);
-                    }
-                }
-                log.info("[INBOX] send to user={} dest=/queue/inbox roomKey={} roomDbId={} msgId={}",
-                        memberId,
-                        room.getRoomId(),
-                        internalId,
-                        saved.getMessageId());
-                messagingTemplate.convertAndSendToUser(
-                        String.valueOf(memberId),
-                        "/queue/inbox",
-                        inboxEvent
-                );
-            }
+            inboxDeliveryService.recordAndDispatch(room, saved, event, members);
 
             return null; // required by Callable
         });

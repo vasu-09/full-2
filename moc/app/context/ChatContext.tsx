@@ -1,12 +1,13 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
-import { inboxQueue, roomTopic } from '../constants/stompEndpoints';
+import { inboxQueue, roomTopic, sendInboxAck as sendInboxAckDestination } from '../constants/stompEndpoints';
 import { getAccessToken, getStoredUserId } from '../services/authStorage';
 import {
   getRecentConversationsFromDb,
   setConversationUnreadInDb,
   upsertConversationInDb,
 } from '../services/database';
+import { fetchPendingMessages } from '../services/messagesService';
 import { ChatMessageDto } from '../services/roomsService';
 import stompClient from '../services/stompClient';
 
@@ -51,6 +52,47 @@ const makeTempRoomIdFromKey = (roomKey: string) => {
     hash = (hash * 31 + roomKey.charCodeAt(i)) | 0;
   }
   return Math.abs(hash) || Date.now();
+};
+
+const stableDmRoomKey = (userA: number | null, userB: number | null) => {
+  if (userA == null || userB == null) return null;
+  const low = Math.min(userA, userB);
+  const high = Math.max(userA, userB);
+  return `dm:${low}:${high}`;
+};
+
+const coerceNumber = (value: any) => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  const parsed = Number.parseInt(String(value), 10);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const deriveRoomKeyFromPayload = (payload: any, currentUserId: number | null) => {
+  const roomKey =
+    payload?.roomKey != null
+      ? String(payload.roomKey)
+      : payload?.conversationKey != null
+        ? String(payload.conversationKey)
+        : payload?.key != null
+          ? String(payload.key)
+          : null;
+
+  if (roomKey) return roomKey;
+
+  const peerCandidate =
+    typeof payload?.peerId === 'number'
+      ? payload.peerId
+      : typeof payload?.senderId === 'number'
+        ? payload.senderId
+        : coerceNumber(payload?.fromUserId);
+
+  const fallback = stableDmRoomKey(currentUserId, coerceNumber(peerCandidate));
+  if (fallback) return fallback;
+
+  if (payload?.msgId || payload?.messageId) {
+    return `pending:${payload.msgId ?? payload.messageId}`;
+  }
+  return null;
 };
 
 export const ChatProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
@@ -265,6 +307,79 @@ const resetUnread = useCallback(
   [persistConversation],
 );
 
+const sendInboxAck = useCallback((msgId: string, roomKey?: string | null) => {
+    if (!msgId) return;
+    stompClient
+      .publish(sendInboxAckDestination, { msgId, roomKey, status: 'DELIVERED' })
+      .catch(err => console.warn('[WS][INBOX] ack failed', err));
+  }, []);
+
+  const handleInboxPayload = useCallback(
+    (payload: any) => {
+      if (!payload) return;
+
+      const roomKey = deriveRoomKeyFromPayload(payload, currentUserId);
+      if (!roomKey) {
+        console.warn('[WS][INBOX] missing roomKey', payload);
+        return;
+      }
+
+      const roomIdRaw = payload.roomDbId ?? payload.roomId ?? payload.conversationId ?? payload.id;
+      const parsedRoomId = coerceNumber(roomIdRaw);
+      const roomId = parsedRoomId ?? makeTempRoomIdFromKey(String(roomKey));
+
+      const existing = roomsRef.current.find(r => r.roomKey === roomKey) ?? null;
+      const peerId =
+        typeof payload.peerId === 'number'
+          ? payload.peerId
+          : existing?.peerId ?? (roomKey.startsWith('dm:') ? coerceNumber(payload.senderId ?? payload.fromUserId) : null);
+
+      const messageId = payload.msgId ?? payload.messageId ?? null;
+      const senderId =
+        typeof payload.senderId === 'number'
+          ? payload.senderId
+          : coerceNumber(payload.fromUserId ?? payload.senderId);
+      const createdAt = payload.serverTs ?? payload.createdAt ?? new Date().toISOString();
+
+      const lastMessage: RoomLastMessage | null = messageId
+        ? {
+            messageId: String(messageId),
+            text: payload.body ?? payload.plaintext ?? payload.ciphertext ?? null,
+            at: createdAt,
+            senderId: senderId ?? undefined,
+          }
+        : existing?.lastMessage ?? null;
+
+      upsertRoom({
+        id: roomId,
+        roomKey,
+        title: payload.roomName ?? payload.title ?? existing?.title ?? roomKey,
+        avatar: payload.roomImage ?? payload.avatar ?? existing?.avatar ?? null,
+        peerId: peerId ?? null,
+        lastMessage,
+        unreadCount: existing?.unreadCount ?? 0,
+      });
+
+      if (senderId != null && senderId !== currentUserId) {
+        incrementUnread(roomKey);
+      }
+
+      if (messageId) {
+        sendInboxAck(String(messageId), roomKey);
+      }
+    },
+    [currentUserId, incrementUnread, sendInboxAck, upsertRoom],
+  );
+
+  const syncPendingMessages = useCallback(() => {
+    if (!sessionReady || !accessToken) return;
+    fetchPendingMessages()
+      .then(list => {
+        list.forEach(handleInboxPayload);
+      })
+      .catch(err => console.warn('[WS][INBOX] pending sync failed', err));
+  }, [accessToken, handleInboxPayload, sessionReady]);
+
 
   const value = useMemo(
     () => ({ rooms, upsertRoom, updateRoomActivity, incrementUnread, resetUnread }),
@@ -275,11 +390,32 @@ const resetUnread = useCallback(
     roomsRef.current = rooms;
   }, [rooms]);
 
-   useEffect(() => {
+  useEffect(() => {
     if (!sessionReady || !accessToken) return;
 
     stompClient.ensureConnected().catch(err => console.warn('Global STOMP connect failed', err));
   }, [sessionReady, accessToken]);
+
+  useEffect(() => {
+    if (!sessionReady || !accessToken) return;
+    let cancelled = false;
+
+    syncPendingMessages();
+
+    const removeListener = stompClient.onConnect(() => {
+      if (!cancelled) {
+        syncPendingMessages();
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      if (removeListener) {
+        removeListener();
+      }
+    };
+  }, [accessToken, sessionReady, syncPendingMessages]);
+
 
   useEffect(() => {
     if (!sessionReady || !accessToken || !currentUserId) {
@@ -308,64 +444,7 @@ const resetUnread = useCallback(
           }
           if (!payload) return;
 
-          // Be tolerant with backend field names
-          const roomKey =
-            payload.roomKey != null
-              ? String(payload.roomKey)
-              : payload.conversationKey != null
-                ? String(payload.conversationKey)
-                : payload.key != null
-                  ? String(payload.key)
-                  : null;
-
-          const roomIdRaw = payload.roomDbId ?? payload.roomId ?? payload.conversationId ?? payload.id;
-          const parsedRoomId =
-            typeof roomIdRaw === 'number' ? roomIdRaw : Number.parseInt(String(roomIdRaw), 10);
-
-           if (!roomKey) {
-            console.warn('[WS][INBOX] missing roomKey', payload);
-            return;
-          }
-
-          const roomId = Number.isFinite(parsedRoomId)
-            ? parsedRoomId
-            : makeTempRoomIdFromKey(String(roomKey));
-
-          const existing = roomsRef.current.find(r => r.roomKey === roomKey) ?? null;
-
-          const lastMessage: RoomLastMessage | null =
-            payload.messageId != null
-              ? {
-                  messageId: String(payload.messageId),
-                  text: payload.body ?? payload.plaintext ?? payload.ciphertext ?? null,
-                  at: payload.serverTs ?? payload.createdAt ?? new Date().toISOString(),
-                  senderId:
-                    typeof payload.senderId === 'number'
-                      ? payload.senderId
-                      : payload.fromUserId ?? null,
-                }
-              : existing?.lastMessage ?? null;
-
-          upsertRoom({
-            id: roomId,
-            roomKey,
-            title: payload.roomName ?? payload.title ?? existing?.title ?? roomKey,
-            avatar: payload.roomImage ?? payload.avatar ?? existing?.avatar ?? null,
-            peerId:
-              typeof payload.peerId === 'number'
-                ? payload.peerId
-                : existing?.peerId ?? payload.otherUserId ?? null,
-            lastMessage,
-            unreadCount: existing?.unreadCount ?? 0,
-          });
-
-          // Increment unread only if sender != me
-          const senderId =
-            typeof payload.senderId === 'number' ? payload.senderId : payload.fromUserId ?? null;
-
-          if (senderId != null && senderId !== currentUserId) {
-            incrementUnread(roomKey);
-          }
+          handleInboxPayload(payload);
         });
       })
       .catch(err => console.warn('[WS][INBOX] listener failed to connect', err));
@@ -381,7 +460,7 @@ const resetUnread = useCallback(
         inboxUnsubRef.current = null;
       }
     };
-  }, [sessionReady, accessToken, currentUserId, upsertRoom, incrementUnread]);
+  }, [sessionReady, accessToken, currentUserId, handleInboxPayload]);
 
 
  useEffect(() => {

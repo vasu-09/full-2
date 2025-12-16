@@ -382,6 +382,7 @@ class StompManager {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private idCounter = 0;
   private lastToken: string | null = null;
+  private onConnectListeners = new Set<() => void>();
 
   private async initClient(explicitToken?: string | null): Promise<SimpleStompClient> {
     if (this.initPromise) {
@@ -403,6 +404,13 @@ class StompManager {
       };
       client.onConnectCallback = () => {
         this.resubscribe(client);
+        this.onConnectListeners.forEach(cb => {
+          try {
+            cb();
+          } catch (err) {
+            console.warn('STOMP onConnect listener failed', err);
+          }
+        });
       };
       await client.connect();
       this.client = client;
@@ -517,6 +525,11 @@ class StompManager {
         }
       }
     };
+  }
+
+  onConnect(callback: () => void) {
+    this.onConnectListeners.add(callback);
+    return () => this.onConnectListeners.delete(callback);
   }
 }
 

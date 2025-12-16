@@ -20,3 +20,9 @@ export const restoreMessageForMe = async (messageId: string | number) => {
 export const restoreMessageForEveryone = async (messageId: string | number) => {
   await apiClient.put(`/api/messages/${messageId}/delete-for-everyone`);
 };
+
+export const fetchPendingMessages = async (since?: string) => {
+  const params = since ? { params: { since } } : undefined;
+  const { data } = await apiClient.get('/api/messages/pending', params);
+  return Array.isArray(data) ? data : [];
+};
