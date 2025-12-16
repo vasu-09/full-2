@@ -84,17 +84,16 @@ public class InboxDeliveryService {
     private boolean sendIfOnline(Long memberId, Map<String, Object> payload) {
         boolean online = sessionRegistry.hasActive(memberId);
         if (!online) {
-            log.info("[INBOX][PENDING] user={} offline; skipping live dispatch", memberId);
-            return false;
+            log.info("[INBOX][PENDING] user={} offline; broadcasting anyway for live subscribers", memberId);
         }
-        log.info("[INBOX] send to user={} dest=/queue/inbox msgId={} roomKey={}",
-                memberId, payload.get("msgId"), payload.get("roomKey"));
+        log.info("[INBOX] send to user={} dest=/queue/inbox msgId={} roomKey={} online={} ",
+                memberId, payload.get("msgId"), payload.get("roomKey"), online);
         messagingTemplate.convertAndSendToUser(
                 String.valueOf(memberId),
                 "/queue/inbox",
                 payload
         );
-        return true;
+        return online;
     }
 
     public List<Map<String, Object>> pendingMessages(Long userId, Instant since) {
