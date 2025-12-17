@@ -30,6 +30,7 @@ const MESSAGE_BAR_HEIGHT = 48;
 const MARGIN = 8;
 const MIC_SIZE = 48;
 
+const getFirstParam = value => (Array.isArray(value) ? value[0] : value);
 
 export const formatDurationText = millis => {
   const totalSeconds = Math.max(0, Math.floor((millis || 0) / 1000));
@@ -239,10 +240,17 @@ export default function ChatDetailScreen() {
   const avatarUri = params?.image && String(params.image).trim() ? String(params.image) : null;
   const avatarSource = avatarUri ? { uri: avatarUri } : null;
   const isRoomReady = Boolean(roomId && (roomKey || roomId));
+  const tableMessageToSend = useMemo(() => {
+    const text = getFirstParam(params?.tableMessage);
+    const id = getFirstParam(params?.tableMessageId);
+    if (!text || !id) return null;
+    return { text: String(text), id: String(id) };
+  }, [params?.tableMessage, params?.tableMessageId]);
 
   const recordingRef = useRef(null);
   const previewSoundRef = useRef(null);
   const playbackSoundRef = useRef(null);
+  const tableMessageIdRef = useRef(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordedUri, setRecordedUri] = useState(null);
   const [recordingDuration, setRecordingDuration] = useState(0);
@@ -545,6 +553,24 @@ export default function ChatDetailScreen() {
   useEffect(() => {
     setSelectedMessages(prev => prev.filter(msg => messages.find(m => m.id === msg.id)));
   }, [messages]);
+
+  useEffect(() => {
+    if (!tableMessageToSend || !isRoomReady) {
+      return;
+    }
+    if (tableMessageIdRef.current === tableMessageToSend.id) {
+      return;
+    }
+    tableMessageIdRef.current = tableMessageToSend.id;
+    sendTextMessage(tableMessageToSend.text).catch(err => {
+      console.warn('Failed to send table preview message', err);
+    });
+    try {
+      router.setParams?.({ tableMessage: undefined, tableMessageId: undefined });
+    } catch (err) {
+      console.warn('Unable to clear table preview params', err);
+    }
+  }, [isRoomReady, router, sendTextMessage, tableMessageToSend]);
 
   useEffect(() => {
     if (!selectedMessages.length) {
@@ -1301,7 +1327,18 @@ export default function ChatDetailScreen() {
                     previewItems.push({ name: item.itemName, qty: qtyText, price: `₹${total}` });
                   });
 
-                  router.push({ pathname: '/screens/SelectedPreview', params: { preview: JSON.stringify(previewItems) } });
+                  const previewParams = {
+                    preview: JSON.stringify(previewItems),
+                    ...(selectedListData?.title ? { listTitle: selectedListData.title } : {}),
+                    ...(roomId ? { roomId: String(roomId) } : {}),
+                    ...(roomKey ? { roomKey } : {}),
+                    ...(peerId != null ? { peerId: String(peerId) } : {}),
+                    ...(chatTitle ? { title: chatTitle } : {}),
+                    ...(phoneNumber ? { phone: phoneNumber } : {}),
+                    ...(avatarUri ? { image: avatarUri } : {}),
+                  };3
+
+                  router.push({ pathname: '/screens/SelectedPreview', params: previewParams });
                 }}
                 style={styles.previewBtn}
                 >
