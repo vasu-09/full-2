@@ -371,6 +371,7 @@ export default function ContactPickerScreen() {
         title: contact?.name ?? match.phone,
         avatar: contact?.imageAvailable ? contact?.image?.uri ?? null : null,
         peerId: participantId,
+        peerPhone: match.phone ?? null,
       });
 
       router.replace({
@@ -380,6 +381,7 @@ export default function ContactPickerScreen() {
           roomKey: room.roomId,
           title: contact?.name ?? match.phone,
           peerId: String(participantId),
+          phone: match.phone ?? '',
         },
       });
     } catch (err) {

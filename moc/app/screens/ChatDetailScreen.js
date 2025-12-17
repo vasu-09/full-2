@@ -180,11 +180,12 @@ export default function ChatDetailScreen() {
   const roomKey = params?.roomKey ? String(params.roomKey) : null;
   const chatTitle = params?.title ? String(params.title) : 'Chat';
   const peerId = params?.peerId ? Number(params.peerId) : null;
+  console.log('[ChatDetailScreen] params', params);
   const phoneNumber = useMemo(() => {
-      const rawPhone = params?.phone;
-      if (Array.isArray(rawPhone)) return rawPhone[0];
-      return rawPhone ? String(rawPhone) : '';
-    }, [params])
+    const rawPhone = params?.phone;
+    if (Array.isArray(rawPhone)) return rawPhone[0];
+    return rawPhone ? String(rawPhone) : '';
+  }, [params])
 
   const {
     messages: sessionMessages,
@@ -399,6 +400,7 @@ export default function ChatDetailScreen() {
   ), []);
 
   const fetchSharedLists = useCallback(async () => {
+    console.log('[ChatDetailScreen] fetchSharedLists inputs', { currentUserId, phoneNumber });
     if (!currentUserId || !phoneNumber) {
       setSharedListError('Missing user information to load shared lists.');
       setSharedLists([]);
@@ -408,6 +410,7 @@ export default function ChatDetailScreen() {
     setSharedListsLoading(true);
     setSharedListError(null);
     try {
+      console.log('[ChatDetailScreen] fetchSharedLists calling API', { currentUserId, phoneNumber });
       const { data } = await apiClient.get('/api/lists/shared', {
         headers: { 'X-User-Id': String(currentUserId) },
         params: { phoneNumber },
@@ -430,6 +433,7 @@ export default function ChatDetailScreen() {
   }, [currentUserId, phoneNumber]);
 
   const fetchSelectedList = useCallback(async listId => {
+     console.log('[ChatDetailScreen] fetchSelectedList inputs', { listId, currentUserId, phoneNumber });
     if (!listId || !currentUserId || !phoneNumber) {
       setSelectedListError('Missing user information to load list details.');
       return;
@@ -438,6 +442,7 @@ export default function ChatDetailScreen() {
     setIsSelectedListLoading(true);
     setSelectedListError(null);
     try {
+      console.log('[ChatDetailScreen] fetchSelectedList calling API', { listId, currentUserId, phoneNumber });
       const { data } = await apiClient.get(`/api/lists/${encodeURIComponent(listId)}/shared`, {
         headers: { 'X-User-Id': String(currentUserId) },
         params: { phoneNumber },
@@ -1884,5 +1889,3 @@ const styles = StyleSheet.create({
     color:'#333'
   },
 });
-
-

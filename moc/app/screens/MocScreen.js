@@ -114,6 +114,7 @@ const MocScreen = () => {
           title: roomTitle,
           avatar: roomAvatar,
           peerId: participantId,
+          peerPhone: contact?.matchPhone ?? contact?.phoneNumbers?.[0]?.number ?? null,
         });
         router.push({
           pathname: '/screens/ChatDetailScreen',
@@ -122,6 +123,7 @@ const MocScreen = () => {
             roomKey: room.roomId,
             title: roomTitle,
             peerId: String(participantId),
+            phone: contact?.matchPhone ?? contact?.phoneNumbers?.[0]?.number ?? '',
             },
           });
       } catch (err) {
@@ -346,6 +348,7 @@ const MocScreen = () => {
                         roomKey: room.roomKey,
                         title: room.title,
                         peerId: room.peerId != null ? String(room.peerId) : undefined,
+                        phone: room.peerPhone ?? undefined,
                       },
                     })
                   }

@@ -24,6 +24,7 @@ export type RoomSummary = {
   title: string;
   avatar?: string | null;
   peerId?: number | null;
+  peerPhone?: string | null;
   lastMessage?: RoomLastMessage | null;
   unreadCount: number;
 };
@@ -211,41 +212,45 @@ export const ChatProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
 
   const upsertRoom = useCallback(
   (room: Partial<RoomSummary> & { id: number; roomKey: string }) => {
-    setRooms(prev => {
-      const existingIndex = prev.findIndex(r => r.roomKey === room.roomKey);
-      let nextSummary: RoomSummary;
+      setRooms(prev => {
+        const existingIndex = prev.findIndex(r => r.roomKey === room.roomKey);
+        let nextSummary: RoomSummary;
 
-      if (existingIndex >= 0) {
-        const next = [...prev];
-        const existing = next[existingIndex];
+        if (existingIndex >= 0) {
+          const next = [...prev];
+          const existing = next[existingIndex];
+
+          nextSummary = {
+            ...existing,
+            ...room,
+            peerPhone: room.peerPhone ?? existing.peerPhone ?? null,
+            unreadCount: room.unreadCount ?? existing.unreadCount,
+          };
+
+          next[existingIndex] = nextSummary;
+          persistConversation(nextSummary);
+          return sortRooms(next);
+        }
 
         nextSummary = {
-          ...existing,
-          ...room,
-          unreadCount: room.unreadCount ?? existing.unreadCount,
+          id: room.id,
+          roomKey: room.roomKey,
+          title: room.title ?? room.roomKey,
+          avatar: room.avatar ?? null,
+          peerId: room.peerId ?? null,
+          peerPhone: room.peerPhone ?? null,
+          lastMessage: room.lastMessage ?? null,
+          unreadCount: room.unreadCount ?? 0,
         };
 
-        next[existingIndex] = nextSummary;
         persistConversation(nextSummary);
-        return sortRooms(next);
-      }
+        return sortRooms([...prev, nextSummary]);
+      });
+    },
+    [persistConversation],
+  );
 
-      nextSummary = {
-        id: room.id,
-        roomKey: room.roomKey,
-        title: room.title ?? room.roomKey,
-        avatar: room.avatar ?? null,
-        peerId: room.peerId ?? null,
-        lastMessage: room.lastMessage ?? null,
-        unreadCount: room.unreadCount ?? 0,
-      };
-
-      persistConversation(nextSummary);
-      return sortRooms([...prev, nextSummary]);
-    });
-  },
-  [persistConversation],
-);
+  
 
 const updateRoomActivity = useCallback(
   (roomKey: string, message: RoomLastMessage) => {
