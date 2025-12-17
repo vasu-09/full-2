@@ -22,100 +22,13 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import useCallSignalingHook from '../hooks/useCallSignaling';
 import { useChatSession } from '../hooks/useChatSession';
+import apiClient from '../services/apiClient';
 
 const BAR_HEIGHT = 56;
 const MESSAGE_BAR_HEIGHT = 48;
 const MARGIN = 8;
 const MIC_SIZE = 48;
 
-
-const userLists = [
-  { id: '1', name: 'Grocery List of Kirana' },
-  { id: '2', name: 'Travel check list' },
-];
-
-const DUMMY_LIST = {
-  title: 'Grocery List of Kirana',
-  items: [
-    {
-      itemName: 'Sugar',
-      quantity: '1kg',
-      priceText: '₹50',
-      subQuantities: [
-        { quantity: '500g', priceText: '₹25' },
-        { quantity: '250g', priceText: '₹15' },
-        { quantity: '100g', priceText: '₹5' },
-      ],
-    },
-    {
-      itemName: 'Salt',
-      quantity: '1kg',
-      priceText: '₹30',
-      subQuantities: [{ quantity: '250g', priceText: '₹10' }],
-    },
-    {
-      itemName: 'Red-wine vinegar',
-      quantity: '1kg',
-      priceText: '₹30',
-      subQuantities: [{ quantity: '250g', priceText: '₹10' }],
-    },
-    {
-      itemName: 'Freedom Sunflower oil',
-      quantity: '1kg',
-      priceText: '₹150',
-      subQuantities: [{ quantity: '250g', priceText: '₹10' }],
-    },
-    {
-      itemName: 'Turmeric powder',
-      quantity: '250g',
-      priceText: '₹50',
-      subQuantities: [{ quantity: '50g', priceText: '₹10' }],
-    },
-    {
-      itemName: 'Groundnuts',
-      quantity: '1kg',
-      priceText: '₹130',
-      subQuantities: [{ quantity: '500g', priceText: '₹60' },
-        { quantity: '250g', priceText: '₹30' }],
-    },
-    {
-      itemName: 'Black gram',
-      quantity: '1kg',
-      priceText: '₹130',
-      subQuantities: [{ quantity: '250g', priceText: '₹10' }],
-    },
-    {
-      itemName: 'Masoor dal',
-      quantity: '1kg',
-      priceText: '₹30',
-      subQuantities: [{ quantity: '250g', priceText: '₹10' }],
-    },
-    {
-      itemName: 'Chana dal',
-      quantity: '1kg',
-      priceText: '₹30',
-      subQuantities: [{ quantity: '250g', priceText: '₹10' }],
-    },
-    {
-      itemName: 'Wheat flour',
-      quantity: '1kg',
-      priceText: '₹30',
-      subQuantities: [{ quantity: '250g', priceText: '₹10' }],
-    },
-    {
-      itemName: 'Urad dal',
-      quantity: '1kg',
-      priceText: '₹30',
-      subQuantities: [{ quantity: '250g', priceText: '₹10' }],
-    },
-     {
-      itemName: 'Roasted Chana dal',
-      quantity: '1kg',
-      priceText: '₹30',
-      subQuantities: [{ quantity: '250g', priceText: '₹10' }],
-    }
-  ],
-};
 
 export const formatDurationText = millis => {
   const totalSeconds = Math.max(0, Math.floor((millis || 0) / 1000));
@@ -267,6 +180,11 @@ export default function ChatDetailScreen() {
   const roomKey = params?.roomKey ? String(params.roomKey) : null;
   const chatTitle = params?.title ? String(params.title) : 'Chat';
   const peerId = params?.peerId ? Number(params.peerId) : null;
+  const phoneNumber = useMemo(() => {
+      const rawPhone = params?.phone;
+      if (Array.isArray(rawPhone)) return rawPhone[0];
+      return rawPhone ? String(rawPhone) : '';
+    }, [params])
 
   const {
     messages: sessionMessages,
@@ -279,6 +197,13 @@ export default function ChatDetailScreen() {
     currentUserId,
     retryDecryptMessage
   } = useChatSession({ roomId, roomKey, peerId, title: chatTitle });
+
+  const [sharedLists, setSharedLists] = useState([]);
+  const [sharedListsLoading, setSharedListsLoading] = useState(false);
+  const [sharedListError, setSharedListError] = useState(null);
+  const [selectedListData, setSelectedListData] = useState(null);
+  const [isSelectedListLoading, setIsSelectedListLoading] = useState(false);
+  const [selectedListError, setSelectedListError] = useState(null);
 
   useEffect(() => () => {
     activeCallIdRef.current = null;
@@ -429,14 +354,131 @@ export default function ChatDetailScreen() {
     setAttachMenuVisible(false);
   };
 
-  const [todoState, setTodoState] = useState(
-    DUMMY_LIST.items.map(item => ({
+  const normalizeSubQuantities = useCallback(raw => {
+    if (!raw) return [];
+
+    try {
+      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map(sub => ({
+            quantity: sub?.quantity ?? sub?.qty ?? '',
+            priceText: sub?.priceText ?? sub?.price ?? '',
+          }))
+          .filter(sub => sub.quantity || sub.priceText);
+      }
+    } catch (err) {
+      console.warn('Failed to parse sub quantities', err);
+    }
+
+    return [];
+  }, []);
+
+  const normalizeItems = useCallback(items => {
+    if (!Array.isArray(items)) return [];
+
+    return items.map(item => {
+      const subQuantities = normalizeSubQuantities(item?.subQuantities ?? item?.subQuantitiesJson);
+      return {
+        id: item?.id != null ? String(item.id) : undefined,
+        itemName: item?.itemName ?? 'Item',
+        quantity: item?.quantity ?? '',
+        priceText: item?.priceText ?? '',
+        subQuantities,
+      };
+    });
+  }, [normalizeSubQuantities]);
+
+  const buildTodoState = useCallback(items => (
+    items.map(item => ({
       checked: false,
       expanded: false,
       count: 1,
-      subChecked: item.subQuantities.map(() => false),
-    })),
-  );
+      subChecked: (item.subQuantities ?? []).map(() => false),
+    }))
+  ), []);
+
+  const fetchSharedLists = useCallback(async () => {
+    if (!currentUserId || !phoneNumber) {
+      setSharedListError('Missing user information to load shared lists.');
+      setSharedLists([]);
+      return;
+    }
+
+    setSharedListsLoading(true);
+    setSharedListError(null);
+    try {
+      const { data } = await apiClient.get('/api/lists/shared', {
+        headers: { 'X-User-Id': String(currentUserId) },
+        params: { phoneNumber },
+      });
+
+      const normalizedLists = (Array.isArray(data) ? data : [])
+        .map(list => ({
+          id: list?.id != null ? String(list.id) : null,
+          title: list?.title ?? 'Untitled List',
+        }))
+        .filter(list => list.id);
+
+      setSharedLists(normalizedLists);
+    } catch (err) {
+      console.error('Failed to fetch shared lists', err);
+      setSharedListError('Unable to load shared lists. Pull to retry.');
+    } finally {
+      setSharedListsLoading(false);
+    }
+  }, [currentUserId, phoneNumber]);
+
+  const fetchSelectedList = useCallback(async listId => {
+    if (!listId || !currentUserId || !phoneNumber) {
+      setSelectedListError('Missing user information to load list details.');
+      return;
+    }
+
+    setIsSelectedListLoading(true);
+    setSelectedListError(null);
+    try {
+      const { data } = await apiClient.get(`/api/lists/${encodeURIComponent(listId)}/shared`, {
+        headers: { 'X-User-Id': String(currentUserId) },
+        params: { phoneNumber },
+      });
+
+      const normalizedItems = normalizeItems(data?.items ?? []);
+      const normalizedList = {
+        id: data?.id != null ? String(data.id) : String(listId),
+        title: data?.title ?? 'Shared List',
+        items: normalizedItems,
+      };
+
+      setSelectedListData(normalizedList);
+      setTodoState(buildTodoState(normalizedItems));
+    } catch (err) {
+      console.error('Failed to fetch shared list', err);
+      setSelectedListError('Unable to load this list right now.');
+      setSelectedListData(null);
+      setTodoState([]);
+    } finally {
+      setIsSelectedListLoading(false);
+    }
+  }, [buildTodoState, currentUserId, normalizeItems, phoneNumber]);
+
+  const [todoState, setTodoState] = useState([]);
+
+  useEffect(() => {
+    if (showListPicker && !selectedListId && !sharedListsLoading) {
+      fetchSharedLists();
+    }
+  }, [fetchSharedLists, selectedListId, sharedListsLoading, showListPicker]);
+
+  useEffect(() => {
+    if (!selectedListId) {
+      setSelectedListData(null);
+      setTodoState([]);
+      return;
+    }
+
+    fetchSelectedList(selectedListId);
+  }, [fetchSelectedList, selectedListId]);
 
   useEffect(() => {
     flatListRef.current?.scrollToEnd({ animated: true });
@@ -574,9 +616,15 @@ export default function ChatDetailScreen() {
     });
 
   const renderTodoItem = ({ item, index }) => {
-    const st = todoState[index];
-    const unitPrice = parseInt(item.priceText.replace(/[^0-9]/g, ''), 10) || 0;
-    const displayedPrice = st.checked ? `₹${unitPrice * st.count}` : item.priceText;
+    const subQuantities = item.subQuantities ?? [];
+    const st = todoState[index] ?? {
+      checked: false,
+      expanded: false,
+      count: 1,
+      subChecked: subQuantities.map(() => false),
+    };
+    const unitPrice = parseInt((item.priceText ?? '').replace(/[^0-9]/g, ''), 10) || 0;
+    const displayedPrice = st.checked && unitPrice ? `₹${unitPrice * st.count}` : (item.priceText ?? '');
 
     return (
       <View>
@@ -591,7 +639,7 @@ export default function ChatDetailScreen() {
             <Text style={styles.todoTitle}>{item.itemName}</Text>
           </View>
           <View style={styles.todoRight}>
-            <Text style={styles.todoQty}>× {item.quantity}</Text>
+            <Text style={styles.todoQty}>× {item.quantity || ''}</Text>
             {st.checked && (
               <View style={styles.counter}>
                 <TouchableOpacity onPress={() => dec(index)}>
@@ -609,13 +657,13 @@ export default function ChatDetailScreen() {
 
         {st.expanded && (
           <View style={styles.subContainer}>
-            {item.subQuantities.map((sub, si) => (
+            {subQuantities.map((sub, si) => (
               <View key={si} style={styles.subRow}>
                 <View style={styles.todoLeft}>
                   <View style={{ width: 40 }} />
                   <TouchableOpacity onPress={() => toggleSubCheck(index, si)} style={{ marginRight: 8 }}>
                     <Icon
-                      name={st.subChecked[si] ? 'check-box' : 'check-box-outline-blank'}
+                      name={st.subChecked?.[si] ? 'check-box' : 'check-box-outline-blank'}
                       size={20}
                       color="#1f6ea7"
                     />
@@ -1132,18 +1180,26 @@ export default function ChatDetailScreen() {
         <View style={[styles.listPickerContainer, { bottom: MESSAGE_BAR_HEIGHT + bottomOffset }]}>
           <View style={styles.arrowDown} />
           <View style={styles.listPicker}>
-            {userLists.map(l => (
-              <TouchableOpacity
-                key={l.id}
-                style={styles.listItem}
-                onPress={() => {
-                  setSelectedListId(l.id);
-                  setShowListPicker(false);
-                }}>
-                <View style={styles.listBullet} />
-                <Text style={styles.listText}>{l.name}</Text>
-              </TouchableOpacity>
-            ))}
+            {sharedListsLoading ? (
+              <ActivityIndicator size="small" color="#1f6ea7" />
+            ) : sharedListError ? (
+              <Text style={styles.listText}>{sharedListError}</Text>
+            ) : sharedLists.length ? (
+              sharedLists.map(l => (
+                <TouchableOpacity
+                  key={l.id}
+                  style={styles.listItem}
+                  onPress={() => {
+                    setSelectedListId(l.id);
+                    setShowListPicker(false);
+                  }}>
+                  <View style={styles.listBullet} />
+                  <Text style={styles.listText}>{l.title}</Text>
+                </TouchableOpacity>
+              ))
+            ) : (
+              <Text style={styles.listText}>No shared lists available.</Text>
+            )}
           </View>
         </View>
       )}
@@ -1155,42 +1211,42 @@ export default function ChatDetailScreen() {
             <TouchableOpacity onPress={() => setSelectedListId(null)} style={{ padding: 8 }}>
               <Icon name="close" size={24} color="#333" />
             </TouchableOpacity>
-            <Text style={styles.todoHeaderTitle}>{DUMMY_LIST.title}</Text>
+            <Text style={styles.todoHeaderTitle}>{selectedListData?.title ?? 'Shared List'}</Text>
 
-            {anyChecked && (
-  <TouchableOpacity
-    onPress={() => {
-                  // build preview items with collapsed same-unit sums
+            {isSelectedListLoading && <ActivityIndicator size="small" color="#1f6ea7" />}
+
+            {anyChecked && selectedListData?.items?.length ? (
+              <TouchableOpacity
+                onPress={() => {
                   const previewItems = [];
-                 DUMMY_LIST.items.forEach((item, idx) => {
-                    const st = todoState[idx];
-                    if (!st.checked && !st.subChecked.some(b => b)) return;
+                 const items = selectedListData?.items ?? [];
 
-                    // compute total price
-                    const basePrice = parseInt(item.priceText.replace(/[^0-9]/g, ''), 10) || 0;
+                  items.forEach((item, idx) => {
+                    const st = todoState[idx];
+                     if (!st?.checked && !(st?.subChecked ?? []).some(Boolean)) return;
+
+                     const basePrice = parseInt((item.priceText ?? '').replace(/[^0-9]/g, ''), 10) || 0;
                     let total = 0;
-                    if (st.checked) total += basePrice * st.count;
-                    item.subQuantities.forEach((sub, si) => {
-                      if (st.subChecked[si]) {
-                        const subPrice = parseInt(sub.priceText.replace(/[^0-9]/g, ''), 10) || 0;
+                    if (st?.checked) total += basePrice * (st?.count ?? 1);
+                    (item.subQuantities ?? []).forEach((sub, si) => {
+                      if (st?.subChecked?.[si]) {
+                        const subPrice = parseInt((sub.priceText ?? '').replace(/[^0-9]/g, ''), 10) || 0;
                         total += subPrice;
                       }
                     });
 
-                    // bucket quantities by unit
                     const unitTotals = {};
-                    if (st.checked) {
-                      const base = parseQty(item.quantity);
-                      if (base) unitTotals[base.unit] = (unitTotals[base.unit] || 0) + base.value * st.count;
+                    if (st?.checked) {
+                      const base = parseQty(item.quantity ?? '');
+                      if (base) unitTotals[base.unit] = (unitTotals[base.unit] || 0) + base.value * (st?.count ?? 1);
                     }
-                    item.subQuantities.forEach((sub, si) => {
-                      if (st.subChecked[si]) {
-                        const pq = parseQty(sub.quantity);
+                    (item.subQuantities ?? []).forEach((sub, si) => {
+                      if (st?.subChecked?.[si]) {
+                        const pq = parseQty(sub.quantity ?? '');
                         if (pq) unitTotals[pq.unit] = (unitTotals[pq.unit] || 0) + pq.value;
                       }
                     });
 
-                    // format as "Xkg + Yg"
                     const parts = [];
                     ['kg', 'g'].forEach(u => {
                       const v = unitTotals[u];
@@ -1206,19 +1262,25 @@ export default function ChatDetailScreen() {
 
                   router.push({ pathname: '/screens/SelectedPreview', params: { preview: JSON.stringify(previewItems) } });
                 }}
-    style={styles.previewBtn}
-  >
-    <Icon name="send" size={24} color="#1f6ea7"/>
-  </TouchableOpacity>
-)}
+                style={styles.previewBtn}
+                >
+                <Icon name="send" size={24} color="#1f6ea7" />
+              </TouchableOpacity>
+            ) : null}
           </View>
           <View style={styles.headerDivider} />
-          <FlatList
-            data={DUMMY_LIST.items}
-            keyExtractor={(_, i) => i.toString()}
-            renderItem={renderTodoItem}
-            contentContainerStyle={{ paddingBottom: 12 }}
-          />
+          {isSelectedListLoading ? (
+            <ActivityIndicator style={{ padding: 16 }} size="small" color="#1f6ea7" />
+          ) : selectedListError ? (
+            <Text style={[styles.listText, { padding: 16 }]}>{selectedListError}</Text>
+          ) : selectedListData ? (
+            <FlatList
+              data={selectedListData.items}
+              keyExtractor={(item, i) => item.id ?? i.toString()}
+              renderItem={renderTodoItem}
+              contentContainerStyle={{ paddingBottom: 12 }}
+            />
+          ) : null}
         </View>
       )}
 
