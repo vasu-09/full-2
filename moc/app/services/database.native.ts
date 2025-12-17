@@ -53,7 +53,7 @@ let localContactCounter = 0;
 let writeQueue: Promise<unknown> = Promise.resolve();
 
 const DB_NAME = 'moc-app.db';
-const CURRENT_SCHEMA_VERSION = 1;
+const CURRENT_SCHEMA_VERSION = 2;
 
 type MetaRow = {
   value: string;
@@ -64,6 +64,7 @@ type ConversationRow = {
   room_key: string;
   title: string | null;
   peer_id: number | null;
+  peer_phone: string | null;
   avatar: string | null;
   unread_count: number;
   created_at: string | null;
@@ -101,6 +102,7 @@ export type ConversationRecordInput = {
   roomKey: string;
   title?: string | null;
   peerId?: number | null;
+  peerPhone?: string | null;
   avatar?: string | null;
   unreadCount?: number;
   createdAt?: string | null;
@@ -204,6 +206,7 @@ const migrateToV1 = async (db: SQLite.SQLiteDatabase) => {
       title TEXT,
       peer_id INTEGER,
       avatar TEXT,
+      peer_phone TEXT,
       unread_count INTEGER DEFAULT 0,
       created_at TEXT,
       updated_at TEXT
@@ -235,6 +238,17 @@ const migrateToV1 = async (db: SQLite.SQLiteDatabase) => {
   );
 };
 
+const migrateToV2 = async (db: SQLite.SQLiteDatabase) => {
+  try {
+    await db.execAsync('ALTER TABLE conversations ADD COLUMN peer_phone TEXT;');
+  } catch (error) {
+    // Ignore if the column already exists
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.warn('Skipping peer_phone migration', error);
+    }
+  }
+};
+
 const runMigrations = async (db: SQLite.SQLiteDatabase) => {
   await ensureMetaTable(db);
   let version = await getSchemaVersion(db);
@@ -247,6 +261,10 @@ const runMigrations = async (db: SQLite.SQLiteDatabase) => {
     if (version < 1) {
       await migrateToV1(tx);
       version = 1;
+    }
+    if (version < 2) {
+      await migrateToV2(tx);
+      version = 2;
     }
 
     await setSchemaVersion(tx, version);
@@ -321,6 +339,7 @@ const mapConversationRow = (row: ConversationRow): ConversationRecordInput => ({
   roomKey: row.room_key,
   title: row.title,
   peerId: row.peer_id,
+  peerPhone: row.peer_phone,
   avatar: row.avatar,
   unreadCount: row.unread_count,
   createdAt: row.created_at,
@@ -347,12 +366,13 @@ export const upsertConversationInDb = async (conversation: ConversationRecordInp
   runWithWriteLock(async () => {
     const db = await getDatabase();
     await db.runAsync(
-      `INSERT INTO conversations (id, room_key, title, peer_id, avatar, unread_count, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO conversations (id, room_key, title, peer_id, peer_phone, avatar, unread_count, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          room_key = excluded.room_key,
          title = excluded.title,
          peer_id = excluded.peer_id,
+         peer_phone = COALESCE(excluded.peer_phone, conversations.peer_phone),
          avatar = excluded.avatar,
          unread_count = excluded.unread_count,
          updated_at = COALESCE(excluded.updated_at, conversations.updated_at)`,
@@ -361,6 +381,7 @@ export const upsertConversationInDb = async (conversation: ConversationRecordInp
         conversation.roomKey,
         conversation.title ?? null,
         conversation.peerId ?? null,
+        conversation.peerPhone ?? null,
         conversation.avatar ?? null,
         conversation.unreadCount ?? 0,
         conversation.createdAt ?? new Date().toISOString(),

@@ -43,6 +43,19 @@ jest.mock('../../hooks/useCallSignaling', () => ({
   __esModule: true,
   default: () => ({ sendInviteDefault: jest.fn() }),
 }));
+jest.mock('../../services/apiClient', () => ({
+  get: jest.fn(),
+  post: jest.fn(),
+}));
+jest.mock('../../services/stompClient', () => ({
+  __esModule: true,
+  default: {
+    ensureConnected: jest.fn(() => Promise.resolve()),
+    subscribe: jest.fn(() => jest.fn()),
+    publish: jest.fn(() => Promise.resolve()),
+    onConnect: jest.fn(() => jest.fn()),
+  },
+}));
 jest.mock('react-native-vector-icons/MaterialIcons', () => 'Icon');
 jest.mock('../../hooks/useChatSession', () => ({
   useChatSession: jest.fn(() => ({

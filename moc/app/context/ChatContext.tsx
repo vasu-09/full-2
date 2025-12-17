@@ -179,6 +179,7 @@ export const ChatProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
           title: room.title ?? room.roomKey,
           avatar: room.avatar ?? null,
           peerId: room.peerId ?? null,
+          peerPhone: room.peerPhone ?? null,
           lastMessage: room.lastMessage
             ? {
                 messageId: room.lastMessage.id,
@@ -205,6 +206,7 @@ export const ChatProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
       title: summary.title,
       avatar: summary.avatar,
       peerId: summary.peerId,
+      peerPhone: summary.peerPhone,
       unreadCount: summary.unreadCount,
       updatedAt: summary.lastMessage?.at,
     }).catch(err => console.warn('Failed to persist conversation', summary.id, err));

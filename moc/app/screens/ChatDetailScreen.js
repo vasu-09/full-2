@@ -20,6 +20,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { useChatRegistry } from '../context/ChatContext';
 import useCallSignalingHook from '../hooks/useCallSignaling';
 import { useChatSession } from '../hooks/useChatSession';
 import apiClient from '../services/apiClient';
@@ -175,17 +176,28 @@ export default function ChatDetailScreen() {
   const activeCallIdRef = useRef(null);
   const [attachMenuVisible, setAttachMenuVisible] = useState(false);
   const router = useRouter();
+  const { rooms } = useChatRegistry();
   const params = useLocalSearchParams();
   const roomId = params?.roomId ? Number(params.roomId) : null;
   const roomKey = params?.roomKey ? String(params.roomKey) : null;
   const chatTitle = params?.title ? String(params.title) : 'Chat';
   const peerId = params?.peerId ? Number(params.peerId) : null;
   console.log('[ChatDetailScreen] params', params);
+  const roomSummary = useMemo(() => {
+    if (!rooms?.length) return null;
+    return (
+      rooms.find(
+        room =>
+          (roomId != null && room.id === roomId) ||
+          (roomKey && room.roomKey === roomKey),
+      ) ?? null
+    );
+  }, [rooms, roomId, roomKey]);
   const phoneNumber = useMemo(() => {
-    const rawPhone = params?.phone;
-    if (Array.isArray(rawPhone)) return rawPhone[0];
+    const rawPhone = params?.phone ?? roomSummary?.peerPhone;
+    if (Array.isArray(rawPhone)) return rawPhone[0] ?? '';
     return rawPhone ? String(rawPhone) : '';
-  }, [params])
+  }, [params, roomSummary]);
 
   const {
     messages: sessionMessages,
