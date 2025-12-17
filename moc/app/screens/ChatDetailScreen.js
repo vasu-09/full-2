@@ -1235,7 +1235,7 @@ export default function ChatDetailScreen() {
       )}
 
       {/* To‑Do overlay */}
-      {selectedListId === '1' && (
+      {selectedListId ? (
         <View style={[styles.todoOverlay, { bottom: MESSAGE_BAR_HEIGHT + bottomOffset }]}>
           <View style={styles.todoHeader}>
             <TouchableOpacity onPress={() => setSelectedListId(null)} style={{ padding: 8 }}>
@@ -1312,7 +1312,7 @@ export default function ChatDetailScreen() {
             />
           ) : null}
         </View>
-      )}
+      ): null}
 
       {/* Input bar */}
       <KeyboardAvoidingView
