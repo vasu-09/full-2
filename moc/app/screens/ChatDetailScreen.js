@@ -216,6 +216,7 @@ export default function ChatDetailScreen() {
   const [sharedListError, setSharedListError] = useState(null);
   const [selectedListData, setSelectedListData] = useState(null);
   const [isSelectedListLoading, setIsSelectedListLoading] = useState(false);
+  const [hasFetchedSharedLists, setHasFetchedSharedLists] = useState(false);
   const [selectedListError, setSelectedListError] = useState(null);
 
   useEffect(() => () => {
@@ -482,10 +483,22 @@ export default function ChatDetailScreen() {
   const [todoState, setTodoState] = useState([]);
 
   useEffect(() => {
-    if (showListPicker && !selectedListId && !sharedListsLoading) {
+    if (showListPicker && !selectedListId && !sharedListsLoading && !hasFetchedSharedLists) {
+      setHasFetchedSharedLists(true);
       fetchSharedLists();
     }
-  }, [fetchSharedLists, selectedListId, sharedListsLoading, showListPicker]);
+  }, [fetchSharedLists, hasFetchedSharedLists, selectedListId, sharedListsLoading, showListPicker]);
+
+  useEffect(() => {
+    if (!showListPicker) {
+      setHasFetchedSharedLists(false);
+    }
+  }, [showListPicker]);
+
+  useEffect(() => {
+    setHasFetchedSharedLists(false);
+    setSharedLists([]);
+  }, [currentUserId, phoneNumber]);
 
   useEffect(() => {
     if (!selectedListId) {
