@@ -625,9 +625,20 @@ export default function ChatDetailScreen() {
   };
 
   function parseQty(qtyStr) {
-    const m = /^([\d.]+)\s*(kg|g)$/i.exec(qtyStr);
+    const m = /^([\d.]+)\s*(kg|kgs?|g|gm|gms?|pcs?|ps)$/i.exec(qtyStr ?? '');
     if (!m) return null;
-    return { value: parseFloat(m[1]), unit: m[2].toLowerCase() };
+    const value = parseFloat(m[1]);
+    const unitKey = m[2].toLowerCase();
+    const unitMap = {
+      kg: 'kg',
+      kgs: 'kg',
+      g: 'g',
+      gm: 'g',
+      gms: 'g',
+      pcs: 'ps',
+      ps: 'ps',
+    };
+    return { value, unit: unitMap[unitKey] ?? unitKey };
   }
 
   const bottomOffset = insets.bottom + MARGIN * 2;
@@ -653,7 +664,7 @@ export default function ChatDetailScreen() {
       count: 1,
       subChecked: subQuantities.map(() => false),
     };
-    const unitPrice = parseInt((item.priceText ?? '').replace(/[^0-9]/g, ''), 10) || 0;
+    const unitPrice = parseInt((item.priceText ?? '').replace(/[^0-9]/gm, ''), 10) || 0;
     const displayedPrice = st.checked && unitPrice ? `₹${unitPrice * st.count}` : (item.priceText ?? '');
 
     return (
@@ -1278,7 +1289,7 @@ export default function ChatDetailScreen() {
                     });
 
                     const parts = [];
-                    ['kg', 'g'].forEach(u => {
+                    ['kg', 'g', 'ps'].forEach(u => {
                       const v = unitTotals[u];
                       if (v) {
                         const str = Number.isInteger(v) ? v : v.toFixed(2).replace(/\.?0+$/, '');

@@ -376,9 +376,9 @@ public class ToDoListService {
         return dto;
     }
 
-    public List<ToDoListTitleDTO> getSharedListTitles(Long creatorId, String phoneNumber) {
-        Long recipientId = userServiceClient.getUseridByPhoneNumber(phoneNumber).getBody();
-        List<ToDoList> lists = listRecipientRepository.findListsSharedBetween(creatorId, recipientId);
+    public List<ToDoListTitleDTO> getSharedListTitles(Long currentUserId, String phoneNumber) {
+        Long peerId = userServiceClient.getUseridByPhoneNumber(phoneNumber).getBody();
+        List<ToDoList> lists = listRecipientRepository.findListsSharedBetween(currentUserId, peerId);
 
         return lists.stream().map(list -> {
             ToDoListTitleDTO dto = new ToDoListTitleDTO();
@@ -388,9 +388,9 @@ public class ToDoListService {
         }).toList();
     }
 
-    public ToDoListSummaryDTO getSharedList(Long listId, Long creatorId, String phoneNumber) {
-        Long recipientId = userServiceClient.getUseridByPhoneNumber(phoneNumber).getBody();
-        ToDoList list = listRecipientRepository.findSharedList(listId, creatorId, recipientId)
+    public ToDoListSummaryDTO getSharedList(Long listId, Long currentUserId, String phoneNumber) {
+        Long peerId = userServiceClient.getUseridByPhoneNumber(phoneNumber).getBody();
+        ToDoList list = listRecipientRepository.findSharedListBetweenUsers(listId, currentUserId, peerId)
                 .orElseThrow(() -> new RuntimeException("List not found or not shared with this user"));
 
         ToDoListSummaryDTO dto = new ToDoListSummaryDTO();

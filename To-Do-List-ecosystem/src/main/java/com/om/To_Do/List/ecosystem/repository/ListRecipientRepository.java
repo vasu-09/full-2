@@ -32,20 +32,25 @@ public interface ListRecipientRepository extends JpaRepository<ListRecipient, Lo
 
 
     @Query("""
-SELECT lr.list
-FROM ListRecipient lr
-WHERE lr.list.id = :listId
-  AND lr.list.createdByUserId = :creatorId
-  AND lr.recipientUserId = :recipientId
-""")
-    Optional<ToDoList> findSharedList(@Param("listId") Long listId, @Param("creatorId") Long creatorId, @Param("recipientId") Long recipientId);
+        SELECT lr.list
+        FROM ListRecipient lr
+        WHERE lr.list.id = :listId
+          AND (
+                  (lr.list.createdByUserId = :userId AND lr.recipientUserId = :peerId) OR
+                  (lr.list.createdByUserId = :peerId AND lr.recipientUserId = :userId)
+                )
+        """)
+    Optional<ToDoList> findSharedListBetweenUsers(@Param("listId") Long listId,
+                                                  @Param("userId") Long userId,
+                                                  @Param("peerId") Long peerId);
+
 
     @Query("""
-SELECT lr.recipientUserId
-FROM ListRecipient lr
-WHERE lr.list.id = :listId
-  AND lr.list.createdByUserId = :creatorId
-""")
+        SELECT lr.recipientUserId
+        FROM ListRecipient lr
+        WHERE lr.list.id = :listId
+          AND lr.list.createdByUserId = :creatorId
+        """)
     List<Long> findRecipientIdsByListIdAndCreatorId(@Param("listId") Long listId, @Param("creatorId") Long creatorId);
 
 
