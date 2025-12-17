@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Image,
   StatusBar,
@@ -15,21 +16,23 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
+import apiClient from '../services/apiClient';
 import { getAllContactsFromDb, saveContactsToDb } from '../services/contactStorage';
 
 const initialSelected = [];
-
 
 export default function LinkListScreen() {
   const insets = useSafeAreaInsets();
   const [selectedIds, setSelectedIds] = useState(initialSelected);
   const router = useRouter();
-   const [contacts, setContacts] = useState([]);
+  const [contacts, setContacts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  const { listName = '', items = '[]' } = useLocalSearchParams();
+  const { listName = '', items = '[]', listId: rawListId } = useLocalSearchParams();
   const parsedItems = JSON.parse(items);
+  const listId = Array.isArray(rawListId) ? rawListId[0] : rawListId ?? '';
 
   useEffect(() => {
     let isMounted = true;
@@ -60,7 +63,7 @@ export default function LinkListScreen() {
           sort: Contacts.SortTypes.FirstName,
         });
 
-         // Persist and re-read from SQLite so this screen always reflects the DB.
+        // Persist and re-read from SQLite so this screen always reflects the DB.
         await saveContactsToDb(data);
 
         const storedContacts = await getAllContactsFromDb();
@@ -127,6 +130,41 @@ export default function LinkListScreen() {
   };
 
   const selectedContacts = contacts.filter(c => selectedIds.includes(c.id));
+
+  const handleSubmitRecipients = async () => {
+    if (isSubmitting) {
+      return;
+    }
+
+    if (!listId) {
+      Alert.alert('Unable to share list', 'We could not find this list. Please go back and try again.');
+      return;
+    }
+
+    const phoneNumbers = Array.from(
+      new Set(
+        selectedContacts
+          .map(contact => String(contact.phone ?? '').trim())
+          .filter(Boolean),
+      ),
+    );
+
+    if (!phoneNumbers.length) {
+      Alert.alert('Select at least one contact', 'Choose at least one contact to share this list with.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await apiClient.post(`/api/lists/${encodeURIComponent(listId)}/recipients`, { phoneNumbers });
+      router.push({ pathname: '/screens/ListsScreen' });
+    } catch (error) {
+      console.error('Failed to add recipients', error);
+      Alert.alert('Unable to share list', 'Something went wrong while adding recipients. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const renderContactsEmpty = () => (
     <View style={styles.emptyContainer}>
@@ -238,9 +276,14 @@ export default function LinkListScreen() {
 
       <TouchableOpacity
         style={[styles.sendFab, { bottom: insets.bottom + 16 }]}
-        onPress={() => router.push({ pathname: '/screens/ListsScreen' })}
+        onPress={handleSubmitRecipients}
+        disabled={isSubmitting}
       >
-        <Icon name="check" size={24} color="#fff" />
+        {isSubmitting ? (
+          <ActivityIndicator size="small" color="#fff" />
+        ) : (
+          <Icon name="check" size={24} color="#fff" />
+        )}
       </TouchableOpacity>
     </SafeAreaView>
   );
@@ -365,11 +408,3 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
 });
-
-
-
-//  selectedList: { paddingLeft: 12, paddingBottom: 12 },
-
-//  contentContainerStyle={styles.selectedList}
-
-//  4b9941
