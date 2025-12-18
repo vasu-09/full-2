@@ -106,6 +106,50 @@ describe('MessageContent', () => {
     expect(getByText('10:00')).toBeTruthy();
   });
 
+    it('renders table messages as a styled grid', () => {
+      const tableText = [
+        'Selected items from Sarukulu',
+        '| # | Item | Qty | Price |',
+        '| --- | --- | --- | --- |',
+        '| 1 | Sugar | 1kg | ₹50 |',
+        '| 2 | Groundnuts | 1kg+500g | ₹200 |',
+        '|  |  | Total | ₹250 |',
+      ].join('\n');
+
+      const message = {
+        id: 'tbl1',
+        messageId: 'tbl1',
+        roomId: 1,
+        senderId: 42,
+        sender: 'other' as const,
+        text: tableText,
+        time: '09:30',
+        pending: false,
+        failed: false,
+        raw: {
+          messageId: 'tbl1',
+          roomId: 1,
+          senderId: 42,
+          type: 'TABLE',
+          body: tableText,
+        },
+      };
+
+      const { getByText, queryByText } = render(
+        <MessageContent
+          item={message}
+          playingMessageId={null}
+          onTogglePlayback={jest.fn()}
+          onRetryDecrypt={jest.fn(async () => null)}
+        />,
+      );
+
+      expect(getByText('Selected items from Sarukulu')).toBeTruthy();
+      expect(getByText('Groundnuts')).toBeTruthy();
+      expect(getByText('1kg+500g')).toBeTruthy();
+      expect(getByText('₹250')).toBeTruthy();
+      expect(queryByText('| # | Item | Qty | Price |')).toBeNull();
+    });
     it('retries decrypting and displays recovered text', async () => {
     const message = {
       id: 'm2',
