@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { MESSAGE_TYPE_TABLE, MESSAGE_TYPE_TEXT } from '../constants/messageTypes';
 import {
   ackQueue,
   dmReceiptQueue,
@@ -58,7 +59,6 @@ type TypingUser = {
   expiresAt: number;
 };
 
-const MESSAGE_TYPE_TEXT = 'TEXT';
 const SHOULD_LOG_DECRYPT = __DEV__ && process.env.EXPO_PUBLIC_DEBUG_DECRYPT !== '0';
 
 const formatTime = (iso?: string | null) => {
@@ -113,7 +113,7 @@ const toStoredMessage = (record: MessageRecordInput): InternalMessage => ({
   messageId: record.id,
   roomId: record.conversationId,
   senderId: record.senderId ?? null,
-  type: MESSAGE_TYPE_TEXT,
+  type: record.type ?? MESSAGE_TYPE_TEXT,
   body: record.plaintext ?? null,
   serverTs: record.createdAt ?? null,
   ciphertext: record.ciphertext ?? null,
@@ -174,6 +174,7 @@ export const useChatSession = ({
     ) => ({
       id: message.messageId,
       conversationId: roomIdOverride ?? message.roomId ?? null,
+      type: message.type ?? MESSAGE_TYPE_TEXT,
       senderId: message.senderId ?? null,
       plaintext: message.body ?? null,
       ciphertext: payload?.ciphertext ?? null,
@@ -1187,7 +1188,7 @@ export const useChatSession = ({
   );
 
   const sendTextMessage = useCallback(
-    async (text: string) => {
+    async (text: string, type: string = MESSAGE_TYPE_TEXT) => {
       if (!resolvedRoomKey || !text.trim()) {
         return;
       }
@@ -1211,7 +1212,7 @@ export const useChatSession = ({
         messageId,
         roomId: normalizedRoomId,
         senderId: currentUserId,
-        type: MESSAGE_TYPE_TEXT,
+        type,
         body,
         serverTs: nowIso,
         pending: true,
@@ -1236,7 +1237,7 @@ export const useChatSession = ({
             if (encrypted) {
               payload = {
                 messageId,
-                type: MESSAGE_TYPE_TEXT,
+                type,
                 e2ee: true,
                 body,
                 e2eeVer: encrypted.envelope.e2eeVer,
@@ -1255,7 +1256,7 @@ export const useChatSession = ({
             const encrypted = await encryptMessage(body, derivedSharedKey);
             payload = {
               messageId,
-              type: MESSAGE_TYPE_TEXT,
+              type,
               e2ee: true,
               body,
               algo: 'XSalsa20-Poly1305',
@@ -1341,7 +1342,12 @@ export const useChatSession = ({
     }
   }, [roomId, resolvedRoomKey, resetUnread, peerId]);
 
-   const typingUsers = useMemo(
+   const sendTableMessage = useCallback(
+    async (text: string) => sendTextMessage(text, MESSAGE_TYPE_TABLE),
+    [sendTextMessage],
+  );
+
+  const typingUsers = useMemo(
     () =>
       typing
         .filter(entry => (currentUserId == null ? true : entry.userId !== currentUserId))
@@ -1355,6 +1361,7 @@ export const useChatSession = ({
     isConnected,
     error,
     sendTextMessage,
+    sendTableMessage,
     notifyTyping,
     markLatestRead,
     typingUsers,

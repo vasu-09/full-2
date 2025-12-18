@@ -11,5 +11,5 @@ public enum MessageType {
     AUDIO_CALL_INVITE,
     STICKER,
     EMOJI,
-
+    TABLE,
 }

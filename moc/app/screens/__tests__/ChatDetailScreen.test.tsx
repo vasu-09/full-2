@@ -62,6 +62,7 @@ jest.mock('../../hooks/useChatSession', () => ({
     messages: [],
     sendTextMessage: jest.fn(),
     notifyTyping: jest.fn(),
+    sendTableMessage: jest.fn(),
     markLatestRead: jest.fn(),
     typingUsers: [],
     isLoading: false,

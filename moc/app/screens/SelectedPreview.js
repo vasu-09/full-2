@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { MESSAGE_TYPE_TABLE } from '../constants/messageTypes';
 
 
 const formatTableMessage = (rows, title) => {
@@ -79,6 +80,7 @@ export default function SelectedPreview() {
           ...chatParams,
           tableMessage: formattedTable,
           tableMessageId: messageId,
+          tableMessageType: MESSAGE_TYPE_TABLE,
         },
       });
     };

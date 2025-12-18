@@ -20,6 +20,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { MESSAGE_TYPE_TABLE } from '../constants/messageTypes';
 import { useChatRegistry } from '../context/ChatContext';
 import useCallSignalingHook from '../hooks/useCallSignaling';
 import { useChatSession } from '../hooks/useChatSession';
@@ -41,6 +42,7 @@ export const formatDurationText = millis => {
 
 export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRetryDecrypt }) => {
   const [overrideText, setOverrideText] = useState(null);
+  const isTableMessage = item?.raw?.type === MESSAGE_TYPE_TABLE;
   const [retryStatus, setRetryStatus] = useState('idle');
 
   useEffect(() => {
@@ -114,7 +116,7 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
         </View>
       ) : (
         <View style={[styles.messageTextFlex, styles.messageTextWrapper]}>
-          <Text style={styles.messageText}>{messageText}</Text>
+          <Text style={[styles.messageText, isTableMessage ? styles.tableText : null]}>{messageText}</Text>
           {showRetryStatus ? (
             <Text style={styles.retryStatusText}>Re-establishing secure session…</Text>
           ) : null}
@@ -203,6 +205,7 @@ export default function ChatDetailScreen() {
   const {
     messages: sessionMessages,
     sendTextMessage,
+    sendTableMessage,
     notifyTyping,
     markLatestRead,
     typingUsers,
@@ -244,8 +247,9 @@ export default function ChatDetailScreen() {
     const text = getFirstParam(params?.tableMessage);
     const id = getFirstParam(params?.tableMessageId);
     if (!text || !id) return null;
-    return { text: String(text), id: String(id) };
-  }, [params?.tableMessage, params?.tableMessageId]);
+    const type = getFirstParam(params?.tableMessageType) || MESSAGE_TYPE_TABLE;
+    return { text: String(text), id: String(id), type: String(type) };
+  }, [params?.tableMessage, params?.tableMessageId, params?.tableMessageType]);
 
   const recordingRef = useRef(null);
   const previewSoundRef = useRef(null);
@@ -562,15 +566,25 @@ export default function ChatDetailScreen() {
       return;
     }
     tableMessageIdRef.current = tableMessageToSend.id;
-    sendTextMessage(tableMessageToSend.text).catch(err => {
+    const targetType =
+      tableMessageToSend.type && typeof tableMessageToSend.type === 'string'
+        ? tableMessageToSend.type
+        : MESSAGE_TYPE_TABLE;
+    const sender =
+      targetType === MESSAGE_TYPE_TABLE ? sendTableMessage : sendTextMessage;
+    sender(tableMessageToSend.text).catch(err => {
       console.warn('Failed to send table preview message', err);
     });
     try {
-      router.setParams?.({ tableMessage: undefined, tableMessageId: undefined });
+      router.setParams?.({
+        tableMessage: undefined,
+        tableMessageId: undefined,
+        tableMessageType: undefined,
+      });
     } catch (err) {
       console.warn('Unable to clear table preview params', err);
     }
-  }, [isRoomReady, router, sendTextMessage, tableMessageToSend]);
+  }, [isRoomReady, router, sendTableMessage, sendTextMessage, tableMessageToSend]);
 
   useEffect(() => {
     if (!selectedMessages.length) {
@@ -1641,6 +1655,10 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   messageText: { fontSize: 16, lineHeight: 20 },
+  tableText: {
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: undefined }),
+    fontVariant: ['tabular-nums'],
+  },
   messageTextWrapper: {
     flexDirection: 'column',
     alignItems: 'flex-start',
