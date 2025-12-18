@@ -93,8 +93,8 @@ export default function SelectedPreview() {
           <Icon name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>
-            {listTitle ? String(listTitle) : 'Preview'}
-          </Text> <Text style={styles.headerTitle}>Preview</Text>
+             {listTitle ? String(listTitle) : 'Preview'}
+        </Text>
         <View style={{ width: 40 }}/>
       </View>
 
