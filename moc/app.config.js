@@ -66,6 +66,11 @@ const normalizeHost = (value) => {
   }
 };
 
+const isExpoHosted = (host) => {
+  if (!host) return false;
+  return host === 'exp.host' || host === 'u.expo.dev' || host.endsWith('.expo.dev') || host.endsWith('.exp.direct');
+};
+
 const buildBaseUrlFromHost = (host, port) => {
   const normalizedHost = normalizeHost(host);
   if (!normalizedHost) {
@@ -85,7 +90,7 @@ const getExpoDevHost = () => {
 
   for (const candidate of envCandidates) {
     const host = normalizeHost(candidate);
-    if (host && host !== 'localhost' && host !== '127.0.0.1') {
+    if (host && host !== 'localhost' && host !== '127.0.0.1' && !isExpoHosted(host)) {
       return host;
     }
   }
