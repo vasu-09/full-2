@@ -53,7 +53,7 @@ let localContactCounter = 0;
 let writeQueue: Promise<unknown> = Promise.resolve();
 
 const DB_NAME = 'moc-app.db';
-const CURRENT_SCHEMA_VERSION = 3;
+const CURRENT_SCHEMA_VERSION = 2;
 
 type MetaRow = {
   value: string;
@@ -75,7 +75,6 @@ type MessageRow = {
   id: string;
   conversation_id: number;
   sender_id: number | null;
-  type: string | null;
   plaintext: string | null;
   ciphertext: string | null;
   aad: string | null;
@@ -125,7 +124,6 @@ export type MessageRecordInput = {
   id: string;
   conversationId: number | null;
   senderId?: number | null;
-  type?: string | null;
   plaintext?: string | null;
   ciphertext?: string | null;
   aad?: string | null;
@@ -220,7 +218,6 @@ const migrateToV1 = async (db: SQLite.SQLiteDatabase) => {
       conversation_id INTEGER NOT NULL,
       sender_id INTEGER,
       plaintext TEXT,
-      type TEXT,
       ciphertext TEXT,
       aad TEXT,
       iv TEXT,
@@ -252,17 +249,6 @@ const migrateToV2 = async (db: SQLite.SQLiteDatabase) => {
   }
 };
 
-const migrateToV3 = async (db: SQLite.SQLiteDatabase) => {
-  try {
-    await db.execAsync('ALTER TABLE messages ADD COLUMN type TEXT;');
-  } catch (error) {
-    if (typeof __DEV__ !== 'undefined' && __DEV__) {
-      console.warn('Skipping message type migration', error);
-    }
-  }
-  await db.execAsync(`UPDATE messages SET type = COALESCE(type, 'TEXT')`);
-};
-
 const runMigrations = async (db: SQLite.SQLiteDatabase) => {
   await ensureMetaTable(db);
   let version = await getSchemaVersion(db);
@@ -280,11 +266,6 @@ const runMigrations = async (db: SQLite.SQLiteDatabase) => {
       await migrateToV2(tx);
       version = 2;
     }
-    if (version < 3) {
-      await migrateToV3(tx);
-      version = 3;
-    }
-
     await setSchemaVersion(tx, version);
   });
 };
@@ -368,7 +349,6 @@ const mapMessageRow = (row: MessageRow): MessageRecordInput => ({
   id: row.id,
   conversationId: row.conversation_id,
   senderId: row.sender_id,
-  type: row.type,
   plaintext: row.plaintext,
   ciphertext: row.ciphertext,
   aad: row.aad,
@@ -473,13 +453,12 @@ export const saveMessagesToDb = async (messages: MessageRecordInput[]): Promise<
     await db.withExclusiveTransactionAsync(async (tx: SQLite.SQLiteDatabase) => {
       for (const message of messages) {
         await tx.runAsync(
-          `INSERT INTO messages (id, conversation_id, sender_id, type, plaintext, ciphertext, aad, iv, key_ref, e2ee, created_at, pending, error, read_by_peer)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `INSERT INTO messages (id, conversation_id, sender_id, plaintext, ciphertext, aad, iv, key_ref, e2ee, created_at, pending, error, read_by_peer)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
              conversation_id = excluded.conversation_id,
              sender_id = excluded.sender_id,
              plaintext = excluded.plaintext,
-             type = COALESCE(excluded.type, messages.type),
              ciphertext = excluded.ciphertext,
              aad = excluded.aad,
              iv = excluded.iv,
@@ -494,7 +473,6 @@ export const saveMessagesToDb = async (messages: MessageRecordInput[]): Promise<
             message.id,
             message.conversationId,
             message.senderId ?? null,
-            message.type ?? 'TEXT',
             message.plaintext ?? null,
             message.ciphertext ?? null,
             message.aad ?? null,

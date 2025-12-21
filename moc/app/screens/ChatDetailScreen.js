@@ -20,7 +20,6 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import { MESSAGE_TYPE_TABLE } from '../constants/messageTypes';
 import { useChatRegistry } from '../context/ChatContext';
 import useCallSignalingHook from '../hooks/useCallSignaling';
 import { useChatSession } from '../hooks/useChatSession';
@@ -31,8 +30,6 @@ const MESSAGE_BAR_HEIGHT = 48;
 const MARGIN = 8;
 const MIC_SIZE = 48;
 
-const getFirstParam = value => (Array.isArray(value) ? value[0] : value);
-
 export const formatDurationText = millis => {
   const totalSeconds = Math.max(0, Math.floor((millis || 0) / 1000));
   const minutes = Math.floor(totalSeconds / 60);
@@ -40,67 +37,9 @@ export const formatDurationText = millis => {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 };
 
-const parseTableMessage = text => {
-  if (!text || typeof text !== 'string') return null;
-
-  const lines = text
-    .split('\n')
-    .map(line => line.trim())
-    .filter(Boolean);
-
-  if (!lines.length) return null;
-
-  let headerCaptured = false;
-  let headerCells = ['#', 'Item', 'Qty', 'Price'];
-  let title = '';
-  const rows = [];
-  let total = null;
-
-  if (!lines[0].startsWith('|')) {
-    title = lines.shift() ?? '';
-  }
-
-  lines.forEach(line => {
-    if (!line.startsWith('|')) return;
-    const cells = line
-      .split('|')
-      .slice(1, -1)
-      .map(cell => cell.trim());
-
-    if (!cells.length) return;
-
-    if (!headerCaptured) {
-      headerCells = cells;
-      headerCaptured = true;
-      return;
-    }
-
-    const isDivider = cells.every(cell => !cell || /^-+$/.test(cell.replace(/\s+/g, '')));
-    if (isDivider) return;
-
-    if (cells.length >= 3 && /^total$/i.test(cells[2] ?? '')) {
-      total = cells[3] || cells[cells.length - 1] || '';
-      return;
-    }
-
-    if (cells.length >= 4) {
-      rows.push({
-        index: cells[0] ?? '',
-        name: cells[1] ?? '',
-        qty: cells[2] ?? '',
-        price: cells[3] ?? '',
-      });
-    }
-  });
-
-  if (!rows.length && !total) return null;
-
-  return { title, header: headerCells, rows, total };
-};
 
 export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRetryDecrypt }) => {
   const [overrideText, setOverrideText] = useState(null);
-  const isTableMessage = item?.raw?.type === MESSAGE_TYPE_TABLE;
   const [retryStatus, setRetryStatus] = useState('idle');
 
   useEffect(() => {
@@ -146,10 +85,7 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
   const showRetryStatus = retryStatus === 'failed' && Boolean(item.failed || item?.raw?.decryptionFailed);
   const fallbackText = item.text ?? item?.raw?.body ?? 'Encrypted message';
   const messageText = overrideText ?? fallbackText;
-  const parsedTable = useMemo(
-    () => (isTableMessage ? parseTableMessage(messageText) : null),
-    [isTableMessage, messageText],
-  );
+  
   const statusColor = item.failed
     ? '#b3261e'
     : item.pending
@@ -178,71 +114,7 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
         </View>
       ) : (
         <View style={[styles.messageTextFlex, styles.messageTextWrapper]}>
-         {parsedTable ? (
-            <View style={styles.tableCard}>
-              {parsedTable.title ? <Text style={styles.tableHeading}>{parsedTable.title}</Text> : null}
-              <View style={styles.tableGrid}>
-                <View style={[styles.tableRow, styles.tableHeaderRow]}>
-                  {parsedTable.header.map((cell, idx) => (
-                    <View
-                      key={`${cell}-${idx}`}
-                      style={[
-                        styles.tableCell,
-                        idx === 0 ? styles.tableIndexCell : null,
-                        idx === 1 ? styles.tableItemCell : null,
-                        idx === 2 ? styles.tableQtyCell : null,
-                        idx === parsedTable.header.length - 1 ? styles.tablePriceCell : null,
-                        idx === parsedTable.header.length - 1 ? styles.tableLastCell : null,
-                      ]}
-                    >
-                      <Text style={[styles.tableHeaderText, idx === parsedTable.header.length - 1 ? styles.tablePriceText : null]}>
-                        {cell}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-
-                {parsedTable.rows.map((row, rowIndex) => (
-                  <View
-                    key={`${row.index}-${row.name}-${rowIndex}`}
-                    style={[styles.tableRow, rowIndex === parsedTable.rows.length - 1 && !parsedTable.total ? styles.tableLastRow : null]}
-                  >
-                    <View style={[styles.tableCell, styles.tableIndexCell]}>
-                      <Text style={styles.tableCellText}>{row.index}</Text>
-                    </View>
-                    <View style={[styles.tableCell, styles.tableItemCell]}>
-                      <Text style={styles.tableCellText}>{row.name}</Text>
-                    </View>
-                    <View style={[styles.tableCell, styles.tableQtyCell]}>
-                      <Text style={styles.tableCellText}>{row.qty}</Text>
-                    </View>
-                    <View style={[styles.tableCell, styles.tablePriceCell, styles.tableLastCell]}>
-                      <Text style={[styles.tableCellText, styles.tablePriceText]}>{row.price}</Text>
-                    </View>
-                  </View>
-                ))}
-
-                {parsedTable.total ? (
-                  <View style={[styles.tableRow, styles.tableTotalRow]}>
-                    <View style={[styles.tableCell, styles.tableIndexCell]}>
-                      <Text style={[styles.tableCellText, styles.tableTotalLabel]}> </Text>
-                    </View>
-                    <View style={[styles.tableCell, styles.tableItemCell]}>
-                      <Text style={[styles.tableCellText, styles.tableTotalLabel]}>Total</Text>
-                    </View>
-                    <View style={[styles.tableCell, styles.tableQtyCell]}>
-                      <Text style={[styles.tableCellText, styles.tableTotalLabel]} />
-                    </View>
-                    <View style={[styles.tableCell, styles.tablePriceCell, styles.tableLastCell]}>
-                      <Text style={[styles.tableCellText, styles.tablePriceText, styles.tableTotalValue]}>{parsedTable.total}</Text>
-                    </View>
-                  </View>
-                ) : null}
-              </View>
-            </View>
-          ) : (
-            <Text style={[styles.messageText, isTableMessage ? styles.tableText : null]}>{messageText}</Text>
-          )}
+          <Text style={styles.messageText}>{messageText}</Text>
           {showRetryStatus ? (
             <Text style={styles.retryStatusText}>Re-establishing secure session…</Text>
           ) : null}
@@ -331,7 +203,6 @@ export default function ChatDetailScreen() {
   const {
     messages: sessionMessages,
     sendTextMessage,
-    sendTableMessage,
     notifyTyping,
     markLatestRead,
     typingUsers,
@@ -369,18 +240,10 @@ export default function ChatDetailScreen() {
   const avatarUri = params?.image && String(params.image).trim() ? String(params.image) : null;
   const avatarSource = avatarUri ? { uri: avatarUri } : null;
   const isRoomReady = Boolean(roomId && (roomKey || roomId));
-  const tableMessageToSend = useMemo(() => {
-    const text = getFirstParam(params?.tableMessage);
-    const id = getFirstParam(params?.tableMessageId);
-    if (!text || !id) return null;
-    const type = getFirstParam(params?.tableMessageType) || MESSAGE_TYPE_TABLE;
-    return { text: String(text), id: String(id), type: String(type) };
-  }, [params?.tableMessage, params?.tableMessageId, params?.tableMessageType]);
 
   const recordingRef = useRef(null);
   const previewSoundRef = useRef(null);
   const playbackSoundRef = useRef(null);
-  const tableMessageIdRef = useRef(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordedUri, setRecordedUri] = useState(null);
   const [recordingDuration, setRecordingDuration] = useState(0);
@@ -683,34 +546,6 @@ export default function ChatDetailScreen() {
   useEffect(() => {
     setSelectedMessages(prev => prev.filter(msg => messages.find(m => m.id === msg.id)));
   }, [messages]);
-
-  useEffect(() => {
-    if (!tableMessageToSend || !isRoomReady) {
-      return;
-    }
-    if (tableMessageIdRef.current === tableMessageToSend.id) {
-      return;
-    }
-    tableMessageIdRef.current = tableMessageToSend.id;
-    const targetType =
-      tableMessageToSend.type && typeof tableMessageToSend.type === 'string'
-        ? tableMessageToSend.type
-        : MESSAGE_TYPE_TABLE;
-    const sender =
-      targetType === MESSAGE_TYPE_TABLE ? sendTableMessage : sendTextMessage;
-    sender(tableMessageToSend.text).catch(err => {
-      console.warn('Failed to send table preview message', err);
-    });
-    try {
-      router.setParams?.({
-        tableMessage: undefined,
-        tableMessageId: undefined,
-        tableMessageType: undefined,
-      });
-    } catch (err) {
-      console.warn('Unable to clear table preview params', err);
-    }
-  }, [isRoomReady, router, sendTableMessage, sendTextMessage, tableMessageToSend]);
 
   useEffect(() => {
     if (!selectedMessages.length) {
@@ -1467,18 +1302,7 @@ export default function ChatDetailScreen() {
                     previewItems.push({ name: item.itemName, qty: qtyText, price: `₹${total}` });
                   });
 
-                  const previewParams = {
-                    preview: JSON.stringify(previewItems),
-                    ...(selectedListData?.title ? { listTitle: selectedListData.title } : {}),
-                    ...(roomId ? { roomId: String(roomId) } : {}),
-                    ...(roomKey ? { roomKey } : {}),
-                    ...(peerId != null ? { peerId: String(peerId) } : {}),
-                    ...(chatTitle ? { title: chatTitle } : {}),
-                    ...(phoneNumber ? { phone: phoneNumber } : {}),
-                    ...(avatarUri ? { image: avatarUri } : {}),
-                  };
-
-                  router.push({ pathname: '/screens/SelectedPreview', params: previewParams });
+                  router.push({ pathname: '/screens/SelectedPreview', params: { preview: JSON.stringify(previewItems) } });
                 }}
                 style={styles.previewBtn}
                 >
@@ -1781,10 +1605,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   messageText: { fontSize: 16, lineHeight: 20 },
-  tableText: {
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: undefined }),
-    fontVariant: ['tabular-nums'],
-  },
   messageTextWrapper: {
     flexDirection: 'column',
     alignItems: 'flex-start',
@@ -2068,84 +1888,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  tableCard: {
-    backgroundColor: '#dff0c2',
-    borderRadius: 10,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: '#9fc36b',
-  },
-  tableHeading: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 8,
-    color: '#2f4b2a',
-  },
-  tableGrid: {
-    borderWidth: 1,
-    borderColor: '#9fc36b',
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  tableRow: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderColor: '#9fc36b',
-  },
-  tableHeaderRow: {
-    backgroundColor: '#cde8ab',
-  },
-  tableTotalRow: {
-    backgroundColor: '#e9f3d3',
-  },
-  tableCell: {
-    paddingVertical: 8,
-    paddingHorizontal: 6,
-    borderRightWidth: 1,
-    borderColor: '#9fc36b',
-    justifyContent: 'center',
-  },
-  tableIndexCell: {
-    flex: 0.6,
-    alignItems: 'center',
-  },
-  tableItemCell: {
-    flex: 2.1,
-  },
-  tableQtyCell: {
-    flex: 1.2,
-    alignItems: 'center',
-  },
-  tablePriceCell: {
-    flex: 1,
-    alignItems: 'flex-end',
-  },
-  tableLastCell: {
-    borderRightWidth: 0,
-  },
-  tableLastRow: {
-    borderBottomWidth: 0,
-  },
-  tableHeaderText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#2f4b2a',
-  },
-  tableCellText: {
-    fontSize: 14,
-    color: '#333',
-  },
-  tablePriceText: {
-    fontWeight: '700',
-  },
-  tableTotalLabel: {
-    fontWeight: '700',
-    color: '#2f4b2a',
-  },
-  tableTotalValue: {
-    color: '#1b5e20',
-  },
 
  attachOverlay:{
     ...StyleSheet.absoluteFillObject,
