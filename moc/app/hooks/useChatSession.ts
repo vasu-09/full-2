@@ -1271,7 +1271,12 @@ export const useChatSession = ({
           }
         }
         if (!payload) {
-          throw new Error('Unable to encrypt message payload');
+          payload = {
+            messageId,
+            type: MESSAGE_TYPE_TEXT,
+            e2ee: false,
+            body,
+          };
         }
 
         try {
