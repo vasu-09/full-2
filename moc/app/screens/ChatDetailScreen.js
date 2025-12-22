@@ -230,6 +230,18 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
   );
 };
 
+const isTableMessage = message => {
+  if (!message || typeof message !== 'string') {
+    return false;
+  }
+  try {
+    const parsed = JSON.parse(message);
+    return parsed?.type === 'todo_table' && Array.isArray(parsed?.rows);
+  } catch {
+    return false;
+  }
+};
+
 export default function ChatDetailScreen() {
   const insets = useSafeAreaInsets();
   const [input, setInput] = useState('');
@@ -1212,6 +1224,7 @@ export default function ChatDetailScreen() {
             }
             renderItem={({ item }) => {
               const isSelected = selectedMessages.some(m => m.id === item.id);
+              const tableMessage = isTableMessage(item.text ?? item?.raw?.body ?? null);
               return (
                 <TouchableOpacity
                   activeOpacity={0.9}
@@ -1238,6 +1251,7 @@ export default function ChatDetailScreen() {
                   <View
                     style={[
                       styles.bubble,
+                      tableMessage ? styles.tableBubble : null,
                       item.sender === 'me' ? styles.myBubble : styles.theirBubble,
                       item.failed ? styles.failedBubble : null,
                       isSelected ? styles.selectedBubble : null,
@@ -1656,6 +1670,10 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 8,
     marginVertical: 4,
+  },
+  tableBubble: {
+    width: '70%',
+    maxWidth: '70%',
   },
   myBubble: {
     backgroundColor: '#C8E6C9',
