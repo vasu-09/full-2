@@ -95,6 +95,32 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
         : '#777';
   const showClock = item.pending || item.failed;
   const decryptionFailed = Boolean(item?.raw?.decryptionFailed);
+  const tablePayload = useMemo(() => {
+    if (decryptionFailed || !messageText || typeof messageText !== 'string') {
+      return null;
+    }
+    try {
+      const parsed = JSON.parse(messageText);
+      if (parsed?.type !== 'todo_table' || !Array.isArray(parsed?.rows)) {
+        return null;
+      }
+      return parsed;
+    } catch {
+      return null;
+    }
+  }, [decryptionFailed, messageText]);
+  const tableRows = tablePayload?.rows ?? [];
+  const tableTotal = useMemo(() => {
+    if (!tablePayload) return null;
+    if (tablePayload.total) {
+      return tablePayload.total;
+    }
+    const totalValue = tableRows.reduce((sum, row) => {
+      const rowValue = parseInt(String(row?.price ?? '').replace(/[^0-9]/g, ''), 10) || 0;
+      return sum + rowValue;
+    }, 0);
+    return `₹${totalValue}`;
+  }, [tablePayload, tableRows]);
   return (
     <View style={styles.messageContentRow}>
       {item.audio ? (
@@ -114,7 +140,43 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
         </View>
       ) : (
         <View style={[styles.messageTextFlex, styles.messageTextWrapper]}>
-          <Text style={styles.messageText}>{messageText}</Text>
+          {tablePayload ? (
+            <View style={styles.tableWrapper}>
+              {tablePayload.title ? (
+                <Text style={styles.tableTitle}>{tablePayload.title}</Text>
+              ) : null}
+              <View style={styles.tableHeaderRow}>
+                <Text style={[styles.tableCell, styles.tableIndexCell, styles.tableHeaderText]}>
+                  #
+                </Text>
+                <Text style={[styles.tableCell, styles.tableItemCell, styles.tableHeaderText]}>
+                  Item
+                </Text>
+                <Text style={[styles.tableCell, styles.tableQtyCell, styles.tableHeaderText]}>
+                  Qty
+                </Text>
+                <Text style={[styles.tableCell, styles.tablePriceCell, styles.tableHeaderText]}>
+                  Price
+                </Text>
+              </View>
+              {tableRows.map((row, index) => (
+                <View style={styles.tableRow} key={`${row?.name ?? 'row'}-${index}`}>
+                  <Text style={[styles.tableCell, styles.tableIndexCell]}>{index + 1}.</Text>
+                  <Text style={[styles.tableCell, styles.tableItemCell]}>{row?.name}</Text>
+                  <Text style={[styles.tableCell, styles.tableQtyCell]}>{row?.qty}</Text>
+                  <Text style={[styles.tableCell, styles.tablePriceCell]}>{row?.price}</Text>
+                </View>
+              ))}
+              <View style={styles.tableTotalRow}>
+                <Text style={[styles.tableCell, styles.tableTotalLabel]}>Total</Text>
+                <Text style={[styles.tableCell, styles.tablePriceCell, styles.tableTotalValue]}>
+                  {tableTotal}
+                </Text>
+              </View>
+            </View>
+          ) : (
+            <Text style={styles.messageText}>{messageText}</Text>
+          )}
           {showRetryStatus ? (
             <Text style={styles.retryStatusText}>Re-establishing secure session…</Text>
           ) : null}
@@ -1618,6 +1680,72 @@ const styles = StyleSheet.create({
   messageTextWrapper: {
     flexDirection: 'column',
     alignItems: 'flex-start',
+  },
+  tableWrapper: {
+    backgroundColor: '#fff',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#cfd8dc',
+    padding: 8,
+    alignSelf: 'stretch',
+  },
+  tableTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1f2d3d',
+    marginBottom: 6,
+  },
+  tableHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#cfd8dc',
+    paddingBottom: 6,
+    marginBottom: 6,
+  },
+  tableRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  tableTotalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#cfd8dc',
+    paddingTop: 6,
+    marginTop: 6,
+  },
+  tableCell: {
+    fontSize: 13,
+    color: '#1f2d3d',
+    paddingRight: 6,
+  },
+  tableHeaderText: {
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  tableIndexCell: {
+    flex: 0.5,
+  },
+  tableItemCell: {
+    flex: 2,
+  },
+  tableQtyCell: {
+    flex: 1,
+  },
+  tablePriceCell: {
+    flex: 1,
+    textAlign: 'right',
+  },
+  tableTotalLabel: {
+    flex: 3.5,
+    fontWeight: '600',
+    color: '#0f172a',
+  },
+  tableTotalValue: {
+    fontWeight: '700',
+    color: '#0f172a',
   },
   messageTextFlex: {
     flexShrink: 1,
