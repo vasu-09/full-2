@@ -22,7 +22,7 @@ export default function SelectedPreview() {
     roomKey,
     peerId,
     title,
-    enableRealtime: false,
+    disableSubscriptions: true,
   });
 
   // parse the passed data
