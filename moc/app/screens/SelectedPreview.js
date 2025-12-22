@@ -1,18 +1,44 @@
 // /app/screens/PreviewScreen.js
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useState } from 'react';
+import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { useChatSession } from '../hooks/useChatSession';
 
 export default function SelectedPreview() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { preview } = useLocalSearchParams();
+  const params = useLocalSearchParams();
+  const preview = params?.preview;
+  const roomId = params?.roomId ? Number(params.roomId) : null;
+  const roomKey = params?.roomKey ? String(params.roomKey) : null;
+  const peerId = params?.peerId ? Number(params.peerId) : null;
+  const title = params?.title ? String(params.title) : null;
+  const listTitle = params?.listTitle ? String(params.listTitle) : 'Shared List';
+  const [isSending, setIsSending] = useState(false);
+  const { sendTextMessage } = useChatSession({
+    roomId,
+    roomKey,
+    peerId,
+    title,
+  });
 
   // parse the passed data
   let items = [];
   try { items = JSON.parse(preview || '[]'); }
   catch {}
+
+  const rows = items.map(item => ({
+    name: item.name,
+    qty: item.qty,
+    price: item.price,
+  }));
+  const totalValue = rows.reduce((sum, row) => {
+    const rowValue = parseInt(String(row.price ?? '').replace(/[^0-9]/g, ''), 10) || 0;
+    return sum + rowValue;
+  }, 0);
+  const total = `₹${totalValue}`;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -43,10 +69,23 @@ export default function SelectedPreview() {
       {/* send arrow */}
       <TouchableOpacity
         style={[styles.sendBtn, { bottom: insets.bottom + 24 }]}
-        onPress={() => {
-          // handle final "send" from preview…
-          console.log('final items', items);
-          router.back();
+        onPress={async () => {
+          if (isSending) return;
+          setIsSending(true);
+          const payload = {
+            type: 'todo_table',
+            title: listTitle,
+            rows,
+            total,
+          };
+          const serializedPayload = JSON.stringify(payload);
+          const sent = await sendTextMessage(serializedPayload);
+          setIsSending(false);
+          if (sent) {
+            router.back();
+          } else {
+            Alert.alert('Send failed', 'Unable to send the list. Please try again.');
+          }
         }}
       >
         <Icon name="send" size={28} color="#fff" />

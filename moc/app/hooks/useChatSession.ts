@@ -1191,7 +1191,7 @@ export const useChatSession = ({
   const sendTextMessage = useCallback(
     async (text: string) => {
       if (!resolvedRoomKey || !text.trim()) {
-        return;
+        return false;
       }
       const resolvedRoomId =
         roomId ?? (resolvedRoomKey ? Number(resolvedRoomKey) : null);
@@ -1290,6 +1290,7 @@ export const useChatSession = ({
         await stompClient.publish(sendRoomMessage(resolvedRoomKey), payload);
 
         console.log('[CHAT] STOMP publish resolved for', messageId);
+        return true;
       } catch (err) {
         console.warn('Failed to send message', err);
         mergeMessage({
@@ -1300,6 +1301,7 @@ export const useChatSession = ({
         await updateMessageFlagsInDb(messageId, { pending: false, error: true }).catch(dbErr =>
           console.warn('Failed to persist failed send status', dbErr),
         );
+        return true;
       }
     },
     [

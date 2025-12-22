@@ -1302,7 +1302,17 @@ export default function ChatDetailScreen() {
                     previewItems.push({ name: item.itemName, qty: qtyText, price: `₹${total}` });
                   });
 
-                  router.push({ pathname: '/screens/SelectedPreview', params: { preview: JSON.stringify(previewItems) } });
+                  router.push({
+                    pathname: '/screens/SelectedPreview',
+                    params: {
+                      preview: JSON.stringify(previewItems),
+                      roomId: roomId ?? undefined,
+                      roomKey: roomKey ?? undefined,
+                      peerId: peerId ?? undefined,
+                      title: chatTitle ?? undefined,
+                      listTitle: selectedListData?.title ?? undefined,
+                    },
+                  });
                 }}
                 style={styles.previewBtn}
                 >
