@@ -503,13 +503,17 @@ class StompManager {
     const entry: SubscriptionEntry = { destination, callback, id };
     this.subscriptions.set(id, entry);
 
-    this.ensureConnected()
-      .then(client => {
-        client.subscribe(destination, callback, id);
-      })
-      .catch(err => {
+    if (this.client && this.client.isConnected()) {
+      try {
+        this.client.subscribe(destination, callback, id);
+      } catch (err) {
+        console.warn('Failed to establish STOMP subscription', err);
+      }
+    } else {
+      this.ensureConnected().catch(err => {
         console.warn('Failed to establish STOMP subscription', err);
       });
+    }
 
     return () => {
       const current = this.subscriptions.get(id);
