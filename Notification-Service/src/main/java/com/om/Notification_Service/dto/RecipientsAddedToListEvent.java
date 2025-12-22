@@ -6,8 +6,6 @@ import lombok.RequiredArgsConstructor;
 import java.util.List;
 
 @Getter
-@RequiredArgsConstructor
-
 public class RecipientsAddedToListEvent {
     private final Long listId;
     private final String listName;

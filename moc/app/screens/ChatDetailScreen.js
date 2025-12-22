@@ -253,21 +253,25 @@ export default function ChatDetailScreen() {
   const router = useRouter();
   const { rooms } = useChatRegistry();
   const params = useLocalSearchParams();
-  const roomId = params?.roomId ? Number(params.roomId) : null;
-  const roomKey = params?.roomKey ? String(params.roomKey) : null;
-  const chatTitle = params?.title ? String(params.title) : 'Chat';
-  const peerId = params?.peerId ? Number(params.peerId) : null;
+  const paramRoomId = params?.roomId ? Number(params.roomId) : null;
+  const paramRoomKey = params?.roomKey ? String(params.roomKey) : null;
+  const paramTitle = params?.title ? String(params.title) : null;
+  const paramPeerId = params?.peerId ? Number(params.peerId) : null;
   console.log('[ChatDetailScreen] params', params);
   const roomSummary = useMemo(() => {
     if (!rooms?.length) return null;
     return (
       rooms.find(
         room =>
-          (roomId != null && room.id === roomId) ||
-          (roomKey && room.roomKey === roomKey),
+          (paramRoomId != null && room.id === paramRoomId) ||
+          (paramRoomKey && room.roomKey === paramRoomKey),
       ) ?? null
     );
-  }, [rooms, roomId, roomKey]);
+  }, [rooms, paramRoomId, paramRoomKey]);
+  const roomId = paramRoomId ?? roomSummary?.id ?? null;
+  const roomKey = paramRoomKey ?? roomSummary?.roomKey ?? null;
+  const chatTitle = paramTitle ?? roomSummary?.title ?? 'Chat';
+  const peerId = paramPeerId ?? roomSummary?.peerId ?? null;
   const phoneNumber = useMemo(() => {
     const rawPhone = params?.phone ?? roomSummary?.peerPhone;
     if (Array.isArray(rawPhone)) return rawPhone[0] ?? '';

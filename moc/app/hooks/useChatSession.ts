@@ -60,6 +60,7 @@ type TypingUser = {
 
 const MESSAGE_TYPE_TEXT = 'TEXT';
 const SHOULD_LOG_DECRYPT = __DEV__ && process.env.EXPO_PUBLIC_DEBUG_DECRYPT !== '0';
+const SHOULD_LOG_E2EE = __DEV__ && process.env.EXPO_PUBLIC_DEBUG_E2EE !== '0';
 
 const formatTime = (iso?: string | null) => {
   if (!iso) {
@@ -406,14 +407,27 @@ export const useChatSession = ({
 
   useEffect(() => {
     let cancelled = false;
+    if (SHOULD_LOG_E2EE) {
+      console.debug('[CHAT][E2EE] initializing client');
+    }
     getE2EEClient()
       .then(client => {
         if (!cancelled) {
           setE2eeClient(client);
+          if (SHOULD_LOG_E2EE) {
+            console.debug('[CHAT][E2EE] client ready', {
+              deviceId: typeof client.getDeviceId === 'function' ? client.getDeviceId() : undefined,
+            });
+          }
         }
       })
       .catch(err => {
         console.warn('E2EE initialization failed', err);
+        if (SHOULD_LOG_E2EE) {
+          console.debug('[CHAT][E2EE] client init failed', {
+            reason: err instanceof Error ? err.message : String(err),
+          });
+        }
         if (!cancelled) {
           setE2eeClient(null);
         }
@@ -1195,6 +1209,7 @@ export const useChatSession = ({
       if (!resolvedRoomKey || !text.trim()) {
         return false;
       }
+      setError(null);
       const resolvedRoomId =
         roomId ?? (resolvedRoomKey ? Number(resolvedRoomKey) : null);
       const normalizedRoomId = Number.isNaN(resolvedRoomId ?? NaN) ? null : resolvedRoomId;
@@ -1203,14 +1218,98 @@ export const useChatSession = ({
       const nowIso = new Date().toISOString();
       let derivedSharedKey = sharedRoomKey;
 
-      if (!derivedSharedKey && resolvedRoomKey) {
+      const logEncryptionUnavailable = (reason: string, details?: Record<string, unknown>) => {
+        if (SHOULD_LOG_E2EE) {
+          console.debug('[CHAT][E2EE] encryption unavailable', {
+            reason,
+            roomKey: resolvedRoomKey ?? null,
+            peerId: peerId ?? null,
+            ...details,
+          });
+        }
+      };
+
+      if (!peerId && !derivedSharedKey && resolvedRoomKey) {
         try {
           derivedSharedKey = await ensureSharedRoomKey(resolvedRoomKey);
           setSharedRoomKey(current => current ?? derivedSharedKey);
         } catch (keyErr) {
           console.warn('Failed to derive shared key before sending', keyErr);
+          logEncryptionUnavailable('ensure-shared-room-key-failed', {
+            error: keyErr instanceof Error ? keyErr.message : String(keyErr),
+          });
         }
       }
+
+      if (peerId != null && !e2eeClient) {
+        logEncryptionUnavailable('missing-e2ee-client');
+        setError('Unable to send secure message. Please try again.');
+        return false;
+      }
+
+      if (peerId == null && !derivedSharedKey) {
+        logEncryptionUnavailable('missing-peer-id');
+        setError('Unable to send secure message. Please try again.');
+        return false;
+      }
+
+      let payload: Record<string, unknown> | null = null;
+      if (peerId != null && e2eeClient) {
+        try {
+          const encrypted = await e2eeClient.encryptForUser(peerId, messageId, body);
+          if (!encrypted) {
+            logEncryptionUnavailable('missing-peer-device', { peerId });
+            setError('Unable to send secure message. Please try again.');
+            return false;
+          }
+          payload = {
+            messageId,
+            type: MESSAGE_TYPE_TEXT,
+            e2ee: true,
+            body,
+            e2eeVer: encrypted.envelope.e2eeVer,
+            algo: encrypted.envelope.algo,
+            aad: encrypted.envelope.aad,
+            iv: encrypted.envelope.iv,
+            ciphertext: encrypted.envelope.ciphertext,
+            keyRef: encrypted.envelope.keyRef,
+          };
+        } catch (encryptErr) {
+          console.warn('Failed to encrypt message', encryptErr);
+          logEncryptionUnavailable('encrypt-failed', {
+            error: encryptErr instanceof Error ? encryptErr.message : String(encryptErr),
+          });
+          setError('Unable to send secure message. Please try again.');
+          return false;
+        }
+      } else if (derivedSharedKey) {
+        try {
+          const encrypted = await encryptMessage(body, derivedSharedKey);
+          payload = {
+            messageId,
+            type: MESSAGE_TYPE_TEXT,
+            e2ee: true,
+            body,
+            algo: 'XSalsa20-Poly1305',
+            iv: encrypted.iv,
+            ciphertext: encrypted.ciphertext,
+          };
+        } catch (encryptErr) {
+          console.warn('Failed to encrypt symmetric message', encryptErr);
+          logEncryptionUnavailable('symmetric-encrypt-failed', {
+            error: encryptErr instanceof Error ? encryptErr.message : String(encryptErr),
+          });
+          setError('Unable to send secure message. Please try again.');
+          return false;
+        }
+      }
+
+      if (!payload) {
+        logEncryptionUnavailable('missing-payload');
+        setError('Unable to send secure message. Please try again.');
+        return false;
+      }
+
       const optimistic: InternalMessage = {
         messageId,
         roomId: normalizedRoomId,
@@ -1221,7 +1320,7 @@ export const useChatSession = ({
         pending: true,
         error: false,
         readByPeer: false,
-        e2ee: Boolean((peerId && e2eeClient) || derivedSharedKey),
+        e2ee: true,
       };
       mergeMessage(optimistic);
       latestMessageIdRef.current = messageId;
@@ -1233,51 +1332,6 @@ export const useChatSession = ({
       });
       resetUnread(resolvedRoomKey);
       try {
-        let payload: Record<string, unknown> | null = null;
-        if (peerId && e2eeClient) {
-          try {
-            const encrypted = await e2eeClient.encryptForUser(peerId, messageId, body);
-            if (encrypted) {
-              payload = {
-                messageId,
-                type: MESSAGE_TYPE_TEXT,
-                e2ee: true,
-                body,
-                e2eeVer: encrypted.envelope.e2eeVer,
-                algo: encrypted.envelope.algo,
-                aad: encrypted.envelope.aad,
-                iv: encrypted.envelope.iv,
-                ciphertext: encrypted.envelope.ciphertext,
-                keyRef: encrypted.envelope.keyRef,
-              };
-            }
-          } catch (encryptErr) {
-            console.warn('Failed to encrypt message', encryptErr);
-          }
-        } else if (derivedSharedKey) {
-          try {
-            const encrypted = await encryptMessage(body, derivedSharedKey);
-            payload = {
-              messageId,
-              type: MESSAGE_TYPE_TEXT,
-              e2ee: true,
-              body,
-              algo: 'XSalsa20-Poly1305',
-              iv: encrypted.iv,
-              ciphertext: encrypted.ciphertext,
-            };
-          } catch (encryptErr) {
-            console.warn('Failed to encrypt symmetric message', encryptErr);
-          }
-        }
-        if (!payload) {
-          payload = {
-            messageId,
-            type: MESSAGE_TYPE_TEXT,
-            e2ee: false,
-            body,
-          };
-        }
 
         try {
           await saveMessagesToDb([

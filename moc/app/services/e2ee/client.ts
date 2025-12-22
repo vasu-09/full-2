@@ -226,6 +226,9 @@ const ensureSignedPrekeySignature = async (
 const ensureDeviceState = async (): Promise<DeviceState> => {
   const current = await loadDeviceState();
   if (!current || current.version !== DEVICE_VERSION) {
+    if (!current) {
+      console.warn('[E2EE] Missing device state; generating a new device identity.');
+    }
     return createDeviceState();
   }
   const withSignature = await ensureSignedPrekeySignature(current);
@@ -246,7 +249,12 @@ const registerIfNeeded = async (state: DeviceState): Promise<DeviceState> => {
     }
 
     const uploads = toUploadablePrekeys(pendingUpload);
-    await uploadPrekeys(state.deviceId, uploads);
+    try {
+      await uploadPrekeys(state.deviceId, uploads);
+    } catch (err) {
+      console.warn('[E2EE] Failed to upload prekeys', err);
+      throw err;
+    }
     const refreshed: DeviceState = {
       ...state,
       oneTimePrekeys: state.oneTimePrekeys.map(pk =>
@@ -258,15 +266,20 @@ const registerIfNeeded = async (state: DeviceState): Promise<DeviceState> => {
     await saveDeviceState(refreshed);
     return refreshed;
   }
-  await registerDevice({
-    deviceId: state.deviceId,
-    name: 'MoC Mobile',
-    platform: Platform.OS,
-    identityKeyPub: state.identity.publicKey,
-    signedPrekeyPub: state.signedPrekey.publicKey,
-    signedPrekeySig: state.signedPrekey.signature,
-    oneTimePrekeys: toUploadablePrekeys(pendingUpload),
-  });
+  try {
+    await registerDevice({
+      deviceId: state.deviceId,
+      name: 'MoC Mobile',
+      platform: Platform.OS,
+      identityKeyPub: state.identity.publicKey,
+      signedPrekeyPub: state.signedPrekey.publicKey,
+      signedPrekeySig: state.signedPrekey.signature,
+      oneTimePrekeys: toUploadablePrekeys(pendingUpload),
+    });
+  } catch (err) {
+    console.warn('[E2EE] Failed to register device', err);
+    throw err;
+  }
   const updated: DeviceState = {
     ...state,
     oneTimePrekeys: state.oneTimePrekeys.map(pk => ({ ...pk, uploaded: true })),
@@ -701,4 +714,3 @@ export const getE2EEClient = async (): Promise<E2EEClient> => {
 };
 
 export type { Envelope as E2EEEnvelope };
-
