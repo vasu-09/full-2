@@ -1301,7 +1301,7 @@ export const useChatSession = ({
         await updateMessageFlagsInDb(messageId, { pending: false, error: true }).catch(dbErr =>
           console.warn('Failed to persist failed send status', dbErr),
         );
-        return true;
+        return false;
       }
     },
     [
