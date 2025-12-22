@@ -140,11 +140,13 @@ export const useChatSession = ({
   roomKey,
   peerId,
   title,
+  disableSubscriptions = false,
 }: {
   roomId: number | null;
   roomKey: string | null;
   peerId?: number | null;
   title?: string | null;
+  disableSubscriptions?: boolean;
 }) => {
   const { upsertRoom, updateRoomActivity, incrementUnread, resetUnread } = useChatRegistry();
   const [rawMessages, setRawMessages] = useState<InternalMessage[]>([]);
@@ -608,8 +610,7 @@ export const useChatSession = ({
   }, [loadHistory, userLoaded, peerId, e2eeReady, roomId, resolvedRoomKey]);
 
   useEffect(() => {
-    
-    if (!roomId) {
+    if (!roomId || disableSubscriptions) {
       return;
     }
 
@@ -644,11 +645,11 @@ export const useChatSession = ({
         clearInterval(timer);
       }
     };
-  }, [roomId]);
+  }, [disableSubscriptions, roomId]);
 
 
   useEffect(() => {
-    if (!roomId || !resolvedRoomKey) {
+    if (!roomId || !resolvedRoomKey || disableSubscriptions) {
       return;
     }
 
@@ -965,6 +966,7 @@ export const useChatSession = ({
  }, [
     roomId,
     resolvedRoomKey,
+    disableSubscriptions,
     mergeMessage,
     updateRoomActivity,
     incrementUnread,
