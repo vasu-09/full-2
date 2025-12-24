@@ -43,6 +43,12 @@ spring:
         jwt:
           jwk-set-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI:http://localhost:8080/.well-known/jwks.json}
 
+
+
+  cloud:
+    compatibility-verifier:
+      enabled=false:
+
 server:
   port: ${SERVER_PORT:8093}
 
@@ -78,3 +84,4 @@ resilience4j:
 # Keep this custom and read it in a @ConfigurationProperties or @Value
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+
