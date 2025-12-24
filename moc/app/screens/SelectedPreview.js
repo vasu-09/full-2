@@ -89,6 +89,7 @@ export default function SelectedPreview() {
           if (sent?.success) {
             if (returnToKey) {
               navigation.navigate({
+                name: 'screens/ChatDetailScreen',
                 key: returnToKey,
                 params: {
                   pendingTodoPreview: {
