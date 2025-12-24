@@ -1,4 +1,5 @@
 // ChatDetailScreen.js
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { Audio } from 'expo-audio';
 import * as Clipboard from 'expo-clipboard';
 import * as DocumentPicker from 'expo-document-picker';
@@ -251,6 +252,8 @@ export default function ChatDetailScreen() {
   const activeCallIdRef = useRef(null);
   const [attachMenuVisible, setAttachMenuVisible] = useState(false);
   const router = useRouter();
+  const navigation = useNavigation();
+  const route = useRoute();
   const { rooms } = useChatRegistry();
   const params = useLocalSearchParams();
   const paramRoomId = params?.roomId ? Number(params.roomId) : null;
@@ -312,6 +315,10 @@ export default function ChatDetailScreen() {
     () => messages.filter(message => !deletedMessageIds.includes(message.id)),
     [messages, deletedMessageIds],
   );
+  const messagesRef = useRef([]);
+  useEffect(() => {
+    messagesRef.current = filteredMessages;
+  }, [filteredMessages]);
   const subtitleText = typingUsers.length
     ? 'typing…'
     : 'Messages are end-to-end encrypted';
@@ -609,6 +616,71 @@ export default function ChatDetailScreen() {
       markLatestRead();
     }
   }, [messages, markLatestRead]);
+
+  useEffect(() => {
+    const onFocus = () => {
+      const currentRoute = navigation
+        ?.getState?.()
+        ?.routes?.find(r => r.key === route.key);
+      const pendingPreview = currentRoute?.params?.pendingTodoPreview;
+      const resumeSelectedListId = currentRoute?.params?.resumeSelectedListId;
+      const resumeShowListPicker = currentRoute?.params?.resumeShowListPicker;
+
+      if (resumeSelectedListId || resumeShowListPicker) {
+        navigation.setParams({
+          resumeSelectedListId: undefined,
+          resumeShowListPicker: undefined,
+        });
+      }
+
+      if (resumeSelectedListId) {
+        setSelectedListId(resumeSelectedListId);
+        setShowListPicker(false);
+      } else if (resumeShowListPicker) {
+        setShowListPicker(true);
+      }
+
+      if (!pendingPreview) {
+        return;
+      }
+
+      navigation.setParams({
+        pendingTodoPreview: undefined,
+        resumeSelectedListId: undefined,
+        resumeShowListPicker: undefined,
+      });
+
+      if (roomId && pendingPreview?.roomId != null && Number(pendingPreview.roomId) !== Number(roomId)) {
+        return;
+      }
+
+      const messageId = pendingPreview.messageId ?? `local-${Date.now()}`;
+      setSelectedListId(pendingPreview.listId ?? resumeSelectedListId ?? selectedListId);
+      setShowListPicker(false);
+      setLocalMessages(prev => {
+        const existsInLocal = prev.some(m => m.id === messageId);
+        const existsInMessages = messagesRef.current.some(m => m.id === messageId);
+        if (existsInLocal || existsInMessages) return prev;
+        const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        return [
+          ...prev,
+          {
+            id: messageId,
+            text: pendingPreview.payload,
+            sender: 'me',
+            pending: true,
+            time,
+            raw: { body: pendingPreview.payload },
+          },
+        ];
+      });
+      clearSelection();
+      requestAnimationFrame(() => flatListRef.current?.scrollToEnd({ animated: true }));
+    };
+
+    const unsubscribe = navigation.addListener('focus', onFocus);
+    return unsubscribe;
+  }, [navigation, route.key, roomId, selectedListId, clearSelection]);
 
   const clearSelection = useCallback(() => {
     setSelectedMessages([]);
@@ -1391,6 +1463,8 @@ export default function ChatDetailScreen() {
                       peerId: peerId ?? undefined,
                       title: chatTitle ?? undefined,
                       listTitle: selectedListData?.title ?? undefined,
+                      returnToKey: route?.key ?? undefined,
+                      selectedListId: selectedListId ?? undefined,
                     },
                   });
                 }}

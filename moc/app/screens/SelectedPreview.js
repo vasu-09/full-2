@@ -1,4 +1,5 @@
 // /app/screens/PreviewScreen.js
+import { useNavigation } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -9,6 +10,7 @@ import { useChatSession } from '../hooks/useChatSession';
 export default function SelectedPreview() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const navigation = useNavigation();
   const params = useLocalSearchParams();
   const preview = params?.preview;
   const roomId = params?.roomId ? Number(params.roomId) : null;
@@ -16,6 +18,8 @@ export default function SelectedPreview() {
   const peerId = params?.peerId ? Number(params.peerId) : null;
   const title = params?.title ? String(params.title) : null;
   const listTitle = params?.listTitle ? String(params.listTitle) : 'Shared List';
+  const returnToKey = params?.returnToKey ? String(params.returnToKey) : null;
+  const resumeSelectedListId = params?.selectedListId ? String(params.selectedListId) : null;
   const [isSending, setIsSending] = useState(false);
   const { sendTextMessage } = useChatSession({
     roomId,
@@ -82,7 +86,26 @@ export default function SelectedPreview() {
           const serializedPayload = JSON.stringify(payload);
           const sent = await sendTextMessage(serializedPayload);
           setIsSending(false);
-          if (sent) {
+          if (sent?.success) {
+            if (returnToKey) {
+              navigation.navigate({
+                key: returnToKey,
+                params: {
+                  pendingTodoPreview: {
+                    payload: serializedPayload,
+                    messageId: sent?.messageId ?? null,
+                    roomId,
+                    roomKey,
+                    peerId,
+                    listId: resumeSelectedListId,
+                    listTitle,
+                  },
+                  resumeSelectedListId,
+                  resumeShowListPicker: true,
+                },
+                merge: true,
+              });
+            }
             router.back();
           } else {
             Alert.alert('Send failed', 'Unable to send the list. Please try again.');

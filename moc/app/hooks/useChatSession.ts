@@ -1207,7 +1207,7 @@ export const useChatSession = ({
   const sendTextMessage = useCallback(
     async (text: string) => {
       if (!resolvedRoomKey || !text.trim()) {
-        return false;
+        return { success: false as const };
       }
       setError(null);
       const resolvedRoomId =
@@ -1244,13 +1244,13 @@ export const useChatSession = ({
       if (peerId != null && !e2eeClient) {
         logEncryptionUnavailable('missing-e2ee-client');
         setError('Unable to send secure message. Please try again.');
-        return false;
+        return { success: false as const };
       }
 
       if (peerId == null && !derivedSharedKey) {
         logEncryptionUnavailable('missing-peer-id');
         setError('Unable to send secure message. Please try again.');
-        return false;
+        return { success: false as const };
       }
 
       let payload: Record<string, unknown> | null = null;
@@ -1260,7 +1260,7 @@ export const useChatSession = ({
           if (!encrypted) {
             logEncryptionUnavailable('missing-peer-device', { peerId });
             setError('Unable to send secure message. Please try again.');
-            return false;
+            return { success: false as const };
           }
           payload = {
             messageId,
@@ -1280,7 +1280,7 @@ export const useChatSession = ({
             error: encryptErr instanceof Error ? encryptErr.message : String(encryptErr),
           });
           setError('Unable to send secure message. Please try again.');
-          return false;
+          return { success: false as const };
         }
       } else if (derivedSharedKey) {
         try {
@@ -1300,14 +1300,14 @@ export const useChatSession = ({
             error: encryptErr instanceof Error ? encryptErr.message : String(encryptErr),
           });
           setError('Unable to send secure message. Please try again.');
-          return false;
+          return { success: false as const };
         }
       }
 
       if (!payload) {
         logEncryptionUnavailable('missing-payload');
         setError('Unable to send secure message. Please try again.');
-        return false;
+        return { success: false as const };
       }
 
       const optimistic: InternalMessage = {
@@ -1351,7 +1351,7 @@ export const useChatSession = ({
         await stompClient.publish(sendRoomMessage(resolvedRoomKey), payload);
 
         console.log('[CHAT] STOMP publish resolved for', messageId);
-        return true;
+        return { success: true as const, messageId };
       } catch (err) {
         console.warn('Failed to send message', err);
         mergeMessage({
@@ -1362,7 +1362,7 @@ export const useChatSession = ({
         await updateMessageFlagsInDb(messageId, { pending: false, error: true }).catch(dbErr =>
           console.warn('Failed to persist failed send status', dbErr),
         );
-        return false;
+        return { success: false as const, messageId };
       }
     },
     [
