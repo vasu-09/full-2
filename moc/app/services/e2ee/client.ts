@@ -648,13 +648,23 @@ export class E2EEClient {
         const prekeyPath = envelope.keyRef?.startsWith('otk:');
         if (prekeyPath) {
           const key = envelope.keyRef.slice(4);
-          const record = this.findPrekey(key);
+          let record = this.findPrekey(key);
           this.logDecryptTelemetry('lookup-prekey', {
             senderId,
             senderDeviceId,
             sessionId,
             found: Boolean(record),
           });
+          if (!record) {
+            const refreshed = await ensureDeviceState();
+            record = refreshed.oneTimePrekeys.find(pk => pk.publicKey === key);
+            if (record) {
+              await this.withState(current => ({
+                ...current,
+                oneTimePrekeys: refreshed.oneTimePrekeys,
+              }));
+            }
+          }
           if (!record) {
             throw new Error('Unknown prekey');
           }
@@ -714,3 +724,4 @@ export const getE2EEClient = async (): Promise<E2EEClient> => {
 };
 
 export type { Envelope as E2EEEnvelope };
+

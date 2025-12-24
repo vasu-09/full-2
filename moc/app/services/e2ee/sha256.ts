@@ -25,15 +25,17 @@ const H0 = new Uint32Array([
 const rightRotate = (value: number, amount: number) => (value >>> amount) | (value << (32 - amount));
 
 export const sha256 = (input: Uint8Array): Uint8Array => {
-  const bytes = new Uint8Array(input.length + 64);
-  bytes.set(input);
   const bitLength = input.length * 8;
-  bytes[input.length] = 0x80;
 
   let paddedLength = input.length + 1;
   while (paddedLength % 64 !== 56) {
     paddedLength += 1;
   }
+
+  const totalLength = paddedLength + 8;
+  const bytes = new Uint8Array(totalLength);
+  bytes.set(input);
+  bytes[input.length] = 0x80;
 
   const view = new DataView(bytes.buffer);
   view.setUint32(paddedLength, Math.floor(bitLength / 0x100000000));
@@ -42,7 +44,7 @@ export const sha256 = (input: Uint8Array): Uint8Array => {
   const w = new Uint32Array(64);
   const h = new Uint32Array(H0);
 
-  for (let offset = 0; offset < paddedLength + 8; offset += 64) {
+  for (let offset = 0; offset < totalLength; offset += 64) {
     for (let i = 0; i < 16; i += 1) {
       w[i] = view.getUint32(offset + i * 4);
     }

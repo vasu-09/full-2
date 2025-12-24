@@ -51,12 +51,14 @@ const mockUploadPrekeys = uploadPrekeys as jest.MockedFunction<typeof uploadPrek
 const mockRegisterDevice = registerDevice as jest.MockedFunction<typeof registerDevice>;
 const mockLoadDeviceState = loadDeviceState as jest.MockedFunction<typeof loadDeviceState>;
 
+const DEVICE_VERSION = 25;
+
 const buildSenderState = (): DeviceState => {
   const identity = generateEd25519KeyPair();
   const signedPrekey = generateDhKeyPair();
 
   return {
-    version: 15,
+    version: DEVICE_VERSION,
     deviceId: 'sender-dev',
     identity: {
       publicKey: bytesToBase64(identity.publicKey),
@@ -83,7 +85,7 @@ const buildRecipientState = (
   signature: string,
   otk: ReturnType<typeof generateDhKeyPair>
 ): DeviceState => ({
-  version: 15,
+  version: DEVICE_VERSION,
   deviceId,
   identity: {
     publicKey: bytesToBase64(identity.publicKey),
@@ -108,7 +110,7 @@ const buildRecipientState = (
 
 describe('E2EEClient device fingerprint handling', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
     mockGetPrekeyStock.mockResolvedValue(10);
     mockUploadPrekeys.mockResolvedValue();
     mockRegisterDevice.mockResolvedValue();
@@ -289,6 +291,7 @@ describe('E2EEClient device fingerprint handling', () => {
 
     const encrypted = await sender.encryptForUser(targetUserId, 'm-recover', 'rebuild-me');
     expect(encrypted).not.toBeNull();
+    expect(encrypted!.envelope.keyRef).toBe(`otk:${recipientOtk.publicKey}`);
 
     mockListDeviceBundles.mockClear();
     mockClaimPrekey.mockClear();
@@ -300,8 +303,8 @@ describe('E2EEClient device fingerprint handling', () => {
     );
 
     expect(plaintext).toBe('rebuild-me');
-    expect(mockListDeviceBundles).toHaveBeenCalledWith(targetUserId);
-    expect(mockClaimPrekey).toHaveBeenCalled();
+    
+    expect(mockLoadDeviceState).toHaveBeenCalled();
   });
 
   it('refreshes stale fingerprints when a different device ID arrives', async () => {
@@ -366,5 +369,65 @@ describe('E2EEClient device fingerprint handling', () => {
     expect((recipient as unknown as { state: DeviceState }).state.peerFingerprints?.[targetUserId]?.deviceId).toBe(
       newDevice,
     );
+  });
+
+  it('encrypts and decrypts boundary-length payloads without padding errors', async () => {
+    const targetUserId = 303;
+    const recipientDeviceId = 'padding-device';
+
+    const recipientIdentity = generateEd25519KeyPair();
+    const recipientSignedPrekey = generateDhKeyPair();
+    const recipientOtk1 = generateDhKeyPair();
+    const recipientOtk2 = generateDhKeyPair();
+    const recipientOtk3 = generateDhKeyPair();
+    const recipientSig = signPrekey(recipientIdentity.privateKey, recipientSignedPrekey.publicKey);
+
+    const buildBundle = (otk: ReturnType<typeof generateDhKeyPair>) => ({
+      deviceId: recipientDeviceId,
+      identityKeyPub: bytesToBase64(recipientIdentity.publicKey),
+      signedPrekeyPub: recipientSignedPrekey.publicKey,
+      signedPrekeySig: recipientSig,
+      oneTimePrekeyPub: otk.publicKey,
+    });
+
+    const bundleQueue = [recipientOtk1, recipientOtk2, recipientOtk3].map(buildBundle);
+
+    mockListDeviceBundles.mockResolvedValue([buildBundle(recipientOtk1)]);
+
+    mockClaimPrekey.mockImplementation(async () => bundleQueue.shift() ?? buildBundle(recipientOtk3));
+
+    const sender = new E2EEClient(buildSenderState());
+    const recipientState = buildRecipientState(
+      recipientDeviceId,
+      recipientIdentity,
+      recipientSignedPrekey,
+      recipientSig,
+      recipientOtk1,
+    );
+    recipientState.oneTimePrekeys = [recipientOtk1, recipientOtk2, recipientOtk3].map(otk => ({
+      publicKey: otk.publicKey,
+      privateKey: otk.privateKey,
+      uploaded: true,
+      createdAt: Date.now(),
+    }));
+    const recipient = new E2EEClient(recipientState);
+
+    const boundaryLengths = [56, 120, 184];
+
+    for (const [index, length] of boundaryLengths.entries()) {
+      const plaintext = 'x'.repeat(length);
+      const messageId = `padding-${index}`;
+
+      const encrypted = await sender.encryptForUser(targetUserId, messageId, plaintext);
+      expect(encrypted).not.toBeNull();
+
+      const decrypted = await recipient.decryptEnvelope(
+        { ...encrypted!.envelope, messageId },
+        false,
+        { senderId: targetUserId, sessionId: encrypted!.envelope.keyRef },
+      );
+
+      expect(decrypted).toBe(plaintext);
+    }
   });
 });
