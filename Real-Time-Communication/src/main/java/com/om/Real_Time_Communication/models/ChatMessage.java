@@ -58,7 +58,7 @@ public class ChatMessage {
     private byte[] iv;                     // nonce/iv
 
     @Lob
-    @Column(name = "ciphertext")
+    @Column(name = "ciphertext", columnDefinition = "LONGBLOB")
     private byte[] ciphertext;             // encrypted payload (opaque to server)
 
     @Column(name = "key_ref", length = 64)
