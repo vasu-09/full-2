@@ -708,6 +708,7 @@ export default function ViewListScreen() {
                 listName: listTitle,
                 description: listSummary?.description ?? '',
                 members: JSON.stringify(listSummary?.members ?? []),
+                listId: listId ?? '',
               },
             })
           }

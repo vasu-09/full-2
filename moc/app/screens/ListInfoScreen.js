@@ -1,27 +1,149 @@
 // ListInfoScreen.js
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useMemo, useState } from 'react';
 import {
-    FlatList,
-    Image,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  FlatList,
+  Image,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
+import apiClient from '../services/apiClient';
+import { getStoredSession } from '../services/authStorage';
+import { getAllContactsFromDb } from '../services/contactStorage';
+
 export default function ListInfoScreen() {
   const router = useRouter();
-  const { listName, description, members } = useLocalSearchParams();
-  const memberArr = members ? JSON.parse(members) : [];
+  const { listName, description, members, listId: rawListId } = useLocalSearchParams();
   const insets = useSafeAreaInsets();
+  const memberArr = useMemo(() => (members ? JSON.parse(members) : []), [members]);
+  const listId = useMemo(() => {
+    if (Array.isArray(rawListId)) {
+      return rawListId[0];
+    }
+    return rawListId ?? null;
+  }, [rawListId]);
+  const [recipients, setRecipients] = useState(memberArr);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [listTitle, setListTitle] = useState(listName ?? '');
+
+  useEffect(() => {
+    setListTitle(listName ?? '');
+  }, [listName]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchRecipients = async () => {
+      if (!listId) {
+        setErrorMessage('Missing list identifier.');
+        setRecipients(memberArr);
+        return;
+      }
+
+      setIsLoading(true);
+      setErrorMessage('');
+
+      try {
+        const session = await getStoredSession();
+        const userId = session?.userId ? String(session.userId) : null;
+
+        if (!userId) {
+          setErrorMessage('Missing account information. Please sign in again.');
+          setRecipients(memberArr);
+          return;
+        }
+
+        const { data } = await apiClient.get(
+          `/api/lists/${encodeURIComponent(listId)}/recipients`,
+          { headers: { 'X-User-Id': userId } },
+        );
+
+        if (data?.title && !listTitle) {
+          setListTitle(String(data.title));
+        }
+
+        const recipientIds = Array.isArray(data?.recipientUserIds) ? data.recipientUserIds : [];
+        const contacts = await getAllContactsFromDb();
+
+        const normalizedRecipients = recipientIds.map((recipientId) => {
+          const matchedContact = contacts.find(
+            (contact) => String(contact.matchUserId) === String(recipientId),
+          );
+
+          return {
+            id: String(recipientId),
+            name: matchedContact?.name ?? `User ${recipientId}`,
+            img: matchedContact?.imageUri ?? null,
+            phone: matchedContact?.matchPhone ?? null,
+          };
+        });
+
+        if (isMounted) {
+          setRecipients(normalizedRecipients);
+          if (!normalizedRecipients.length) {
+            setErrorMessage('No recipients yet.');
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load recipients', error);
+        if (isMounted) {
+          setErrorMessage('Unable to load recipients right now. Please try again later.');
+          setRecipients(memberArr);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    fetchRecipients();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [listId, memberArr]);
 
   const renderMember = ({ item }) => (
     <View style={styles.memberRow}>
-      <Image source={{ uri: item.img }} style={styles.avatar} />
-      <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
+      {item.img ? (
+        <Image source={{ uri: item.img }} style={styles.avatar} />
+      ) : (
+        <View style={[styles.avatar, styles.placeholderAvatar]}>
+          <Icon name="person" size={20} color="#888" />
+        </View>
+      )}
+      <View style={styles.memberText}>
+        <Text style={styles.name} numberOfLines={1}>
+          {item.name}
+        </Text>
+        {item.phone ? (
+          <Text style={styles.subText} numberOfLines={1}>
+            {item.phone}
+          </Text>
+        ) : null}
+      </View>
+    </View>
+  );
+
+  const renderEmpty = () => (
+    <View style={styles.emptyState}>
+      {isLoading ? (
+        <>
+          <ActivityIndicator size="small" color="#1f6ea7" />
+          <Text style={styles.emptyText}>Loading recipients…</Text>
+        </>
+      ) : (
+        <Text style={styles.emptyText}>{errorMessage || 'No recipients yet.'}</Text>
+      )}
     </View>
   );
 
@@ -34,7 +156,7 @@ export default function ListInfoScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
           <Icon name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{listName}</Text>
+        <Text style={styles.headerTitle}>{listTitle}</Text>
         <TouchableOpacity onPress={() => {/* TODO: more menu */}} style={styles.iconBtn}>
                   <Icon name="person-add" size={24} color="#fff" />
                 </TouchableOpacity>
@@ -56,11 +178,12 @@ export default function ListInfoScreen() {
        <View style={[styles.card, styles.sectionContainer]}>
           <Text style={styles.section}>Shared With</Text>
           <FlatList
-            data={memberArr}
+            data={recipients}
             keyExtractor={item => item.id}
             renderItem={renderMember}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
+            ListEmptyComponent={renderEmpty}
           />
         </View>
 
@@ -131,5 +254,14 @@ const styles = StyleSheet.create({
     borderBottomColor: '#ddd',
   },
   avatar: { width: 40, height: 40, borderRadius: 20, marginRight: 12 },
+  placeholderAvatar: {
+    backgroundColor: '#f2f2f2',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  memberText: { flex: 1 },
   name: { fontSize: 16, flexShrink: 1, color: '#333' },
+  subText: { fontSize: 12, color: '#777', marginTop: 2 },
+  emptyState: { paddingVertical: 24, alignItems: 'center' },
+  emptyText: { marginTop: 8, color: '#666', fontSize: 13 },
 });
