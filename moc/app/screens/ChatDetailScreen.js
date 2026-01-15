@@ -96,32 +96,37 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
         : '#777';
   const showClock = item.pending || item.failed;
   const decryptionFailed = Boolean(item?.raw?.decryptionFailed);
-  const tablePayload = useMemo(() => {
+  const todoPayload = useMemo(() => {
     if (decryptionFailed || !messageText || typeof messageText !== 'string') {
       return null;
     }
     try {
       const parsed = JSON.parse(messageText);
-      if (parsed?.type !== 'todo_table' || !Array.isArray(parsed?.rows)) {
-        return null;
+      if (parsed?.type === 'todo_table' && Array.isArray(parsed?.rows)) {
+        return parsed;
       }
-      return parsed;
+      if (parsed?.type === 'todo_list' && Array.isArray(parsed?.items)) {
+        return parsed;
+      }
+      return null;
     } catch {
       return null;
     }
   }, [decryptionFailed, messageText]);
-  const tableRows = tablePayload?.rows ?? [];
+  const isTablePayload = todoPayload?.type === 'todo_table';
+  const tableRows = isTablePayload ? (todoPayload?.rows ?? []) : [];
+  const listItems = todoPayload?.type === 'todo_list' ? (todoPayload?.items ?? []) : [];
   const tableTotal = useMemo(() => {
-    if (!tablePayload) return null;
-    if (tablePayload.total) {
-      return tablePayload.total;
+    if (!isTablePayload) return null;
+    if (todoPayload?.total) {
+      return todoPayload.total;;
     }
     const totalValue = tableRows.reduce((sum, row) => {
       const rowValue = parseInt(String(row?.price ?? '').replace(/[^0-9]/g, ''), 10) || 0;
       return sum + rowValue;
     }, 0);
     return `₹${totalValue}`;
-  }, [tablePayload, tableRows]);
+  }, [isTablePayload, todoPayload, tableRows]);
   return (
     <View style={styles.messageContentRow}>
       {item.audio ? (
@@ -141,40 +146,53 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
         </View>
       ) : (
         <View style={[styles.messageTextFlex, styles.messageTextWrapper]}>
-          {tablePayload ? (
+          {todoPayload ? (
             <View style={styles.tableWrapper}>
-              {tablePayload.title ? (
-                <Text style={styles.tableTitle}>{tablePayload.title}</Text>
+              {todoPayload.title ? (
+                <Text style={styles.tableTitle}>{todoPayload.title}</Text>
               ) : null}
-              <View style={styles.tableHeaderRow}>
-                <Text style={[styles.tableCell, styles.tableIndexCell, styles.tableHeaderText]}>
-                  #
-                </Text>
-                <Text style={[styles.tableCell, styles.tableItemCell, styles.tableHeaderText]}>
-                  Item
-                </Text>
-                <Text style={[styles.tableCell, styles.tableQtyCell, styles.tableHeaderText]}>
-                  Qty
-                </Text>
-                <Text style={[styles.tableCell, styles.tablePriceCell, styles.tableHeaderText]}>
-                  Price
-                </Text>
-              </View>
-              {tableRows.map((row, index) => (
-                <View style={styles.tableRow} key={`${row?.name ?? 'row'}-${index}`}>
-                  <Text style={[styles.tableCell, styles.tableIndexCell]}>{index + 1}.</Text>
-                  <Text style={[styles.tableCell, styles.tableItemCell]}>{row?.name}</Text>
-                  <Text style={[styles.tableCell, styles.tableQtyCell]}>{row?.qty}</Text>
-                  <Text style={[styles.tableCell, styles.tablePriceCell]}>{row?.price}</Text>
+              {isTablePayload ? (
+                <>
+                  <View style={styles.tableHeaderRow}>
+                    <Text style={[styles.tableCell, styles.tableIndexCell, styles.tableHeaderText]}>
+                      #
+                    </Text>
+                    <Text style={[styles.tableCell, styles.tableItemCell, styles.tableHeaderText]}>
+                      Item
+                    </Text>
+                    <Text style={[styles.tableCell, styles.tableQtyCell, styles.tableHeaderText]}>
+                      Qty
+                    </Text>
+                    <Text style={[styles.tableCell, styles.tablePriceCell, styles.tableHeaderText]}>
+                      Price
+                    </Text>
+                  </View>
+                  {tableRows.map((row, index) => (
+                    <View style={styles.tableRow} key={`${row?.name ?? 'row'}-${index}`}>
+                      <Text style={[styles.tableCell, styles.tableIndexCell]}>{index + 1}.</Text>
+                      <Text style={[styles.tableCell, styles.tableItemCell]}>{row?.name}</Text>
+                      <Text style={[styles.tableCell, styles.tableQtyCell]}>{row?.qty}</Text>
+                      <Text style={[styles.tableCell, styles.tablePriceCell]}>{row?.price}</Text>
+                    </View>
+                  ))}
+                  <View style={styles.tableTotalRow}>
+                    <Text style={[styles.tableCell, styles.tableTotalLabel]}>Total</Text>
+                    <Text style={[styles.tableCell, styles.tablePriceCell, styles.tableTotalValue]}>
+                      {tableTotal}
+                    </Text>
+                  </View>
+                </>
+              ) : (
+                <View style={styles.todoListRows}>
+                  {listItems.map((row, index) => (
+                    <View style={styles.todoListRow} key={`${row?.name ?? 'row'}-${index}`}>
+                      <Text style={styles.todoListIndex}>{index + 1}.</Text>
+                      <Text style={styles.todoListText}>{row?.name}</Text>
+                    </View>
+                  ))}
                 </View>
-              ))}
-              <View style={styles.tableTotalRow}>
-                <Text style={[styles.tableCell, styles.tableTotalLabel]}>Total</Text>
-                <Text style={[styles.tableCell, styles.tablePriceCell, styles.tableTotalValue]}>
-                  {tableTotal}
-                </Text>
-              </View>
-                {item.time ? (
+              )}
+              {item.time ? (
                 <View style={styles.tableMetaRow}>
                   <Text
                     style={[
@@ -260,7 +278,10 @@ const isTableMessage = message => {
   }
   try {
     const parsed = JSON.parse(message);
-    return parsed?.type === 'todo_table' && Array.isArray(parsed?.rows);
+     return (
+      (parsed?.type === 'todo_table' && Array.isArray(parsed?.rows)) ||
+      (parsed?.type === 'todo_list' && Array.isArray(parsed?.items))
+    );
   } catch {
     return false;
   }
@@ -1450,13 +1471,18 @@ export default function ChatDetailScreen() {
               <TouchableOpacity
                 onPress={() => {
                   const previewItems = [];
-                 const items = selectedListData?.items ?? [];
+                  const items = selectedListData?.items ?? [];
 
                   items.forEach((item, idx) => {
                     const st = todoState[idx];
-                     if (!st?.checked && !(st?.subChecked ?? []).some(Boolean)) return;
+                    if (!st?.checked && !(st?.subChecked ?? []).some(Boolean)) return;
 
-                     const basePrice = parseInt((item.priceText ?? '').replace(/[^0-9]/g, ''), 10) || 0;
+                    if (!isDetailedTodoList) {
+                      previewItems.push({ name: item.itemName });
+                      return;
+                    }
+
+                    const basePrice = parseInt((item.priceText ?? '').replace(/[^0-9]/g, ''), 10) || 0;
                     let total = 0;
                     if (st?.checked) total += basePrice * (st?.count ?? 1);
                     (item.subQuantities ?? []).forEach((sub, si) => {
@@ -1491,10 +1517,14 @@ export default function ChatDetailScreen() {
                     previewItems.push({ name: item.itemName, qty: qtyText, price: `₹${total}` });
                   });
 
+                  const previewPayload = isDetailedTodoList
+                    ? { type: 'todo_table', title: selectedListData?.title ?? undefined, rows: previewItems }
+                    : { type: 'todo_list', title: selectedListData?.title ?? undefined, items: previewItems };
+
                   router.push({
                     pathname: '/screens/SelectedPreview',
                     params: {
-                      preview: JSON.stringify(previewItems),
+                      preview: JSON.stringify(previewPayload),
                       roomId: roomId ?? undefined,
                       roomKey: roomKey ?? undefined,
                       peerId: peerId ?? undefined,
@@ -1898,6 +1928,24 @@ const styles = StyleSheet.create({
   tableTotalValue: {
     fontWeight: '700',
     color: '#0f172a',
+  },
+  todoListRows: {
+    marginTop: 4,
+  },
+  todoListRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 2,
+  },
+  todoListIndex: {
+    fontSize: 13,
+    color: '#1f2d3d',
+    width: 20,
+  },
+  todoListText: {
+    flexShrink: 1,
+    fontSize: 13,
+    color: '#1f2d3d',
   },
   messageTextFlex: {
     flexShrink: 1,

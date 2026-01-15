@@ -30,17 +30,27 @@ export default function SelectedPreview() {
   });
 
   // parse the passed data
-  let items = [];
-  try { items = JSON.parse(preview || '[]'); }
-  catch {}
+  let previewPayload = null;
+  try {
+    previewPayload = JSON.parse(preview || '[]');
+  } catch {
+    previewPayload = null;
+  }
 
-  const rows = items.map(item => ({
-    name: item.name,
-    qty: item.qty,
-    price: item.price,
+  const isLegacyArray = Array.isArray(previewPayload);
+  const listType = isLegacyArray ? 'todo_table' : previewPayload?.type ?? 'todo_table';
+  const isTableList = listType === 'todo_table';
+  const parsedItems = isLegacyArray
+    ? previewPayload
+    : (isTableList ? previewPayload?.rows : previewPayload?.items) ?? [];
+
+  const rows = parsedItems.map(item => ({
+    name: item?.name ?? item?.itemName,
+    qty: item?.qty,
+    price: item?.price,
   }));
   const totalValue = rows.reduce((sum, row) => {
-    const rowValue = parseInt(String(row.price ?? '').replace(/[^0-9]/g, ''), 10) || 0;
+    const rowValue = parseInt(String(row?.price ?? '').replace(/[^0-9]/g, ''), 10) || 0;
     return sum + rowValue;
   }, 0);
   const total = `₹${totalValue}`;
@@ -58,15 +68,19 @@ export default function SelectedPreview() {
 
       {/* list */}
       <FlatList
-        data={items}
+        data={rows}
         keyExtractor={(_, i) => i.toString()}
         contentContainerStyle={{ padding: 16 }}
         renderItem={({ item, index }) => (
           <View style={styles.row}>
             <Text style={[styles.cell, { flex: 0.5 }]}>{index + 1}.</Text>
             <Text style={[styles.cell, { flex: 2 }]}>{item.name}</Text>
-            <Text style={[styles.cell, { flex: 2 }]}>{item.qty}</Text>
-            <Text style={[styles.cell, { flex: 1, textAlign: 'right' }]}>{item.price}</Text>
+            {isTableList ? (
+              <>
+                <Text style={[styles.cell, { flex: 2 }]}>{item.qty}</Text>
+                <Text style={[styles.cell, { flex: 1, textAlign: 'right' }]}>{item.price}</Text>
+              </>
+            ) : null}
           </View>
         )}
       />
@@ -77,12 +91,18 @@ export default function SelectedPreview() {
         onPress={async () => {
           if (isSending) return;
           setIsSending(true);
-          const payload = {
-            type: 'todo_table',
-            title: listTitle,
-            rows,
-            total,
-          };
+          const payload = isTableList
+            ? {
+                type: 'todo_table',
+                title: listTitle,
+                rows,
+                total,
+              }
+            : {
+                type: 'todo_list',
+                title: listTitle,
+                items: rows.map(row => ({ name: row.name })),
+              };
           const serializedPayload = JSON.stringify(payload);
           const sent = await sendTextMessage(serializedPayload);
           setIsSending(false);
