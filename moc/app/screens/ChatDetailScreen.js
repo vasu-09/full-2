@@ -168,7 +168,13 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
                     </Text>
                   </View>
                   {tableRows.map((row, index) => (
-                    <View style={styles.tableRow} key={`${row?.name ?? 'row'}-${index}`}>
+                    <View
+                      style={[
+                        styles.tableRow,
+                        index < tableRows.length - 1 ? styles.tableRowDivider : null,
+                      ]}
+                      key={`${row?.name ?? 'row'}-${index}`}
+                    >
                       <Text style={[styles.tableCell, styles.tableIndexCell]}>{index + 1}.</Text>
                       <Text style={[styles.tableCell, styles.tableItemCell]}>{row?.name}</Text>
                       <Text style={[styles.tableCell, styles.tableQtyCell]}>{row?.qty}</Text>
@@ -185,7 +191,13 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
               ) : (
                 <View style={styles.todoListRows}>
                   {listItems.map((row, index) => (
-                    <View style={styles.todoListRow} key={`${row?.name ?? 'row'}-${index}`}>
+                    <View
+                      style={[
+                        styles.todoListRow,
+                        index < listItems.length - 1 ? styles.todoListRowDivider : null,
+                      ]}
+                      key={`${row?.name ?? 'row'}-${index}`}
+                    >
                       <Text style={styles.todoListIndex}>{index + 1}.</Text>
                       <Text style={styles.todoListText}>{row?.name}</Text>
                     </View>
@@ -1929,6 +1941,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#0f172a',
   },
+  tableRowDivider: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#a8aaadff',
+    paddingBottom: 6,
+    marginBottom: 6,
+  },
   todoListRows: {
     marginTop: 4,
   },
@@ -1936,6 +1954,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     paddingVertical: 2,
+  },
+  todoListRowDivider: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#999a9bff',
+    paddingBottom: 6,
+    marginBottom: 6,
   },
   todoListIndex: {
     fontSize: 13,
