@@ -230,7 +230,7 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
           ) : null}
         </View>
       )}
-       {tablePayload ? null : showClock ? (
+       {todoPayload ? null : showClock ? (
         <View style={styles.messageStatusRow}>
           {item.time ? (
             <Text
