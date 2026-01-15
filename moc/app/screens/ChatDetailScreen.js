@@ -590,6 +590,15 @@ export default function ChatDetailScreen() {
   }, [buildTodoState, currentUserId, normalizeItems, phoneNumber]);
 
   const [todoState, setTodoState] = useState([]);
+  const isDetailedTodoList = useMemo(() => {
+    const items = selectedListData?.items ?? [];
+    return items.some(
+      item =>
+        item?.quantity ||
+        item?.priceText ||
+        (item?.subQuantities?.length ?? 0) > 0,
+    );
+  }, [selectedListData]);
 
   useEffect(() => {
     if (showListPicker && !selectedListId && !sharedListsLoading && !hasFetchedSharedLists) {
@@ -838,6 +847,7 @@ export default function ChatDetailScreen() {
       count: 1,
       subChecked: subQuantities.map(() => false),
     };
+    const showSubQuantities = subQuantities.length > 0;
     const unitPrice = parseInt((item.priceText ?? '').replace(/[^0-9]/gm, ''), 10) || 0;
     const displayedPrice = st.checked && unitPrice ? `₹${unitPrice * st.count}` : (item.priceText ?? '');
 
@@ -848,29 +858,33 @@ export default function ChatDetailScreen() {
             <TouchableOpacity onPress={() => toggleCheck(index)} style={{ marginRight: 8 }}>
               <Icon name={st.checked ? 'check-box' : 'check-box-outline-blank'} size={24} color="#1f6ea7" />
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => toggleExpand(index)} style={{ marginRight: 8 }}>
-              <Icon name={st.expanded ? 'arrow-drop-up' : 'arrow-drop-down'} size={28} color="#333" />
-            </TouchableOpacity>
+            {showSubQuantities ? (
+              <TouchableOpacity onPress={() => toggleExpand(index)} style={{ marginRight: 8 }}>
+                <Icon name={st.expanded ? 'arrow-drop-up' : 'arrow-drop-down'} size={28} color="#333" />
+              </TouchableOpacity>
+            ) : null}
             <Text style={styles.todoTitle}>{item.itemName}</Text>
           </View>
-          <View style={styles.todoRight}>
-            <Text style={styles.todoQty}>× {item.quantity || ''}</Text>
-            {st.checked && (
-              <View style={styles.counter}>
-                <TouchableOpacity onPress={() => dec(index)}>
-                  <Text style={styles.counterBtn}>–</Text>
-                </TouchableOpacity>
-                <Text style={styles.counterLabel}>{st.count}</Text>
-                <TouchableOpacity onPress={() => inc(index)}>
-                  <Text style={styles.counterBtn1}>＋</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-            <Text style={styles.todoPrice}>{displayedPrice}</Text>
-          </View>
+          {isDetailedTodoList ? (
+            <View style={styles.todoRight}>
+              <Text style={styles.todoQty}>× {item.quantity || ''}</Text>
+              {st.checked && unitPrice ? (
+                <View style={styles.counter}>
+                  <TouchableOpacity onPress={() => dec(index)}>
+                    <Text style={styles.counterBtn}>–</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.counterLabel}>{st.count}</Text>
+                  <TouchableOpacity onPress={() => inc(index)}>
+                    <Text style={styles.counterBtn1}>＋</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+              <Text style={styles.todoPrice}>{displayedPrice}</Text>
+            </View>
+          ) : null}
         </View>
 
-        {st.expanded && (
+        {showSubQuantities && st.expanded && (
           <View style={styles.subContainer}>
             {subQuantities.map((sub, si) => (
               <View key={si} style={styles.subRow}>
