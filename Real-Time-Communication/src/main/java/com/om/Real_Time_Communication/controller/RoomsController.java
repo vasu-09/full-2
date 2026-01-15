@@ -11,7 +11,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
-import lombok.RequiredArgsConstructor;
 
 import java.nio.file.AccessDeniedException;
 import java.security.Principal;
@@ -25,8 +24,6 @@ import java.util.Map;
 @CrossOrigin(origins = "${cors.allowed-origins}")
 public class RoomsController {
     private final ChatRoomService chatRoomService;
-    // private final MessageService messageService;
-    // private final ReadReceiptService readReceiptService;
 
     private final MessagePagingService paging;
     private final MessageDtoMapper mapper; // map entity -> DTO

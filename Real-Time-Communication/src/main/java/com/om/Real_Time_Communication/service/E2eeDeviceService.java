@@ -1,6 +1,5 @@
 package com.om.Real_Time_Communication.service;
 
-
 import com.om.Real_Time_Communication.Repository.E2eeDeviceRepository;
 import com.om.Real_Time_Communication.Repository.E2eeOneTimePrekeyRepository;
 import com.om.Real_Time_Communication.dto.DeviceBundleDto;
@@ -14,7 +13,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.Arrays;
 import java.util.ArrayList;
 import org.slf4j.Logger;
 import java.util.HexFormat;
@@ -163,7 +161,6 @@ public class E2eeDeviceService {
                 req.getKeyVersion());
         return claimOneTimePrekey(req.getTargetUserId(), req.getTargetDeviceId());
     }
-
 
     @Transactional(readOnly = true)
     public long availablePrekeys(Long userId, String deviceId) {

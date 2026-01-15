@@ -382,9 +382,6 @@ public class MessageService {
         messageRepository.save(message);
     }
 
-
-
-
     private Message toEntity(MessageDto messageDto) {
         Message message = new Message();
         message.setGroupMessage(messageDto.getGroupMessage());
@@ -532,10 +529,6 @@ public class MessageService {
                 .map(this::toDto)
                 .collect(Collectors.toList());
     }
-
-
-
-
 
     /** Stable broadcast/event shape for subscribers (ascending compatible). */
     public Map<String, Object> toRoomEvent(ChatMessage m) {

@@ -1,6 +1,5 @@
 package com.om.Real_Time_Communication.config;
 
-
 import com.om.Real_Time_Communication.Repository.ChatRoomParticipantRepository;
 import com.om.Real_Time_Communication.Repository.ChatRoomRepository;
 import com.om.Real_Time_Communication.models.ChatRoom;
@@ -280,7 +279,6 @@ public class StompSecurityInterceptor implements ChannelInterceptor {
         int min = Math.min(slash, dot);
         return min == Integer.MAX_VALUE ? -1 : min;
     }
-
 
     /**
      * Minimal Principal that carries userId as name for STOMP APIs.

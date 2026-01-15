@@ -8,7 +8,6 @@ import com.om.Real_Time_Communication.models.*;
 import com.om.Real_Time_Communication.service.*;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.MessageMapping;
@@ -20,12 +19,10 @@ import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 
-import java.nio.file.AccessDeniedException;
 import java.security.Principal;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import java.util.List;
 import java.util.Map;
 
 
@@ -138,7 +135,4 @@ public class MessageController {
             throw new RuntimeException("Invalid metadata format: " + metadata);
         }
     }
-
-
-
 }

@@ -174,6 +174,29 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
                   {tableTotal}
                 </Text>
               </View>
+                {item.time ? (
+                <View style={styles.tableMetaRow}>
+                  <Text
+                    style={[
+                      styles.tableTime,
+                      item.sender === 'me' ? styles.myTime : styles.theirTime,
+                      item.pending ? styles.pendingTime : null,
+                      item.failed ? styles.failedTime : null,
+                      { color: statusColor },
+                    ]}
+                  >
+                    {item.time}
+                  </Text>
+                  {showClock ? (
+                    <Icon
+                      name="schedule"
+                      size={12}
+                      color={statusColor}
+                      style={styles.statusIcon}
+                    />
+                  ) : null}
+                </View>
+              ) : null}
             </View>
           ) : (
             <Text style={styles.messageText}>{messageText}</Text>
@@ -189,7 +212,7 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
           ) : null}
         </View>
       )}
-      {showClock ? (
+       {tablePayload ? null : showClock ? (
         <View style={styles.messageStatusRow}>
           {item.time ? (
             <Text
@@ -1811,6 +1834,15 @@ const styles = StyleSheet.create({
     borderTopColor: '#cfd8dc',
     paddingTop: 6,
     marginTop: 6,
+  },
+  tableMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginTop: 6,
+  },
+  tableTime: {
+    fontSize: 10,
   },
   tableCell: {
     fontSize: 13,
