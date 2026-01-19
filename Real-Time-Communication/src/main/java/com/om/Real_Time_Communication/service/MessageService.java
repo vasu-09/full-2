@@ -19,6 +19,7 @@ import org.springframework.web.socket.WebSocketSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.AccessDeniedException;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -232,9 +233,10 @@ public class MessageService {
         unhideDirectRoomForUser(senderId, dto.getReceiverId());
         unhideDirectRoomForUser(dto.getReceiverId(), senderId);
 
+        UUID receiverUuid = UUID.nameUUIDFromBytes(String.valueOf(receiverId).getBytes(StandardCharsets.UTF_8));
         eventPublisher.publish(
                 new EventMessage(
-                        UUID.fromString(String.valueOf(receiverId)),
+                        receiverUuid,
                         "NEW_MESSAGE",
                         Map.of(
                                 "senderId", senderId,

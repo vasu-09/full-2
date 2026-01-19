@@ -19,11 +19,14 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.web.socket.WebSocketSession;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -44,13 +47,15 @@ class MessageServiceTest {
     @Mock ChatRoomService aclService;
     @Mock DirectRoomPolicy directPolicy;
     @Mock RoomMembershipService membership;
+    @Mock UndeliveredMessageStore undeliveredStore;
+    @Mock InboxDeliveryService inboxDeliveryService;
 
     @InjectMocks
     MessageService service;
 
     @BeforeEach
     void setup() {
-        when(blockService.isBlocked(anyString(), anyString())).thenReturn(false);
+        lenient().when(blockService.isBlocked(anyString(), anyString())).thenReturn(false);
     }
 
     @Test
@@ -64,7 +69,10 @@ class MessageServiceTest {
         saved.setMessageId("m1");
         saved.setTimestamp(LocalDateTime.now());
         when(messageRepository.save(any())).thenReturn(saved);
-        when(sessionRegistry.hasActive(2L)).thenReturn(true);
+        WebSocketSession session = mock(WebSocketSession.class);
+        when(session.isOpen()).thenReturn(true);
+        when(session.getId()).thenReturn("session-1");
+        when(sessionRegistry.getSessions(2L)).thenReturn(Set.of(session));
 
         MessageDto dto = new MessageDto();
         dto.setSenderId("1");
@@ -76,9 +84,9 @@ class MessageServiceTest {
         MessageDto result = service.handlePrivateMessage(dto);
         assertEquals("m1", result.getMessageId());
 
-        verify(messagingTemplate).convertAndSendToUser(eq("2"), anyString(), eq(dto));
+        verify(messagingTemplate).convertAndSendToUser(eq("2"), anyString(), eq(dto), any(Map.class));
         verify(messagingTemplate).convertAndSendToUser(eq("1"), anyString(), eq(dto));
-        verify(eventPublisher, never()).publishOfflineMessage(anyString(), any());
+        verify(eventPublisher).publish(any());
     }
 
     @Test
@@ -92,7 +100,7 @@ class MessageServiceTest {
         saved.setMessageId("m2");
         saved.setTimestamp(LocalDateTime.now());
         when(messageRepository.save(any())).thenReturn(saved);
-        when(sessionRegistry.hasActive(3L)).thenReturn(false);
+        when(sessionRegistry.getSessions(3L)).thenReturn(Set.of());
 
         MessageDto dto = new MessageDto();
         dto.setSenderId("1");
@@ -103,9 +111,10 @@ class MessageServiceTest {
 
         service.handlePrivateMessage(dto);
 
-        verify(eventPublisher).publishOfflineMessage("3", dto);
+        verify(eventPublisher).publish(any());
+        verify(undeliveredStore).record(eq(3L), anyString(), any());
         verify(messagingTemplate).convertAndSendToUser(eq("1"), anyString(), eq(dto));
-        verify(messagingTemplate, never()).convertAndSendToUser(eq("3"), anyString(), eq(dto));
+        verify(messagingTemplate, never()).convertAndSendToUser(eq("3"), anyString(), eq(dto), any(Map.class));
     }
 
     @Test
@@ -170,7 +179,11 @@ class MessageServiceTest {
         ChatSendDto dto = new ChatSendDto();
         dto.setMessageId("g1");
         dto.setType(MessageType.TEXT);
-        dto.setBody("hello group");
+        dto.setE2ee(true);
+        dto.setAlgo("AES-GCM");
+        dto.setKeyRef("k1");
+        dto.setIv(new byte[] {1, 2, 3});
+        dto.setCiphertext(new byte[] {4, 5, 6});
 
         ChatMessage saved = new ChatMessage();
         saved.setMessageId("g1");
@@ -178,6 +191,7 @@ class MessageServiceTest {
         saved.setSenderId(1L);
         saved.setServerTs(Instant.now());
         saved.setType(MessageType.TEXT);
+        saved.setE2ee(true);
         when(chatMessageRepository.findByRoomIdAndMessageId(10L, "g1")).thenReturn(Optional.empty());
         when(chatMessageRepository.save(any())).thenReturn(saved);
         when(aclService.canPublish(1L, Long.valueOf("10"))).thenReturn(true);
@@ -187,7 +201,8 @@ class MessageServiceTest {
         service.saveInbound(10L, 1L, dto);
 
         ArgumentCaptor<List<Long>> captor = ArgumentCaptor.forClass(List.class);
-        verify(eventPublisher).publishNewMessage(eq(10L), eq("g1"), eq(1L), captor.capture(), eq(false), any());
+        verify(eventPublisher).publishNewMessage(eq(10L), eq("g1"), eq(1L), captor.capture(), eq(true), isNull());
+        verify(inboxDeliveryService).sendInboxEvent(saved);
         assertEquals(List.of(2L,3L), captor.getValue());
     }
 }

@@ -1,6 +1,7 @@
 package com.om.Real_Time_Communication;
 
 import com.om.Real_Time_Communication.Repository.ChatRoomRepository;
+import com.om.Real_Time_Communication.client.UserServiceClient;
 import com.om.Real_Time_Communication.models.ChatRoom;
 import com.om.Real_Time_Communication.models.ChatRoomType;
 import com.om.Real_Time_Communication.service.ChatRoomService;
@@ -8,6 +9,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.TestPropertySource;
 
 import java.util.concurrent.Callable;
@@ -35,6 +37,9 @@ class ChatRoomServiceConcurrencyTest {
 
     @Autowired
     private ChatRoomRepository chatRoomRepository;
+
+    @MockitoBean
+    private UserServiceClient userServiceClient;
 
     @AfterEach
     void cleanUp() {

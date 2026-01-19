@@ -5,6 +5,7 @@ import com.om.Real_Time_Communication.Repository.*;
 import com.om.Real_Time_Communication.dto.MessageDto;
 import com.om.Real_Time_Communication.models.Message;
 import com.om.Real_Time_Communication.models.MessageType;
+import com.om.Real_Time_Communication.security.SessionRegistry;
 import com.om.Real_Time_Communication.service.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -65,6 +66,26 @@ class MessageServiceIntegrationTest {
         RoomMembershipService membership() {
             return mock(RoomMembershipService.class);
         }
+
+        @Bean
+        SessionRegistry sessionRegistry() {
+            return new SessionRegistry();
+        }
+
+        @Bean
+        PendingMessageService pendingMessageService() {
+            return mock(PendingMessageService.class);
+        }
+
+        @Bean
+        UndeliveredMessageStore undeliveredMessageStore() {
+            return mock(UndeliveredMessageStore.class);
+        }
+
+        @Bean
+        InboxDeliveryService inboxDeliveryService() {
+            return mock(InboxDeliveryService.class);
+        }
     }
 
     @Autowired
@@ -94,9 +115,10 @@ class MessageServiceIntegrationTest {
                 for (int j = 0; j < perThread; j++) {
                     MessageDto dto = new MessageDto();
                     dto.setSenderId("s" + sender);
-                    dto.setReceiverId("r1");
+                    dto.setReceiverId("1");
                     dto.setContent("m" + sender + "-" + j);
                     dto.setType(MessageType.TEXT);
+                    dto.setMessageId("m-" + sender + "-" + j);
                     try {
                         messageService.handlePrivateMessage(dto);
                     } catch (Exception e) {
