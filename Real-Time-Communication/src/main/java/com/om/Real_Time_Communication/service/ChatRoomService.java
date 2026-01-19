@@ -8,7 +8,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import com.om.Real_Time_Communication.Repository.ChatRoomRepository;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 
@@ -31,9 +33,15 @@ public class ChatRoomService {
     @PersistenceContext
     private EntityManager entityManager;
 
+    private final TransactionTemplate transactionTemplate;
 
     private static final int MAX_GROUP_MEMBERS = 100;
 
+    @Autowired
+    public ChatRoomService(PlatformTransactionManager transactionManager) {
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
+        this.transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    }
 
     public ChatRoom createGroupChat(String groupName, List<String> phoneNumbers, String creatorId) {
 
@@ -82,7 +90,6 @@ public class ChatRoomService {
         return savedRoom;
     }
 
-    @Transactional(noRollbackFor = DataIntegrityViolationException.class)
     public ChatRoom createDirectChat(Long userId, Long otherUserId) {
         if (userId == null || otherUserId == null) {
             throw new IllegalArgumentException("Both user ids are required to create a direct chat");
@@ -94,9 +101,9 @@ public class ChatRoomService {
         String pairKey = ChatRoomRepository.buildDirectPairKey(userId, otherUserId);
 
         try {
-            return chatRoomRepository
+            return transactionTemplate.execute(status -> chatRoomRepository
                     .findDirectRoomForUpdate(pairKey, ChatRoomType.DIRECT)
-                    .orElseGet(() -> createDirectRoom(userId, otherUserId, pairKey));
+                    .orElseGet(() -> createDirectRoom(userId, otherUserId, pairKey)));
         } catch (DataIntegrityViolationException duplicatePair) {
             entityManager.clear();
             return chatRoomRepository
@@ -114,7 +121,7 @@ public class ChatRoomService {
         room.setAllowMembersToEditMetadata(false);
         room.setCreatedAt(LocalDateTime.now());
 
-        ChatRoom saved = chatRoomRepository.saveAndFlush(room);
+        ChatRoom saved = chatRoomRepository.save(room);
 
         ChatRoomParticipant p1 = new ChatRoomParticipant();
         p1.setUserId(userId);

@@ -17,6 +17,11 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import apiClient from '../services/apiClient';
 import { getStoredSession } from '../services/authStorage';
 import { getAllContactsFromDb } from '../services/contactStorage';
+import {
+  getListSummaryFromDb,
+  initializeDatabase,
+  saveListSummaryToDb,
+} from '../services/database';
 
 export default function ListInfoScreen() {
   const router = useRouter();
@@ -33,10 +38,51 @@ export default function ListInfoScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [listTitle, setListTitle] = useState(listName ?? '');
+  const [listDescription, setListDescription] = useState(description ?? '');
 
   useEffect(() => {
     setListTitle(listName ?? '');
   }, [listName]);
+
+  useEffect(() => {
+    setListDescription(description ?? '');
+  }, [description]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadCachedInfo = async () => {
+      if (!listId) {
+        return;
+      }
+
+      try {
+        await initializeDatabase();
+        const cached = await getListSummaryFromDb(String(listId));
+        if (!isMounted || !cached) {
+          return;
+        }
+
+        if (cached.title) {
+          setListTitle(cached.title);
+        }
+        if (cached.description) {
+          setListDescription(cached.description);
+        }
+        if (Array.isArray(cached.members) && cached.members.length) {
+          setRecipients(cached.members);
+        }
+      } catch (dbError) {
+        console.error('Failed to load cached list info', dbError);
+      }
+    };
+
+    loadCachedInfo();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [listId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -91,6 +137,18 @@ export default function ListInfoScreen() {
           if (!normalizedRecipients.length) {
             setErrorMessage('No recipients yet.');
           }
+        }
+
+        try {
+          await initializeDatabase();
+          await saveListSummaryToDb({
+            id: String(listId),
+            title: data?.title ?? listTitle ?? 'Untitled List',
+            description: data?.description ?? listDescription ?? null,
+            members: normalizedRecipients,
+          });
+        } catch (dbError) {
+          console.error('Failed to cache list recipients', dbError);
         }
       } catch (error) {
         console.error('Failed to load recipients', error);
@@ -169,8 +227,8 @@ export default function ListInfoScreen() {
         
        <View style={[styles.card, styles.sectionContainer]}>
         <Text style={styles.title}>Description</Text>
-          {description ? (
-            <Text style={styles.description}>{description}</Text>
+           {listDescription ? (
+            <Text style={styles.description}>{listDescription}</Text>
           ) : null}
         </View>
 

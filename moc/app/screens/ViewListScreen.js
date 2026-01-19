@@ -142,6 +142,8 @@ export default function ViewListScreen() {
             listSummary?.createdByUserId != null
               ? String(listSummary.createdByUserId)
               : null,
+              description: listSummary?.description ?? null,
+          members: Array.isArray(listSummary?.members) ? listSummary.members : null,
           items,
         });
       } catch (dbError) {
@@ -239,6 +241,10 @@ export default function ViewListScreen() {
             summaryPayload?.createdByUserId != null
               ? String(summaryPayload.createdByUserId)
               : cachedSummary?.createdByUserId ?? null,
+          description: summaryPayload?.description ?? cachedSummary?.description ?? null,
+          members: Array.isArray(summaryPayload?.members)
+            ? summaryPayload.members
+            : cachedSummary?.members ?? null,
           items: normalizedItems,
         });
       } catch (dbSaveError) {

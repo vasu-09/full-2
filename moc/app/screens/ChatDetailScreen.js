@@ -25,6 +25,7 @@ import { useChatRegistry } from '../context/ChatContext';
 import useCallSignalingHook from '../hooks/useCallSignaling';
 import { useChatSession } from '../hooks/useChatSession';
 import apiClient from '../services/apiClient';
+import { initializeDatabase, saveListSummaryToDb } from '../services/database';
 
 const BAR_HEIGHT = 56;
 const MESSAGE_BAR_HEIGHT = 48;
@@ -612,6 +613,24 @@ export default function ChatDetailScreen() {
 
       setSelectedListData(normalizedList);
       setTodoState(buildTodoState(normalizedItems));
+
+      try {
+        await initializeDatabase();
+        await saveListSummaryToDb({
+          id: normalizedList.id,
+          title: normalizedList.title,
+          listType: data?.listType ?? null,
+          createdAt: data?.createdAt ?? null,
+          updatedAt: data?.updatedAt ?? null,
+          createdByUserId:
+            data?.createdByUserId != null ? String(data.createdByUserId) : null,
+          description: data?.description ?? null,
+          members: Array.isArray(data?.members) ? data.members : null,
+          items: normalizedItems,
+        });
+      } catch (dbError) {
+        console.error('Failed to cache shared list', dbError);
+      }
     } catch (err) {
       console.error('Failed to fetch shared list', err);
       setSelectedListError('Unable to load this list right now.');

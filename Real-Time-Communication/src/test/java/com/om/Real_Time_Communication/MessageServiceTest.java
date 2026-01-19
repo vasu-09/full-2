@@ -70,7 +70,6 @@ class MessageServiceTest {
         saved.setTimestamp(LocalDateTime.now());
         when(messageRepository.save(any())).thenReturn(saved);
         WebSocketSession session = mock(WebSocketSession.class);
-        when(session.isOpen()).thenReturn(true);
         when(session.getId()).thenReturn("session-1");
         when(sessionRegistry.getSessions(2L)).thenReturn(Set.of(session));
 

@@ -8,6 +8,16 @@ export type ListRecordInput = {
   createdAt?: string | null;
   updatedAt?: string | null;
   createdByUserId?: string | null;
+  description?: string | null;
+  members?: ListMemberRecordInput[] | null;
+  membersJson?: string | null;
+};
+
+export type ListMemberRecordInput = {
+  id?: string | number | null;
+  name?: string | null;
+  img?: string | null;
+  phone?: string | null;
 };
 
 export type ListItemRecordInput = {
@@ -33,6 +43,8 @@ type ListRow = {
   created_at: string | null;
   updated_at: string | null;
   created_by_user_id: string | null;
+  description: string | null;
+  members_json: string | null;
 };
 
 type ItemRow = {
@@ -53,7 +65,7 @@ let localContactCounter = 0;
 let writeQueue: Promise<unknown> = Promise.resolve();
 
 const DB_NAME = 'moc-app.db';
-const CURRENT_SCHEMA_VERSION = 2;
+const CURRENT_SCHEMA_VERSION = 3;
 
 type MetaRow = {
   value: string;
@@ -172,7 +184,9 @@ const migrateToV1 = async (db: SQLite.SQLiteDatabase) => {
       pinned INTEGER DEFAULT 0,
       created_at TEXT,
       updated_at TEXT,
-      created_by_user_id TEXT
+      created_by_user_id TEXT,
+      description TEXT,
+      members_json TEXT
     );
   `);
   await db.execAsync(`
@@ -249,6 +263,24 @@ const migrateToV2 = async (db: SQLite.SQLiteDatabase) => {
   }
 };
 
+const migrateToV3 = async (db: SQLite.SQLiteDatabase) => {
+  try {
+    await db.execAsync('ALTER TABLE lists ADD COLUMN description TEXT;');
+  } catch (error) {
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.warn('Skipping description migration', error);
+    }
+  }
+
+  try {
+    await db.execAsync('ALTER TABLE lists ADD COLUMN members_json TEXT;');
+  } catch (error) {
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.warn('Skipping members_json migration', error);
+    }
+  }
+};
+
 const runMigrations = async (db: SQLite.SQLiteDatabase) => {
   await ensureMetaTable(db);
   let version = await getSchemaVersion(db);
@@ -265,6 +297,10 @@ const runMigrations = async (db: SQLite.SQLiteDatabase) => {
     if (version < 2) {
       await migrateToV2(tx);
       version = 2;
+    }
+    if (version < 3) {
+      await migrateToV3(tx);
+      version = 3;
     }
     await setSchemaVersion(tx, version);
   });
@@ -312,6 +348,23 @@ const parseSubQuantities = (value: string | null): { quantity?: string | null; p
   return [];
 };
 
+const parseListMembers = (value: string | null): ListMemberRecordInput[] => {
+  if (!value) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) {
+      return parsed as ListMemberRecordInput[];
+    }
+  } catch (error) {
+    console.warn('Failed to parse stored list members', error);
+  }
+
+  return [];
+};
+
 const serializeSubQuantities = (
   input?: { quantity?: string | null; priceText?: string | null }[] | null,
   fallbackJson?: string | null,
@@ -321,6 +374,22 @@ const serializeSubQuantities = (
       return JSON.stringify(input);
     } catch (error) {
       console.warn('Failed to serialize sub quantities', error);
+      return fallbackJson ?? null;
+    }
+  }
+
+  return fallbackJson ?? null;
+};
+
+const serializeListMembers = (
+  input?: ListMemberRecordInput[] | null,
+  fallbackJson?: string | null,
+): string | null => {
+  if (Array.isArray(input)) {
+    try {
+      return JSON.stringify(input);
+    } catch (error) {
+      console.warn('Failed to serialize list members', error);
       return fallbackJson ?? null;
     }
   }
@@ -587,7 +656,7 @@ const deserializeContactRow = (row: ContactRow): StoredContactInput => {
   } as StoredContactInput;
 };
 
-export const getListsFromDb = async (): Promise<{ id: string; title: string; listType: string | null; pinned: boolean; createdAt: string | null; updatedAt: string | null; createdByUserId: string | null }[]> => {
+export const getListsFromDb = async (): Promise<{ id: string; title: string; listType: string | null; pinned: boolean; createdAt: string | null; updatedAt: string | null; createdByUserId: string | null; description: string | null; members: ListMemberRecordInput[] }[]> => {
   const db = await getDatabase();
   const rows = (await db.getAllAsync<ListRow>('SELECT * FROM lists ORDER BY pinned DESC, COALESCE(updated_at, created_at) DESC, title COLLATE NOCASE ASC')) ?? [];
 
@@ -599,6 +668,8 @@ export const getListsFromDb = async (): Promise<{ id: string; title: string; lis
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     createdByUserId: row.created_by_user_id,
+    description: row.description,
+    members: parseListMembers(row.members_json),
   }));
 };
 
@@ -621,16 +692,19 @@ export const replaceListsInDb = async (lists: ListRecordInput[]): Promise<void> 
 
       for (const list of lists) {
               const pinnedValue = list.pinned ? 1 : 0;
+              const membersJson = serializeListMembers(list.members ?? null, list.membersJson ?? null);
               await tx.runAsync(
-                `INSERT INTO lists (id, title, list_type, pinned, created_at, updated_at, created_by_user_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                `INSERT INTO lists (id, title, list_type, pinned, created_at, updated_at, created_by_user_id, description, members_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                   title = excluded.title,
                   list_type = excluded.list_type,
                   pinned = excluded.pinned,
                   created_at = COALESCE(excluded.created_at, lists.created_at),
                   updated_at = COALESCE(excluded.updated_at, lists.updated_at),
-                  created_by_user_id = COALESCE(excluded.created_by_user_id, lists.created_by_user_id)
+                   created_by_user_id = COALESCE(excluded.created_by_user_id, lists.created_by_user_id),
+                  description = COALESCE(excluded.description, lists.description),
+                  members_json = COALESCE(excluded.members_json, lists.members_json)
                 `,
                 [
                   list.id,
@@ -640,6 +714,8 @@ export const replaceListsInDb = async (lists: ListRecordInput[]): Promise<void> 
                   list.createdAt ?? null,
                   list.updatedAt ?? null,
                   list.createdByUserId ?? null,
+                  list.description ?? null,
+                  membersJson,
                 ],
               );
             }
@@ -682,6 +758,8 @@ export const getListSummaryFromDb = async (
   createdAt: string | null;
   updatedAt: string | null;
   createdByUserId: string | null;
+  description: string | null;
+  members: ListMemberRecordInput[];
   items: {
     id: string;
     itemName: string;
@@ -723,6 +801,8 @@ export const getListSummaryFromDb = async (
     updatedAt: listRow.updated_at,
     createdByUserId: listRow.created_by_user_id,
     items,
+    description: listRow.description,
+    members: parseListMembers(listRow.members_json),
   };
 };
 
@@ -738,17 +818,20 @@ export const saveListSummaryToDb = async (summary: ListSummaryInput): Promise<vo
       await db.withExclusiveTransactionAsync(async (tx: SQLite.SQLiteDatabase) => {
       const existing = await tx.getFirstAsync<{ pinned: number }>('SELECT pinned FROM lists WHERE id = ?', [normalizedId]);
       const pinnedValue = summary.pinned != null ? (summary.pinned ? 1 : 0) : existing?.pinned ?? 0;
+      const membersJson = serializeListMembers(summary.members ?? null, summary.membersJson ?? null);
 
       await tx.runAsync(
-        `INSERT INTO lists (id, title, list_type, pinned, created_at, updated_at, created_by_user_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO lists (id, title, list_type, pinned, created_at, updated_at, created_by_user_id, description, members_json)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            title = excluded.title,
            list_type = excluded.list_type,
            pinned = excluded.pinned,
            created_at = COALESCE(excluded.created_at, lists.created_at),
            updated_at = COALESCE(excluded.updated_at, lists.updated_at),
-           created_by_user_id = COALESCE(excluded.created_by_user_id, lists.created_by_user_id)
+           created_by_user_id = COALESCE(excluded.created_by_user_id, lists.created_by_user_id),
+           description = COALESCE(excluded.description, lists.description),
+           members_json = COALESCE(excluded.members_json, lists.members_json)
         `,
         [
           normalizedId,
@@ -758,6 +841,8 @@ export const saveListSummaryToDb = async (summary: ListSummaryInput): Promise<vo
           summary.createdAt ?? null,
           summary.updatedAt ?? null,
           summary.createdByUserId ?? null,
+          summary.description ?? null,
+          membersJson,
         ],
       );
 
