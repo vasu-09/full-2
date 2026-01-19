@@ -9,6 +9,8 @@ import org.springframework.stereotype.Service;
 import com.om.Real_Time_Communication.Repository.ChatRoomRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.annotation.Transactional;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 
 import java.nio.file.AccessDeniedException;
 import java.time.LocalDateTime;
@@ -26,6 +28,8 @@ public class ChatRoomService {
     @Autowired
     private UserServiceClient userServiceClient;
 
+    @PersistenceContext
+    private EntityManager entityManager;
 
 
     private static final int MAX_GROUP_MEMBERS = 100;
@@ -78,7 +82,7 @@ public class ChatRoomService {
         return savedRoom;
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = DataIntegrityViolationException.class)
     public ChatRoom createDirectChat(Long userId, Long otherUserId) {
         if (userId == null || otherUserId == null) {
             throw new IllegalArgumentException("Both user ids are required to create a direct chat");
@@ -94,6 +98,7 @@ public class ChatRoomService {
                     .findDirectRoomForUpdate(pairKey, ChatRoomType.DIRECT)
                     .orElseGet(() -> createDirectRoom(userId, otherUserId, pairKey));
         } catch (DataIntegrityViolationException duplicatePair) {
+            entityManager.clear();
             return chatRoomRepository
                     .findByDirectPairKeyAndType(pairKey, ChatRoomType.DIRECT)
                     .orElseThrow(() -> duplicatePair);
@@ -109,7 +114,7 @@ public class ChatRoomService {
         room.setAllowMembersToEditMetadata(false);
         room.setCreatedAt(LocalDateTime.now());
 
-        ChatRoom saved = chatRoomRepository.save(room);
+        ChatRoom saved = chatRoomRepository.saveAndFlush(room);
 
         ChatRoomParticipant p1 = new ChatRoomParticipant();
         p1.setUserId(userId);
