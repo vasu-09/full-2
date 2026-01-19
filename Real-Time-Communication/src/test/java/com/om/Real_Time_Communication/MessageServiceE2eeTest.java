@@ -29,6 +29,7 @@ public class MessageServiceE2eeTest {
     private com.om.Real_Time_Communication.Repository.ChatMessageRepository chatRepo;
     private com.om.Real_Time_Communication.service.ChatRoomService aclService;
     private DirectRoomPolicy directPolicy;
+    private com.om.Real_Time_Communication.service.InboxDeliveryService inboxDeliveryService;
 
     @BeforeEach
     void setUp() {
@@ -36,10 +37,12 @@ public class MessageServiceE2eeTest {
         chatRepo = Mockito.mock(com.om.Real_Time_Communication.Repository.ChatMessageRepository.class);
         aclService = Mockito.mock(com.om.Real_Time_Communication.service.ChatRoomService.class);
         directPolicy = Mockito.mock(DirectRoomPolicy.class);
+        inboxDeliveryService = Mockito.mock(com.om.Real_Time_Communication.service.InboxDeliveryService.class);
 
         ReflectionTestUtils.setField(messageService, "chatMessageRepository", chatRepo);
         ReflectionTestUtils.setField(messageService, "aclService", aclService);
         ReflectionTestUtils.setField(messageService, "directPolicy", directPolicy);
+        ReflectionTestUtils.setField(messageService, "inboxDeliveryService", inboxDeliveryService);
     }
 
     @Test

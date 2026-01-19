@@ -15,6 +15,8 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import com.om.Real_Time_Communication.client.UserServiceClient;
 
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -53,11 +55,6 @@ class MessageServiceIntegrationTest {
         }
 
         @Bean
-        ChatRoomService aclService() {
-            return mock(ChatRoomService.class);
-        }
-
-        @Bean
         MessageService.DirectRoomPolicy directPolicy() {
             return mock(MessageService.DirectRoomPolicy.class);
         }
@@ -87,6 +84,12 @@ class MessageServiceIntegrationTest {
             return mock(InboxDeliveryService.class);
         }
     }
+
+    @MockitoBean
+    ChatRoomService aclService;
+
+    @MockitoBean
+    UserServiceClient userServiceClient;
 
     @Autowired
     MessageService messageService;

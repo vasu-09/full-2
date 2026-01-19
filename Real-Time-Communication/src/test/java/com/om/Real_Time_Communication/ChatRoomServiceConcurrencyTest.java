@@ -8,7 +8,8 @@ import com.om.Real_Time_Communication.service.ChatRoomService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.TestPropertySource;
 
@@ -22,7 +23,8 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-@SpringBootTest
+@DataJpaTest
+@Import(ChatRoomService.class)
 @TestPropertySource(properties = {
         "spring.datasource.url=jdbc:h2:mem:rtc-test;MODE=MySQL;DB_CLOSE_DELAY=-1",
         "spring.datasource.driverClassName=org.h2.Driver",
