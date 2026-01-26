@@ -25,7 +25,12 @@ import { useChatRegistry } from '../context/ChatContext';
 import useCallSignalingHook from '../hooks/useCallSignaling';
 import { useChatSession } from '../hooks/useChatSession';
 import apiClient from '../services/apiClient';
-import { initializeDatabase, saveListSummaryToDb } from '../services/database';
+import {
+  getListSummaryFromDb,
+  getListsFromDb,
+  initializeDatabase,
+  saveListSummaryToDb,
+} from '../services/database';
 
 const BAR_HEIGHT = 56;
 const MESSAGE_BAR_HEIGHT = 48;
@@ -358,6 +363,65 @@ export default function ChatDetailScreen() {
   const [hasFetchedSharedLists, setHasFetchedSharedLists] = useState(false);
   const [selectedListError, setSelectedListError] = useState(null);
 
+  const normalizePhoneNumber = useCallback(value => {
+    if (!value) return '';
+    return String(value).replace(/\D/g, '');
+  }, []);
+
+  const loadSharedListsFromDatabase = useCallback(async () => {
+    if (!phoneNumber) {
+      return [];
+    }
+
+    try {
+      await initializeDatabase();
+      const storedLists = await getListsFromDb();
+      const normalizedPhone = normalizePhoneNumber(phoneNumber);
+      const filteredLists = storedLists.filter(list =>
+        (list?.members ?? []).some(
+          member => normalizePhoneNumber(member?.phone) === normalizedPhone,
+        ),
+      );
+
+      return filteredLists
+        .map(list => ({
+          id: list?.id != null ? String(list.id) : null,
+          title: list?.title ?? 'Untitled List',
+        }))
+        .filter(list => list.id);
+    } catch (dbError) {
+      console.error('Failed to load shared lists from database', dbError);
+      return [];
+    }
+  }, [normalizePhoneNumber, phoneNumber]);
+
+  const loadSelectedListFromDatabase = useCallback(
+    async listId => {
+      if (!listId) {
+        return null;
+      }
+
+      try {
+        await initializeDatabase();
+        const storedList = await getListSummaryFromDb(String(listId));
+        if (!storedList) {
+          return null;
+        }
+
+        const normalizedItems = normalizeItems(storedList?.items ?? []);
+        return {
+          id: storedList?.id != null ? String(storedList.id) : String(listId),
+          title: storedList?.title ?? 'Shared List',
+          items: normalizedItems,
+        };
+      } catch (dbError) {
+        console.error('Failed to load shared list from database', dbError);
+        return null;
+      }
+    },
+    [normalizeItems],
+  );
+
   useEffect(() => () => {
     activeCallIdRef.current = null;
   }, []);
@@ -565,6 +629,10 @@ export default function ChatDetailScreen() {
 
     setSharedListsLoading(true);
     setSharedListError(null);
+    const cachedLists = await loadSharedListsFromDatabase();
+    if (cachedLists.length) {
+      setSharedLists(cachedLists);
+    }
     try {
       console.log('[ChatDetailScreen] fetchSharedLists calling API', { currentUserId, phoneNumber });
       const { data } = await apiClient.get('/api/lists/shared', {
@@ -582,11 +650,13 @@ export default function ChatDetailScreen() {
       setSharedLists(normalizedLists);
     } catch (err) {
       console.error('Failed to fetch shared lists', err);
-      setSharedListError('Unable to load shared lists. Pull to retry.');
+      if (!cachedLists.length) {
+        setSharedListError('Unable to load shared lists. Pull to retry.');
+      }
     } finally {
       setSharedListsLoading(false);
     }
-  }, [currentUserId, phoneNumber]);
+  }, [currentUserId, loadSharedListsFromDatabase, phoneNumber]);
 
   const fetchSelectedList = useCallback(async listId => {
      console.log('[ChatDetailScreen] fetchSelectedList inputs', { listId, currentUserId, phoneNumber });
@@ -597,6 +667,11 @@ export default function ChatDetailScreen() {
 
     setIsSelectedListLoading(true);
     setSelectedListError(null);
+    const cachedList = await loadSelectedListFromDatabase(listId);
+    if (cachedList) {
+      setSelectedListData(cachedList);
+      setTodoState(buildTodoState(cachedList.items ?? []));
+    }
     try {
       console.log('[ChatDetailScreen] fetchSelectedList calling API', { listId, currentUserId, phoneNumber });
       const { data } = await apiClient.get(`/api/lists/${encodeURIComponent(listId)}/shared`, {
@@ -633,13 +708,21 @@ export default function ChatDetailScreen() {
       }
     } catch (err) {
       console.error('Failed to fetch shared list', err);
-      setSelectedListError('Unable to load this list right now.');
-      setSelectedListData(null);
-      setTodoState([]);
+      if (!cachedList) {
+        setSelectedListError('Unable to load this list right now.');
+        setSelectedListData(null);
+        setTodoState([]);
+      }
     } finally {
       setIsSelectedListLoading(false);
     }
-  }, [buildTodoState, currentUserId, normalizeItems, phoneNumber]);
+   }, [
+    buildTodoState,
+    currentUserId,
+    loadSelectedListFromDatabase,
+    normalizeItems,
+    phoneNumber,
+  ]);
 
   const [todoState, setTodoState] = useState([]);
   const isDetailedTodoList = useMemo(() => {

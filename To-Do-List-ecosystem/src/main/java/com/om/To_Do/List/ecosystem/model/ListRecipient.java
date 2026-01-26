@@ -7,6 +7,7 @@ import lombok.*;
 @Entity
 @Data
 @Builder
+@ToString(exclude = "list")
 @Table(name = "list_recipients")
 public class ListRecipient {
 

@@ -12,6 +12,7 @@ import java.util.List;
 @Entity
 @Data
 @Builder
+@ToString(exclude = {"items", "recipients"})
 @Table(name = "todo_lists")
 public class ToDoList {
 
