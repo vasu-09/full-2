@@ -48,6 +48,7 @@ export default function SelectedPreview() {
     name: item?.name ?? item?.itemName,
     qty: item?.qty,
     price: item?.price,
+    checked: Boolean(item?.checked),
   }));
   const totalValue = rows.reduce((sum, row) => {
     const rowValue = parseInt(String(row?.price ?? '').replace(/[^0-9]/g, ''), 10) || 0;
@@ -73,14 +74,25 @@ export default function SelectedPreview() {
         contentContainerStyle={{ padding: 16 }}
         renderItem={({ item, index }) => (
           <View style={styles.row}>
-            <Text style={[styles.cell, { flex: 0.5 }]}>{index + 1}.</Text>
-            <Text style={[styles.cell, { flex: 2 }]}>{item.name}</Text>
             {isTableList ? (
               <>
+                <Text style={[styles.cell, { flex: 0.5 }]}>{index + 1}.</Text>
+                <Text style={[styles.cell, { flex: 2 }]}>{item.name}</Text>
                 <Text style={[styles.cell, { flex: 2 }]}>{item.qty}</Text>
                 <Text style={[styles.cell, { flex: 1, textAlign: 'right' }]}>{item.price}</Text>
               </>
-            ) : null}
+             ) : (
+              <>
+                <Icon
+                  name={item.checked ? 'check-box' : 'check-box-outline-blank'}
+                  size={18}
+                  color={item.checked ? '#1f6ea7' : '#7a7a7a'}
+                  style={styles.todoCheckbox}
+                />
+                <Text style={[styles.cell, { flex: 0.5 }]}>{index + 1}.</Text>
+                <Text style={[styles.cell, { flex: 2 }]}>{item.name}</Text>
+              </>
+            )}
           </View>
         )}
       />
@@ -169,6 +181,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333',
     marginHorizontal: 4,
+  },
+  todoCheckbox: {
+    marginRight: 6,
   },
 
   sendBtn: {

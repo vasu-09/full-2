@@ -1620,7 +1620,7 @@ export default function ChatDetailScreen() {
                     if (!st?.checked && !(st?.subChecked ?? []).some(Boolean)) return;
 
                     if (!isDetailedTodoList) {
-                       previewItems.push({
+                      previewItems.push({
                         name: item.itemName,
                         checked: Boolean(st?.checked),
                       });
@@ -1664,7 +1664,14 @@ export default function ChatDetailScreen() {
 
                   const previewPayload = isDetailedTodoList
                     ? { type: 'todo_table', title: selectedListData?.title ?? undefined, rows: previewItems }
-                    : { type: 'todo_list', title: selectedListData?.title ?? undefined, items: previewItems };
+                    : {
+                        type: 'todo_list',
+                        title: selectedListData?.title ?? undefined,
+                        items: (selectedListData?.items ?? []).map((item, idx) => ({
+                          name: item.itemName,
+                          checked: Boolean(todoState[idx]?.checked),
+                        })),
+                      };
 
                   router.push({
                     pathname: '/screens/SelectedPreview',
