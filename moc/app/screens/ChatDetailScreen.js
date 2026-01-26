@@ -11,6 +11,7 @@ import {
   FlatList,
   Image,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   StatusBar,
   StyleSheet,
@@ -102,26 +103,56 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
         : '#777';
   const showClock = item.pending || item.failed;
   const decryptionFailed = Boolean(item?.raw?.decryptionFailed);
-  const todoPayload = useMemo(() => {
+  const structuredPayload = useMemo(() => {
     if (decryptionFailed || !messageText || typeof messageText !== 'string') {
       return null;
     }
     try {
-      const parsed = JSON.parse(messageText);
-      if (parsed?.type === 'todo_table' && Array.isArray(parsed?.rows)) {
-        return parsed;
-      }
-      if (parsed?.type === 'todo_list' && Array.isArray(parsed?.items)) {
-        return parsed;
-      }
-      return null;
+      return JSON.parse(messageText);
     } catch {
       return null;
     }
   }, [decryptionFailed, messageText]);
+  const todoPayload = useMemo(() => {
+    if (structuredPayload?.type === 'todo_table' && Array.isArray(structuredPayload?.rows)) {
+      return structuredPayload;
+    }
+    if (structuredPayload?.type === 'todo_list' && Array.isArray(structuredPayload?.items)) {
+      return structuredPayload;
+    }
+    return null;
+  }, [structuredPayload]);
+  const locationPayload = useMemo(() => {
+    if (structuredPayload?.type !== 'location') {
+      return null;
+    }
+    const latitude = Number(structuredPayload?.coords?.latitude);
+    const longitude = Number(structuredPayload?.coords?.longitude);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      return null;
+    }
+    return {
+      latitude,
+      longitude,
+      url: structuredPayload?.url ?? `https://maps.google.com/?q=${latitude},${longitude}`,
+    };
+  }, [structuredPayload]);
   const isTablePayload = todoPayload?.type === 'todo_table';
   const tableRows = isTablePayload ? (todoPayload?.rows ?? []) : [];
   const listItems = todoPayload?.type === 'todo_list' ? (todoPayload?.items ?? []) : [];
+  const locationImageUrl = useMemo(() => {
+    if (!locationPayload) return null;
+    const { latitude, longitude } = locationPayload;
+    const baseUrl = 'https://staticmap.openstreetmap.de/staticmap.php';
+    const params = [
+      `center=${latitude},${longitude}`,
+      'zoom=15',
+      'size=600x300',
+      'maptype=mapnik',
+      `markers=${latitude},${longitude},red-pushpin`,
+    ].join('&');
+    return `${baseUrl}?${params}`;
+  }, [locationPayload]);
   const tableTotal = useMemo(() => {
     if (!isTablePayload) return null;
     if (todoPayload?.total) {
@@ -243,6 +274,26 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
                 </View>
               ) : null}
             </View>
+             ) : locationPayload ? (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => Linking.openURL(locationPayload.url)}
+              style={styles.locationCard}
+            >
+              {locationImageUrl ? (
+                <Image source={{ uri: locationImageUrl }} style={styles.locationMapImage} />
+              ) : null}
+              <View style={styles.locationDetails}>
+                <View style={styles.locationTitleRow}>
+                  <Icon name="place" size={18} color="#1f6ea7" />
+                  <Text style={styles.locationTitle}>Shared location</Text>
+                </View>
+                <Text style={styles.locationCoords}>
+                  {locationPayload.latitude.toFixed(5)}, {locationPayload.longitude.toFixed(5)}
+                </Text>
+                <Text style={styles.locationAction}>Tap to open in maps</Text>
+              </View>
+            </TouchableOpacity>
           ) : (
             <Text style={styles.messageText}>{messageText}</Text>
           )}
@@ -331,6 +382,7 @@ export default function ChatDetailScreen() {
   const paramRoomKey = params?.roomKey ? String(params.roomKey) : null;
   const paramTitle = params?.title ? String(params.title) : null;
   const paramPeerId = params?.peerId ? Number(params.peerId) : null;
+  const paramLocation = params?.location ?? null;
   console.log('[ChatDetailScreen] params', params);
   const roomSummary = useMemo(() => {
     if (!rooms?.length) return null;
@@ -466,6 +518,7 @@ export default function ChatDetailScreen() {
   const [playingMessageId, setPlayingMessageId] = useState(null);
   const [selectedMessages, setSelectedMessages] = useState([]);
   const [moreMenuVisible, setMoreMenuVisible] = useState(false);
+  const lastLocationRef = useRef(null);
   
 
   const handleCallRoomEvent = useCallback(
@@ -811,6 +864,38 @@ export default function ChatDetailScreen() {
       markLatestRead();
     }
   }, [messages, markLatestRead]);
+
+  useEffect(() => {
+    if (!paramLocation || !roomId) {
+      return;
+    }
+    const rawLocation = Array.isArray(paramLocation) ? paramLocation[0] : paramLocation;
+    if (!rawLocation || rawLocation === lastLocationRef.current) {
+      return;
+    }
+    let parsedLocation = null;
+    try {
+      parsedLocation = JSON.parse(rawLocation);
+    } catch (error) {
+      console.warn('Failed to parse location payload', error);
+      return;
+    }
+    const latitude = Number(parsedLocation?.coords?.latitude);
+    const longitude = Number(parsedLocation?.coords?.longitude);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      return;
+    }
+    lastLocationRef.current = rawLocation;
+    navigation.setParams({ location: undefined });
+    const locationPayload = JSON.stringify({
+      type: 'location',
+      coords: { latitude, longitude },
+      url: parsedLocation?.url ?? `https://maps.google.com/?q=${latitude},${longitude}`,
+    });
+    sendTextMessage(locationPayload).catch(err => {
+      console.warn('Send location error:', err);
+    });
+  }, [navigation, paramLocation, roomId, sendTextMessage]);
 
   useEffect(() => {
     const onFocus = () => {
@@ -1995,6 +2080,44 @@ const styles = StyleSheet.create({
   messageTextWrapper: {
     flexDirection: 'column',
     alignItems: 'flex-start',
+  },
+  locationCard: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#cfd8dc',
+    minWidth: 200,
+  },
+  locationMapImage: {
+    width: 240,
+    height: 130,
+    backgroundColor: '#e0e0e0',
+  },
+  locationDetails: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  locationTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  locationTitle: {
+    marginLeft: 6,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1f2d3d',
+  },
+  locationCoords: {
+    marginTop: 4,
+    fontSize: 12,
+    color: '#4b5563',
+  },
+  locationAction: {
+    marginTop: 4,
+    fontSize: 12,
+    color: '#1f6ea7',
+    fontWeight: '600',
   },
   tableWrapper: {
     backgroundColor: '#fff',
