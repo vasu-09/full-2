@@ -3,6 +3,7 @@ import * as Location from 'expo-location';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   Dimensions,
   StyleSheet,
   Text,
@@ -13,7 +14,7 @@ import MapView from '../../components/MapView';
 
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-
+import { useChatSession } from '../hooks/useChatSession';
 
 
 export default function LocationPickerScreen() {
@@ -26,7 +27,24 @@ export default function LocationPickerScreen() {
   
   const [isFullScreen, setIsFullScreen] = useState(false);
 
-  
+  const normalizeParam = value => {
+    if (Array.isArray(value)) return value[0];
+    return value != null ? String(value) : undefined;
+  };
+
+  const roomId = normalizeParam(params?.roomId);
+  const roomKey = normalizeParam(params?.roomKey);
+  const peerId = normalizeParam(params?.peerId);
+  const title = normalizeParam(params?.title);
+
+  const { sendTextMessage } = useChatSession({
+    roomId: roomId != null ? Number(roomId) : null,
+    roomKey: roomKey ?? null,
+    peerId: peerId != null ? Number(peerId) : null,
+    title: title ?? null,
+    disableSubscriptions: true,
+  });
+
   // 1️⃣ Get last‑known (fast) or current location
  useEffect(() => {
   (async () => {
@@ -68,27 +86,23 @@ export default function LocationPickerScreen() {
   }
 
   // Helpers to send back
-  const sendCurrent = () => {
+  const sendCurrent = async () => {
+    if (!roomId || !roomKey) {
+      Alert.alert('Missing room details', 'Unable to send location right now.');
+      return;
+    }
     const url = `https://maps.google.com/?q=${region.latitude},${region.longitude}`;
-    const normalizeParam = value => {
-      if (Array.isArray(value)) return value[0];
-      return value != null ? String(value) : undefined;
-    };
-    const baseParams = {
-      roomId: normalizeParam(params?.roomId),
-      roomKey: normalizeParam(params?.roomKey),
-      peerId: normalizeParam(params?.peerId),
-      phone: normalizeParam(params?.phone),
-      title: normalizeParam(params?.title),
-      image: normalizeParam(params?.image),
-    };
-    router.replace({
-      pathname: '/screens/ChatDetailScreen',
-      params: {
-        ...baseParams,
-        location: JSON.stringify({ coords: region, url }),
-      },
+    const payload = JSON.stringify({
+      type: 'location',
+      coords: { latitude: region.latitude, longitude: region.longitude },
+      url,
     });
+    const sent = await sendTextMessage(payload);
+    if (sent?.success) {
+      router.back();
+      return;
+    }
+    Alert.alert('Send failed', 'Unable to send location. Please try again.');
   };
   
 
