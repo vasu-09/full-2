@@ -196,18 +196,27 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
                 </>
               ) : (
                 <View style={styles.todoListRows}>
-                  {listItems.map((row, index) => (
-                    <View
-                      style={[
-                        styles.todoListRow,
-                        index < listItems.length - 1 ? styles.todoListRowDivider : null,
-                      ]}
-                      key={`${row?.name ?? 'row'}-${index}`}
-                    >
-                      <Text style={styles.todoListIndex}>{index + 1}.</Text>
-                      <Text style={styles.todoListText}>{row?.name}</Text>
-                    </View>
-                  ))}
+                  {listItems.map((row, index) => {
+                    const checked = Boolean(row?.checked);
+                    return (
+                      <View
+                        style={[
+                          styles.todoListRow,
+                          index < listItems.length - 1 ? styles.todoListRowDivider : null,
+                        ]}
+                        key={`${row?.name ?? 'row'}-${index}`}
+                      >
+                        <Icon
+                          name={checked ? 'check-box' : 'check-box-outline-blank'}
+                          size={16}
+                          color={checked ? '#1f6ea7' : '#7a7a7a'}
+                          style={styles.todoListCheckbox}
+                        />
+                        <Text style={styles.todoListIndex}>{index + 1}.</Text>
+                        <Text style={styles.todoListText}>{row?.name}</Text>
+                      </View>
+                    );
+                  })}
                 </View>
               )}
               {item.time ? (
@@ -1611,7 +1620,10 @@ export default function ChatDetailScreen() {
                     if (!st?.checked && !(st?.subChecked ?? []).some(Boolean)) return;
 
                     if (!isDetailedTodoList) {
-                      previewItems.push({ name: item.itemName });
+                       previewItems.push({
+                        name: item.itemName,
+                        checked: Boolean(st?.checked),
+                      });
                       return;
                     }
 
@@ -2075,6 +2087,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     paddingVertical: 2,
+  },
+  todoListCheckbox: {
+    marginRight: 6,
+    marginTop: 1,
   },
   todoListRowDivider: {
     borderBottomWidth: StyleSheet.hairlineWidth,

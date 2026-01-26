@@ -101,7 +101,10 @@ export default function SelectedPreview() {
             : {
                 type: 'todo_list',
                 title: listTitle,
-                items: rows.map(row => ({ name: row.name })),
+                items: parsedItems.map(row => ({
+                  name: row?.name ?? row?.itemName,
+                  checked: Boolean(row?.checked),
+                })),
               };
           const serializedPayload = JSON.stringify(payload);
           const sent = await sendTextMessage(serializedPayload);
