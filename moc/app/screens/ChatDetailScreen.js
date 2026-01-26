@@ -143,15 +143,16 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
   const locationImageUrl = useMemo(() => {
     if (!locationPayload) return null;
     const { latitude, longitude } = locationPayload;
-    const baseUrl = 'https://staticmap.openstreetmap.de/staticmap.php';
-    const params = [
-      `center=${latitude},${longitude}`,
-      'zoom=15',
-      'size=600x300',
-      'maptype=mapnik',
-      `markers=${latitude},${longitude},red-pushpin`,
-    ].join('&');
-    return `${baseUrl}?${params}`;
+    const zoom = 15;
+    const scale = 1 << zoom;
+    const latRad = (latitude * Math.PI) / 180;
+    const x = Math.floor(((longitude + 180) / 360) * scale);
+    const y = Math.floor(
+      ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * scale,
+    );
+    const safeX = Math.min(Math.max(x, 0), scale - 1);
+    const safeY = Math.min(Math.max(y, 0), scale - 1);
+    return `https://tile.openstreetmap.org/${zoom}/${safeX}/${safeY}.png`;
   }, [locationPayload]);
   const tableTotal = useMemo(() => {
     if (!isTablePayload) return null;
@@ -275,25 +276,30 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
               ) : null}
             </View>
              ) : locationPayload ? (
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => Linking.openURL(locationPayload.url)}
-              style={styles.locationCard}
-            >
-              {locationImageUrl ? (
-                <Image source={{ uri: locationImageUrl }} style={styles.locationMapImage} />
-              ) : null}
-              <View style={styles.locationDetails}>
-                <View style={styles.locationTitleRow}>
-                  <Icon name="place" size={18} color="#1f6ea7" />
-                  <Text style={styles.locationTitle}>Shared location</Text>
+           <View style={styles.locationMessageWrapper}>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => Linking.openURL(locationPayload.url)}
+                style={styles.locationCard}
+              >
+                <View style={styles.locationMapWrapper}>
+                  {locationImageUrl ? (
+                    <Image source={{ uri: locationImageUrl }} style={styles.locationMapImage} />
+                  ) : null}
+                  <Icon name="place" size={24} color="#e11d48" style={styles.locationMapPin} />
                 </View>
-                <Text style={styles.locationCoords}>
-                  {locationPayload.latitude.toFixed(5)}, {locationPayload.longitude.toFixed(5)}
-                </Text>
-                <Text style={styles.locationAction}>Tap to open in maps</Text>
-              </View>
-            </TouchableOpacity>
+                <View style={styles.locationDetails}>
+                  <View style={styles.locationTitleRow}>
+                    <Icon name="place" size={18} color="#1f6ea7" />
+                    <Text style={styles.locationTitle}>Shared location</Text>
+                  </View>
+                  <Text style={styles.locationCoords}>
+                    {locationPayload.latitude.toFixed(5)}, {locationPayload.longitude.toFixed(5)}
+                  </Text>
+                  <Text style={styles.locationAction}>Tap to open in maps</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
           ) : (
             <Text style={styles.messageText}>{messageText}</Text>
           )}
@@ -308,7 +314,32 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
           ) : null}
         </View>
       )}
-       {todoPayload ? null : showClock ? (
+       {todoPayload ? null : locationPayload ? (
+        <View style={styles.locationTimeRow}>
+          {item.time ? (
+            <Text
+              style={[
+                styles.messageTime,
+                styles.locationTimeText,
+                item.sender === 'me' ? styles.myTime : styles.theirTime,
+                item.pending ? styles.pendingTime : null,
+                item.failed ? styles.failedTime : null,
+                { color: statusColor },
+              ]}
+            >
+              {item.time}
+            </Text>
+          ) : null}
+          {showClock ? (
+            <Icon
+              name="schedule"
+              size={12}
+              color={statusColor}
+              style={styles.statusIcon}
+            />
+          ) : null}
+        </View>
+      ) : showClock ? (
         <View style={styles.messageStatusRow}>
           {item.time ? (
             <Text
@@ -2099,10 +2130,22 @@ const styles = StyleSheet.create({
     borderColor: '#cfd8dc',
     minWidth: 200,
   },
-  locationMapImage: {
+  locationMessageWrapper: {
+    alignItems: 'flex-start',
+  },
+  locationMapWrapper: {
     width: 240,
     height: 130,
     backgroundColor: '#e0e0e0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  locationMapImage: {
+    width: '100%',
+    height: '100%',
+  },
+  locationMapPin: {
+    position: 'absolute',
   },
   locationDetails: {
     paddingHorizontal: 10,
@@ -2128,6 +2171,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#1f6ea7',
     fontWeight: '600',
+  },
+  locationTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+    marginTop: 4,
+  },
+  locationTimeText: {
+    marginTop: 0,
   },
   tableWrapper: {
     backgroundColor: '#fff',
