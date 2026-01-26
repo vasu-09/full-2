@@ -627,12 +627,12 @@ export default function ChatDetailScreen() {
       return;
     }
 
-    setSharedListsLoading(true);
     setSharedListError(null);
     const cachedLists = await loadSharedListsFromDatabase();
     if (cachedLists.length) {
       setSharedLists(cachedLists);
     }
+    setSharedListsLoading(cachedLists.length === 0);
     try {
       console.log('[ChatDetailScreen] fetchSharedLists calling API', { currentUserId, phoneNumber });
       const { data } = await apiClient.get('/api/lists/shared', {
@@ -659,19 +659,19 @@ export default function ChatDetailScreen() {
   }, [currentUserId, loadSharedListsFromDatabase, phoneNumber]);
 
   const fetchSelectedList = useCallback(async listId => {
-     console.log('[ChatDetailScreen] fetchSelectedList inputs', { listId, currentUserId, phoneNumber });
+    console.log('[ChatDetailScreen] fetchSelectedList inputs', { listId, currentUserId, phoneNumber });
     if (!listId || !currentUserId || !phoneNumber) {
       setSelectedListError('Missing user information to load list details.');
       return;
     }
 
-    setIsSelectedListLoading(true);
     setSelectedListError(null);
     const cachedList = await loadSelectedListFromDatabase(listId);
     if (cachedList) {
       setSelectedListData(cachedList);
       setTodoState(buildTodoState(cachedList.items ?? []));
     }
+    setIsSelectedListLoading(!cachedList);
     try {
       console.log('[ChatDetailScreen] fetchSelectedList calling API', { listId, currentUserId, phoneNumber });
       const { data } = await apiClient.get(`/api/lists/${encodeURIComponent(listId)}/shared`, {
@@ -752,6 +752,25 @@ export default function ChatDetailScreen() {
     setHasFetchedSharedLists(false);
     setSharedLists([]);
   }, [currentUserId, phoneNumber]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!phoneNumber) {
+      return undefined;
+    }
+
+    loadSharedListsFromDatabase()
+      .then(lists => {
+        if (!cancelled && lists.length) {
+          setSharedLists(lists);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loadSharedListsFromDatabase, phoneNumber]);
 
   useEffect(() => {
     if (!selectedListId) {
