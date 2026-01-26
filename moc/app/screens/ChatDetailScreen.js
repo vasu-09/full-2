@@ -1398,7 +1398,17 @@ export default function ChatDetailScreen() {
       case 'files':
         return pickAndSendFile();
       case 'location':
-        return router.push('/screens/LocationPickerScreen');
+        return router.push({
+          pathname: '/screens/LocationPickerScreen',
+          params: {
+            roomId: roomId != null ? String(roomId) : undefined,
+            roomKey: roomKey ?? undefined,
+            peerId: peerId != null ? String(peerId) : undefined,
+            phone: phoneNumber || undefined,
+            title: chatTitle,
+            ...(avatarUri ? { image: avatarUri } : {}),
+          },
+        });
       case 'music':
         return router.push('/screens/AudioPickerScreen');
       case 'contacts':

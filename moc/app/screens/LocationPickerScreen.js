@@ -1,6 +1,6 @@
 // screens/LocationPickerScreen.js
 import * as Location from 'expo-location';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
   Dimensions,
@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import MapView from '../../components/MapView';
 
-import {  SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
 
@@ -19,6 +19,7 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 export default function LocationPickerScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const params = useLocalSearchParams();
   const mapRef = useRef(null);
 
   const [region, setRegion] = useState(null);
@@ -69,9 +70,24 @@ export default function LocationPickerScreen() {
   // Helpers to send back
   const sendCurrent = () => {
     const url = `https://maps.google.com/?q=${region.latitude},${region.longitude}`;
+    const normalizeParam = value => {
+      if (Array.isArray(value)) return value[0];
+      return value != null ? String(value) : undefined;
+    };
+    const baseParams = {
+      roomId: normalizeParam(params?.roomId),
+      roomKey: normalizeParam(params?.roomKey),
+      peerId: normalizeParam(params?.peerId),
+      phone: normalizeParam(params?.phone),
+      title: normalizeParam(params?.title),
+      image: normalizeParam(params?.image),
+    };
     router.replace({
       pathname: '/screens/ChatDetailScreen',
-      params: { location: JSON.stringify({ coords: region, url }) },
+      params: {
+        ...baseParams,
+        location: JSON.stringify({ coords: region, url }),
+      },
     });
   };
   
