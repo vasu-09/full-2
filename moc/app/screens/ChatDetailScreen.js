@@ -142,17 +142,13 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
   const listItems = todoPayload?.type === 'todo_list' ? (todoPayload?.items ?? []) : [];
   const locationImageUrl = useMemo(() => {
     if (!locationPayload) return null;
+    const googleMapsKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_STATIC_API_KEY;
+    if (!googleMapsKey) return null;
     const { latitude, longitude } = locationPayload;
-    const zoom = 15;
-    const scale = 1 << zoom;
-    const latRad = (latitude * Math.PI) / 180;
-    const x = Math.floor(((longitude + 180) / 360) * scale);
-    const y = Math.floor(
-      ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * scale,
-    );
-    const safeX = Math.min(Math.max(x, 0), scale - 1);
-    const safeY = Math.min(Math.max(y, 0), scale - 1);
-    return `https://tile.openstreetmap.org/${zoom}/${safeX}/${safeY}.png`;
+    const center = `${latitude},${longitude}`;
+    const markers = `color:red|${center}`;
+    const size = '480x260';
+    return `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(center)}&zoom=15&size=${size}&scale=2&maptype=roadmap&markers=${encodeURIComponent(markers)}&key=${encodeURIComponent(googleMapsKey)}`;
   }, [locationPayload]);
   const tableTotal = useMemo(() => {
     if (!isTablePayload) return null;
@@ -285,7 +281,14 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
                 <View style={styles.locationMapWrapper}>
                   {locationImageUrl ? (
                     <Image source={{ uri: locationImageUrl }} style={styles.locationMapImage} />
-                  ) : null}
+                  ) : (
+                    <View style={styles.locationMapPlaceholder}>
+                      <Icon name="map" size={24} color="#6b7280" />
+                      <Text style={styles.locationMapPlaceholderText}>
+                        Map preview unavailable
+                      </Text>
+                    </View>
+                  )}
                   <Icon name="place" size={24} color="#e11d48" style={styles.locationMapPin} />
                 </View>
                 <View style={styles.locationDetails}>
@@ -2143,6 +2146,17 @@ const styles = StyleSheet.create({
   locationMapImage: {
     width: '100%',
     height: '100%',
+  },
+  locationMapPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  locationMapPlaceholderText: {
+    marginTop: 6,
+    fontSize: 12,
+    color: '#6b7280',
+    textAlign: 'center',
   },
   locationMapPin: {
     position: 'absolute',
