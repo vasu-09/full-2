@@ -140,21 +140,35 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
   const isTablePayload = todoPayload?.type === 'todo_table';
   const tableRows = isTablePayload ? (todoPayload?.rows ?? []) : [];
   const listItems = todoPayload?.type === 'todo_list' ? (todoPayload?.items ?? []) : [];
-  const locationImageUrl = useMemo(() => {
-    if (!locationPayload) return null;
+  const { primaryMapUrl, fallbackMapUrl } = useMemo(() => {
+    if (!locationPayload) {
+      return { primaryMapUrl: null, fallbackMapUrl: null };
+    }
     const { latitude, longitude } = locationPayload;
     const center = `${latitude},${longitude}`;
     const googleMapsKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_STATIC_API_KEY;
     if (googleMapsKey) {
       const markers = `color:red|${center}`;
       const size = '480x260';
-      return `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(center)}&zoom=15&size=${size}&scale=2&maptype=roadmap&markers=${encodeURIComponent(markers)}&key=${encodeURIComponent(googleMapsKey)}`;
+     return {
+        primaryMapUrl: `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(center)}&zoom=15&size=${size}&scale=2&maptype=roadmap&markers=${encodeURIComponent(markers)}&key=${encodeURIComponent(googleMapsKey)}`,
+        fallbackMapUrl: `https://staticmap.openstreetmap.de/staticmap.php?center=${encodeURIComponent(center)}&zoom=15&size=600x300&markers=${encodeURIComponent(`${latitude},${longitude},red-pushpin`)}`,
+      };
     }
     const size = '600x300';
     const zoom = '15';
     const marker = `${latitude},${longitude},red-pushpin`;
-    return `https://staticmap.openstreetmap.de/staticmap.php?center=${encodeURIComponent(center)}&zoom=${zoom}&size=${size}&markers=${encodeURIComponent(marker)}`;
+    return {
+      primaryMapUrl: `https://staticmap.openstreetmap.de/staticmap.php?center=${encodeURIComponent(center)}&zoom=${zoom}&size=${size}&markers=${encodeURIComponent(marker)}`,
+      fallbackMapUrl: null,
+    };
   }, [locationPayload]);
+  const [mapImageState, setMapImageState] = useState('primary');
+  useEffect(() => {
+    setMapImageState('primary');
+  }, [primaryMapUrl, fallbackMapUrl]);
+  const locationImageUrl =
+    mapImageState === 'fallback' ? fallbackMapUrl : mapImageState === 'primary' ? primaryMapUrl : null;
   const tableTotal = useMemo(() => {
     if (!isTablePayload) return null;
     if (todoPayload?.total) {
@@ -285,7 +299,18 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
               >
                 <View style={styles.locationMapWrapper}>
                   {locationImageUrl ? (
-                    <Image source={{ uri: locationImageUrl }} style={styles.locationMapImage} />
+                    <Image
+                      source={{ uri: locationImageUrl }}
+                      style={styles.locationMapImage}
+                      resizeMode="cover"
+                      onError={() => {
+                        if (mapImageState === 'primary' && fallbackMapUrl) {
+                          setMapImageState('fallback');
+                        } else {
+                          setMapImageState('error');
+                        }
+                      }}
+                    />
                   ) : (
                     <View style={styles.locationMapPlaceholder}>
                       <Icon name="map" size={24} color="#6b7280" />
