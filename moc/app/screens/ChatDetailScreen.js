@@ -38,6 +38,8 @@ const BAR_HEIGHT = 56;
 const MESSAGE_BAR_HEIGHT = 48;
 const MARGIN = 8;
 const MIC_SIZE = 48;
+const DECRYPTION_PENDING_TEXT = 'Waiting for this message. This may take a while.';
+const HELP_CENTER_URL = 'https://mocconnect.in/';
 
 export const formatDurationText = millis => {
   const totalSeconds = Math.max(0, Math.floor((millis || 0) / 1000));
@@ -104,8 +106,14 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
         : '#777';
   const showClock = item.pending || item.failed;
   const decryptionFailed = Boolean(item?.raw?.decryptionFailed);
+  const showEncryptedPlaceholder = decryptionFailed && !overrideText;
+  const handleLearnMore = useCallback(() => {
+    Linking.openURL(HELP_CENTER_URL).catch(() => {
+      Alert.alert('Error', 'Unable to open Help Center');
+    });
+  }, []);
   const structuredPayload = useMemo(() => {
-    if (decryptionFailed || !messageText || typeof messageText !== 'string') {
+    if (showEncryptedPlaceholder  || !messageText || typeof messageText !== 'string') {
       return null;
     }
     try {
@@ -366,17 +374,19 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
                 </View>
               )}
             </View>
+            ) : showEncryptedPlaceholder ? (
+            <Text style={[styles.messageText, styles.waitingMessageText]}>
+              {DECRYPTION_PENDING_TEXT}
+              {'\n'}
+              <Text style={styles.learnMoreLink} onPress={handleLearnMore}>
+                Learn more
+              </Text>
+            </Text>
           ) : (
             <Text style={styles.messageText}>{messageText}</Text>
           )}
           {showRetryStatus ? (
             <Text style={styles.retryStatusText}>Re-establishing secure session…</Text>
-          ) : null}
-          {decryptionFailed ? (
-            <View style={styles.decryptionBadge}>
-              <Icon name="lock-open" size={12} color="#b3261e" style={styles.decryptionIcon} />
-              <Text style={styles.decryptionBadgeText}>Decryption failed</Text>
-            </View>
           ) : null}
         </View>
       )}
@@ -2328,22 +2338,14 @@ const styles = StyleSheet.create({
   messageTextFlex: {
     flexShrink: 1,
   },
-  decryptionBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fdecea',
-    borderRadius: 8,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    marginTop: 4,
+  waitingMessageText: {
+    color: '#475569',
+    lineHeight: 18,
   },
-  decryptionIcon: {
-    marginRight: 2,
-  },
-  decryptionBadgeText: {
-    color: '#b3261e',
-    fontSize: 12,
+  learnMoreLink: {
+    color: '#1f6ea7',
     fontWeight: '600',
+    textDecorationLine: 'underline',
   },
   retryStatusText: {
     color: '#1f6ea7',

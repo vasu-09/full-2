@@ -142,11 +142,12 @@ describe('MessageContent', () => {
       />,
     );
 
-    expect(getByText('Original raw message')).toBeTruthy();
+    expect(getByText('Waiting for this message. This may take a while.')).toBeTruthy();
+    expect(getByText('Learn more')).toBeTruthy();
 
     await waitFor(() => expect(getByText('Recovered text')).toBeTruthy());
     expect(retryDecrypt).toHaveBeenCalledTimes(1);
-    expect(getByText('Decryption failed')).toBeTruthy();
+    expect(getByText('Recovered text')).toBeTruthy();
   });
 
   it('shows session rebuild hint when retry fails', async () => {
@@ -182,6 +183,7 @@ describe('MessageContent', () => {
     );
 
     await waitFor(() => expect(getByText('Re-establishing secure session…')).toBeTruthy());
-    expect(getByText('Raw text from payload')).toBeTruthy();
+    expect(getByText('Waiting for this message. This may take a while.')).toBeTruthy();
+    expect(getByText('Learn more')).toBeTruthy();
   });
 });

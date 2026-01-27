@@ -61,6 +61,7 @@ type TypingUser = {
 const MESSAGE_TYPE_TEXT = 'TEXT';
 const SHOULD_LOG_DECRYPT = __DEV__ && process.env.EXPO_PUBLIC_DEBUG_DECRYPT !== '0';
 const SHOULD_LOG_E2EE = __DEV__ && process.env.EXPO_PUBLIC_DEBUG_E2EE !== '0';
+const DECRYPTION_PENDING_MESSAGE = 'Waiting for this message. This may take a while.';
 
 const formatTime = (iso?: string | null) => {
   if (!iso) {
@@ -260,7 +261,7 @@ export const useChatSession = ({
           updates[msg.messageId] = { text, failed: false };
         } catch (err) {
           console.warn('Failed to decrypt cached message', { messageId: msg.messageId }, err);
-          updates[msg.messageId] = { text: 'Unable to decrypt message', failed: true };
+          updates[msg.messageId] = { text: DECRYPTION_PENDING_MESSAGE, failed: true };
         }
       }
 
@@ -352,7 +353,7 @@ export const useChatSession = ({
           updates[msg.messageId] = { text, failed: false };
         } catch (err) {
           console.warn('Failed to decrypt cached envelope', { messageId: msg.messageId }, err);
-          updates[msg.messageId] = { text: 'Unable to decrypt message', failed: true };
+          updates[msg.messageId] = { text: DECRYPTION_PENDING_MESSAGE, failed: true };
         }
       }
 
@@ -527,7 +528,7 @@ export const useChatSession = ({
                 });
               } catch (decryptErr) {
                 console.warn('Failed to decrypt history message', decryptErr);
-                text = dto.body ?? 'Unable to decrypt message';
+                text = dto.body ?? DECRYPTION_PENDING_MESSAGE;
                 failed = dto.body == null;
                 debugBody = dto.body ?? null;
               }
@@ -539,7 +540,7 @@ export const useChatSession = ({
               text = await decryptMessage(encryptedPayload, sharedRoomKey);
             } catch (decryptErr) {
               console.warn('Failed to decrypt symmetric history message', decryptErr);
-              text = dto.body ?? 'Unable to decrypt message';
+              text = dto.body ?? DECRYPTION_PENDING_MESSAGE;
               failed = dto.body == null;
               debugBody = dto.body ?? null;
             }
@@ -790,7 +791,7 @@ export const useChatSession = ({
                   });
                 }
                 finalize(
-                  fallbackBody ?? 'Unable to decrypt message',
+                  fallbackBody ?? DECRYPTION_PENDING_MESSAGE,
                   true,
                   fallbackBody ?? payload.body ?? null,
                 );
@@ -836,7 +837,7 @@ export const useChatSession = ({
                   hasFallback: Boolean(fallbackBody),
                 });
               }
-              finalize(fallbackBody ?? 'Unable to decrypt message', true, fallbackBody);
+              finalize(fallbackBody ?? DECRYPTION_PENDING_MESSAGE, true, fallbackBody);
             });
           return;
         }
