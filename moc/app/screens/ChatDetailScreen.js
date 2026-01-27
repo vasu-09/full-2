@@ -2,6 +2,7 @@
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Audio } from 'expo-audio';
 import * as Clipboard from 'expo-clipboard';
+import Constants from 'expo-constants';
 import * as DocumentPicker from 'expo-document-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -131,12 +132,19 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
       return null;
     }
+    const mapboxToken =
+      process.env.EXPO_PUBLIC_MAPBOX_TOKEN ||
+      Constants?.expoConfig?.extra?.mapboxToken ||
+      Constants?.manifest2?.extra?.mapboxToken ||
+      '';
+    const mapboxUrl = `https://www.mapbox.com/maps/?center=${longitude},${latitude}&zoom=15`;
     return {
       latitude,
       longitude,
       url:
         structuredPayload?.url ??
-        `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=15/${latitude}/${longitude}`,
+        (mapboxToken ? mapboxUrl : `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=15/${latitude}/${longitude}`),
+      mapboxToken,
     };
   }, [structuredPayload]);
   const isTablePayload = todoPayload?.type === 'todo_table';
@@ -146,18 +154,27 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
     if (!locationPayload) {
       return { primaryMapUrl: null, fallbackMapUrl: null };
     }
-    const { latitude, longitude } = locationPayload;
+    const { latitude, longitude, mapboxToken } = locationPayload;
     const center = `${latitude},${longitude}`;
     const size = '600x300';
     const zoom = '15';
     const marker = `${latitude},${longitude},red-pushpin`;
+    if (mapboxToken) {
+      const mapboxMarker = `pin-s+e11d48(${longitude},${latitude})`;
+      const encodedMarker = encodeURIComponent(mapboxMarker);
+      const mapboxSize = '600x300';
+      return {
+        primaryMapUrl:
+          `https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/${encodedMarker}/` +
+          `${longitude},${latitude},${zoom}/${mapboxSize}?access_token=${mapboxToken}`,
+        fallbackMapUrl: `https://staticmap.openstreetmap.de/staticmap.php?center=${encodeURIComponent(center)}&zoom=${zoom}&size=${size}&markers=${encodeURIComponent(marker)}`,
+      };
+    }
     return {
       primaryMapUrl: `https://staticmap.openstreetmap.de/staticmap.php?center=${encodeURIComponent(center)}&zoom=${zoom}&size=${size}&markers=${encodeURIComponent(marker)}`,
       fallbackMapUrl: null,
     };
   }, [locationPayload]);
-  console.log('locationPayload:', locationPayload);
-  console.log('locationImageUrl:', locationImageUrl);
   const [mapImageState, setMapImageState] = useState('primary');
   useEffect(() => {
     setMapImageState('primary');

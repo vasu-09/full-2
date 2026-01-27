@@ -150,6 +150,7 @@ module.exports = () => {
       apiBaseUrl,
       apiHost: process.env.EXPO_PUBLIC_API_HOST || '',
       apiPort: process.env.EXPO_PUBLIC_API_PORT || '',
+      mapboxToken: process.env.EXPO_PUBLIC_MAPBOX_TOKEN || expo?.extra?.mapboxToken || '',
     },
   };
 };
