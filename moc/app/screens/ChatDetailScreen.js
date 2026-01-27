@@ -334,22 +334,9 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
                   ) : (
                     <View style={styles.locationMapPlaceholder}>
                       <Icon name="map" size={24} color="#6b7280" />
-                      <Text style={styles.locationMapPlaceholderText}>
-                        Map preview unavailable
-                      </Text>
                     </View>
                   )}
                   <Icon name="place" size={24} color="#e11d48" style={styles.locationMapPin} />
-                </View>
-                <View style={styles.locationDetails}>
-                  <View style={styles.locationTitleRow}>
-                    <Icon name="place" size={18} color="#1f6ea7" />
-                    <Text style={styles.locationTitle}>Shared location</Text>
-                  </View>
-                  <Text style={styles.locationCoords}>
-                    {locationPayload.latitude.toFixed(5)}, {locationPayload.longitude.toFixed(5)}
-                  </Text>
-                  <Text style={styles.locationAction}>Tap to open in maps</Text>
                 </View>
               </TouchableOpacity>
             </View>
@@ -2178,11 +2165,11 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   locationCard: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
+    backgroundColor: 'transparent',
+    borderRadius: 12,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#cfd8dc',
+    borderWidth: 0,
+    borderColor: 'transparent',
     minWidth: 200,
   },
   locationMessageWrapper: {
@@ -2194,6 +2181,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#e0e0e0',
     justifyContent: 'center',
     alignItems: 'center',
+    borderRadius: 12,
+    overflow: 'hidden',
   },
   locationMapImage: {
     width: '100%',
@@ -2204,39 +2193,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 16,
   },
-  locationMapPlaceholderText: {
-    marginTop: 6,
-    fontSize: 12,
-    color: '#6b7280',
-    textAlign: 'center',
-  },
   locationMapPin: {
     position: 'absolute',
-  },
-  locationDetails: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  locationTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  locationTitle: {
-    marginLeft: 6,
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1f2d3d',
-  },
-  locationCoords: {
-    marginTop: 4,
-    fontSize: 12,
-    color: '#4b5563',
-  },
-  locationAction: {
-    marginTop: 4,
-    fontSize: 12,
-    color: '#1f6ea7',
-    fontWeight: '600',
   },
   locationTimeRow: {
     flexDirection: 'row',
