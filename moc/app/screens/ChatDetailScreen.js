@@ -137,6 +137,7 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
       Constants?.expoConfig?.extra?.mapboxToken ||
       Constants?.manifest2?.extra?.mapboxToken ||
       '';
+      console.log('mapboxToken prefix:', (mapboxToken || '').slice(0, 10));
     const mapboxUrl = `https://www.mapbox.com/maps/?center=${longitude},${latitude}&zoom=15`;
     return {
       latitude,
@@ -163,17 +164,23 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
       const mapboxMarker = `pin-s+e11d48(${longitude},${latitude})`;
       const encodedMarker = encodeURIComponent(mapboxMarker);
       const mapboxSize = '600x300';
-      return {
+      const mapUrls = {
         primaryMapUrl:
           `https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/${encodedMarker}/` +
           `${longitude},${latitude},${zoom}/${mapboxSize}?access_token=${mapboxToken}`,
         fallbackMapUrl: `https://staticmap.openstreetmap.de/staticmap.php?center=${encodeURIComponent(center)}&zoom=${zoom}&size=${size}&markers=${encodeURIComponent(marker)}`,
       };
+      console.log('primaryMapUrl:', mapUrls.primaryMapUrl);
+      console.log('fallbackMapUrl:', mapUrls.fallbackMapUrl);
+      return mapUrls;
     }
-    return {
+    const mapUrls = {
       primaryMapUrl: `https://staticmap.openstreetmap.de/staticmap.php?center=${encodeURIComponent(center)}&zoom=${zoom}&size=${size}&markers=${encodeURIComponent(marker)}`,
       fallbackMapUrl: null,
     };
+    console.log('primaryMapUrl:', mapUrls.primaryMapUrl);
+    console.log('fallbackMapUrl:', mapUrls.fallbackMapUrl);
+    return mapUrls;
   }, [locationPayload]);
   const [mapImageState, setMapImageState] = useState('primary');
   useEffect(() => {
@@ -315,7 +322,8 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
                       source={{ uri: locationImageUrl }}
                       style={styles.locationMapImage}
                       resizeMode="cover"
-                      onError={() => {
+                      onError={(e) => {
+                        console.warn('Map image load failed:', locationImageUrl, e?.nativeEvent);
                         if (mapImageState === 'primary' && fallbackMapUrl) {
                           setMapImageState('fallback');
                         } else {
