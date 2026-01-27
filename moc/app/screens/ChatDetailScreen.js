@@ -163,6 +163,9 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
       fallbackMapUrl: null,
     };
   }, [locationPayload]);
+  console.log('locationPayload:', locationPayload);
+  console.log('locationImageUrl:', locationImageUrl);
+  console.log('googleKey present:', !!process.env.EXPO_PUBLIC_GOOGLE_MAPS_STATIC_API_KEY);
   const [mapImageState, setMapImageState] = useState('primary');
   useEffect(() => {
     setMapImageState('primary');
