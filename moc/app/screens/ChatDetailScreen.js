@@ -142,13 +142,18 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
   const listItems = todoPayload?.type === 'todo_list' ? (todoPayload?.items ?? []) : [];
   const locationImageUrl = useMemo(() => {
     if (!locationPayload) return null;
-    const googleMapsKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_STATIC_API_KEY;
-    if (!googleMapsKey) return null;
     const { latitude, longitude } = locationPayload;
     const center = `${latitude},${longitude}`;
-    const markers = `color:red|${center}`;
-    const size = '480x260';
-    return `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(center)}&zoom=15&size=${size}&scale=2&maptype=roadmap&markers=${encodeURIComponent(markers)}&key=${encodeURIComponent(googleMapsKey)}`;
+    const googleMapsKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_STATIC_API_KEY;
+    if (googleMapsKey) {
+      const markers = `color:red|${center}`;
+      const size = '480x260';
+      return `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(center)}&zoom=15&size=${size}&scale=2&maptype=roadmap&markers=${encodeURIComponent(markers)}&key=${encodeURIComponent(googleMapsKey)}`;
+    }
+    const size = '600x300';
+    const zoom = '15';
+    const marker = `${latitude},${longitude},red-pushpin`;
+    return `https://staticmap.openstreetmap.de/staticmap.php?center=${encodeURIComponent(center)}&zoom=${zoom}&size=${size}&markers=${encodeURIComponent(marker)}`;
   }, [locationPayload]);
   const tableTotal = useMemo(() => {
     if (!isTablePayload) return null;
