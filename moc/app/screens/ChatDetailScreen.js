@@ -339,6 +339,32 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
                   <Icon name="place" size={24} color="#e11d48" style={styles.locationMapPin} />
                 </View>
               </TouchableOpacity>
+              {todoPayload ? null : (
+                <View style={styles.locationTimeRow}>
+                  {item.time ? (
+                    <Text
+                      style={[
+                        styles.messageTime,
+                        styles.locationTimeText,
+                        item.sender === 'me' ? styles.myTime : styles.theirTime,
+                        item.pending ? styles.pendingTime : null,
+                        item.failed ? styles.failedTime : null,
+                        { color: statusColor },
+                      ]}
+                    >
+                      {item.time}
+                    </Text>
+                  ) : null}
+                  {showClock ? (
+                    <Icon
+                      name="schedule"
+                      size={12}
+                      color={statusColor}
+                      style={styles.statusIcon}
+                    />
+                  ) : null}
+                </View>
+              )}
             </View>
           ) : (
             <Text style={styles.messageText}>{messageText}</Text>
@@ -354,32 +380,7 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
           ) : null}
         </View>
       )}
-       {todoPayload ? null : locationPayload ? (
-        <View style={styles.locationTimeRow}>
-          {item.time ? (
-            <Text
-              style={[
-                styles.messageTime,
-                styles.locationTimeText,
-                item.sender === 'me' ? styles.myTime : styles.theirTime,
-                item.pending ? styles.pendingTime : null,
-                item.failed ? styles.failedTime : null,
-                { color: statusColor },
-              ]}
-            >
-              {item.time}
-            </Text>
-          ) : null}
-          {showClock ? (
-            <Icon
-              name="schedule"
-              size={12}
-              color={statusColor}
-              style={styles.statusIcon}
-            />
-          ) : null}
-        </View>
-      ) : showClock ? (
+       {todoPayload ? null : locationPayload ? null : showClock ? (
         <View style={styles.messageStatusRow}>
           {item.time ? (
             <Text
