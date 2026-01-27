@@ -134,7 +134,9 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
     return {
       latitude,
       longitude,
-      url: structuredPayload?.url ?? `https://maps.google.com/?q=${latitude},${longitude}`,
+      url:
+        structuredPayload?.url ??
+        `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=15/${latitude}/${longitude}`,
     };
   }, [structuredPayload]);
   const isTablePayload = todoPayload?.type === 'todo_table';
@@ -146,15 +148,6 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
     }
     const { latitude, longitude } = locationPayload;
     const center = `${latitude},${longitude}`;
-    const googleMapsKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_STATIC_API_KEY;
-    if (googleMapsKey) {
-      const markers = `color:red|${center}`;
-      const size = '480x260';
-     return {
-        primaryMapUrl: `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(center)}&zoom=15&size=${size}&scale=2&maptype=roadmap&markers=${encodeURIComponent(markers)}&key=${encodeURIComponent(googleMapsKey)}`,
-        fallbackMapUrl: `https://staticmap.openstreetmap.de/staticmap.php?center=${encodeURIComponent(center)}&zoom=15&size=600x300&markers=${encodeURIComponent(`${latitude},${longitude},red-pushpin`)}`,
-      };
-    }
     const size = '600x300';
     const zoom = '15';
     const marker = `${latitude},${longitude},red-pushpin`;
@@ -165,7 +158,6 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
   }, [locationPayload]);
   console.log('locationPayload:', locationPayload);
   console.log('locationImageUrl:', locationImageUrl);
-  console.log('googleKey present:', !!process.env.EXPO_PUBLIC_GOOGLE_MAPS_STATIC_API_KEY);
   const [mapImageState, setMapImageState] = useState('primary');
   useEffect(() => {
     setMapImageState('primary');
@@ -957,7 +949,9 @@ export default function ChatDetailScreen() {
     const locationPayload = JSON.stringify({
       type: 'location',
       coords: { latitude, longitude },
-      url: parsedLocation?.url ?? `https://maps.google.com/?q=${latitude},${longitude}`,
+      url:
+        parsedLocation?.url ??
+        `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=15/${latitude}/${longitude}`,
     });
     sendTextMessage(locationPayload).catch(err => {
       console.warn('Send location error:', err);
