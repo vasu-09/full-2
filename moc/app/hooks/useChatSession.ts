@@ -479,10 +479,19 @@ export const useChatSession = ({
     });
   }, [roomId, resolvedRoomKey, title, peerId, upsertRoom]);
 
-  const mergeMessage = useCallback(
-    (incoming: InternalMessage) => setRawMessages(prev => mergeIncomingMessage(prev, incoming)),
-    [],
-  );
+  const mergeMessage = useCallback((incoming: InternalMessage) => {
+    setRawMessages(prev => {
+      const idx = prev.findIndex(
+        message => String(message.messageId) === String(incoming.messageId),
+      );
+      if (idx >= 0) {
+        const next = prev.slice();
+        next[idx] = { ...prev[idx], ...incoming };
+        return next;
+      }
+      return [...prev, incoming];
+    });
+  }, []);
 
   const loadHistory = useCallback(async () => {
     if (!roomId) {
@@ -765,6 +774,13 @@ export const useChatSession = ({
             keyRef: payload.keyRef ?? null,
           };
           mergeMessage(selfUpdate);
+          saveMessagesToDb([toDbRecord(selfUpdate, normalizedPayload)]).catch(err =>
+            console.warn('Failed to persist self-echo message', err),
+          );
+          updateMessageFlagsInDb(String(selfUpdate.messageId), {
+            pending: false,
+            error: false,
+          }).catch(err => console.warn('Failed to clear pending flag for self-echo', err));
           return;
         }
         if (payloadCiphertext && payloadAad && payloadIv && payload.keyRef) {
