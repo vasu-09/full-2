@@ -1025,36 +1025,9 @@ export default function ChatDetailScreen() {
         resumeShowListPicker: undefined,
         closeTodoOverlay: undefined,
       });
-
-      if (roomId && pendingPreview?.roomId != null && Number(pendingPreview.roomId) !== Number(roomId)) {
-        return;
-      }
-
-      const previewMessageId = pendingPreview.messageId ?? createLocalMessageId();
-      const messageId = String(previewMessageId).startsWith('local-')
-        ? String(previewMessageId)
-        : `local-${previewMessageId}`;
       setShowListPicker(false);
       setSelectedListId(null);
-      setLocalMessages(prev => {
-        const existsInLocal = prev.some(m => m.id === messageId);
-        const existsInMessages = messagesRef.current.some(m => m.id === messageId);
-        if (existsInLocal || existsInMessages) return prev;
-        const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        return [
-          ...prev,
-          {
-            id: messageId,
-            text: pendingPreview.payload,
-            sender: 'me',
-            pending: true,
-            time,
-            raw: { body: pendingPreview.payload },
-          },
-        ];
-      });
-      clearSelection();
-      requestAnimationFrame(() => flatListRef.current?.scrollToEnd({ animated: true }));
+      return;
     };
 
     const unsubscribe = navigation.addListener('focus', onFocus);

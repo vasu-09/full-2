@@ -54,21 +54,12 @@ export default function SelectedPreview() {
     return sum + rowValue;
   }, 0);
   const total = `₹${totalValue}`;
-  const resumeParams = serializedPayload => ({
-    pendingTodoPreview: {
-      payload: serializedPayload,
-      messageId: null,
-      roomId,
-      roomKey,
-      peerId,
-      listTitle,
-    },
+  const resumeParams = () => ({
     closeTodoOverlay: true,
   });
 
-  const navigateBackToChat = (serializedPayload, messageId) => {
-    const params = resumeParams(serializedPayload);
-    params.pendingTodoPreview.messageId = messageId ?? null;
+  const navigateBackToChat = () => {
+    const params = resumeParams();
    try {
       if (returnToKey) {
         navigation.dispatch({
