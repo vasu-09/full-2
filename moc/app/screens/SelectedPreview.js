@@ -1,5 +1,5 @@
 // /app/screens/PreviewScreen.js
-import { useNavigation } from '@react-navigation/native';
+import { CommonActions, useNavigation } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -72,17 +72,15 @@ export default function SelectedPreview() {
   const navigateBackToChat = (serializedPayload, messageId) => {
     const params = resumeParams(serializedPayload);
     params.pendingTodoPreview.messageId = messageId ?? null;
-    if (returnToKey) {
-      navigation.navigate({
-        key: returnToKey,
-        name: 'screens/ChatDetailScreen',
-        params,
-        merge: true,
-      });
-       if (router.canGoBack()) {
-        router.back();
-        return;
+   try {
+      if (returnToKey) {
+        navigation.dispatch({
+          ...CommonActions.setParams(params),
+          source: returnToKey,
+        });
       }
+    } catch (error) {
+      console.warn('[SelectedPreview] Failed to set params on ChatDetailScreen:', error);
     }
     if (router.canGoBack()) {
       router.back();
@@ -95,7 +93,6 @@ export default function SelectedPreview() {
         roomKey: roomKey ?? undefined,
         peerId: peerId ?? undefined,
         title: title ?? undefined,
-        ...params,
       },
     });
   };
