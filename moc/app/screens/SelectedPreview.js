@@ -79,9 +79,13 @@ export default function SelectedPreview() {
         params,
         merge: true,
       });
+       if (router.canGoBack()) {
+        router.back();
+        return;
+      }
     }
-    if (navigation.canGoBack()) {
-      navigation.goBack();
+    if (router.canGoBack()) {
+      router.back();
       return;
     }
     router.replace({
