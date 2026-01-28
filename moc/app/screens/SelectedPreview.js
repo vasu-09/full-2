@@ -55,6 +55,46 @@ export default function SelectedPreview() {
     return sum + rowValue;
   }, 0);
   const total = `₹${totalValue}`;
+  const resumeParams = serializedPayload => ({
+    pendingTodoPreview: {
+      payload: serializedPayload,
+      messageId: null,
+      roomId,
+      roomKey,
+      peerId,
+      listId: resumeSelectedListId,
+      listTitle,
+    },
+    resumeSelectedListId,
+    resumeShowListPicker: true,
+  });
+
+  const navigateBackToChat = (serializedPayload, messageId) => {
+    const params = resumeParams(serializedPayload);
+    params.pendingTodoPreview.messageId = messageId ?? null;
+    if (returnToKey) {
+      navigation.navigate({
+        key: returnToKey,
+        name: 'screens/ChatDetailScreen',
+        params,
+        merge: true,
+      });
+    }
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace({
+      pathname: '/screens/ChatDetailScreen',
+      params: {
+        roomId: roomId ?? undefined,
+        roomKey: roomKey ?? undefined,
+        peerId: peerId ?? undefined,
+        title: title ?? undefined,
+        ...params,
+      },
+    });
+  };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -122,27 +162,7 @@ export default function SelectedPreview() {
           const sent = await sendTextMessage(serializedPayload);
           setIsSending(false);
           if (sent?.success) {
-            if (returnToKey) {
-              navigation.navigate({
-                name: 'screens/ChatDetailScreen',
-                key: returnToKey,
-                params: {
-                  pendingTodoPreview: {
-                    payload: serializedPayload,
-                    messageId: sent?.messageId ?? null,
-                    roomId,
-                    roomKey,
-                    peerId,
-                    listId: resumeSelectedListId,
-                    listTitle,
-                  },
-                  resumeSelectedListId,
-                  resumeShowListPicker: true,
-                },
-                merge: true,
-              });
-            }
-            router.back();
+            navigateBackToChat(serializedPayload, sent?.messageId);
           } else {
             Alert.alert('Send failed', 'Unable to send the list. Please try again.');
           }
