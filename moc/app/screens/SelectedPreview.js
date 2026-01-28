@@ -19,7 +19,6 @@ export default function SelectedPreview() {
   const title = params?.title ? String(params.title) : null;
   const listTitle = params?.listTitle ? String(params.listTitle) : 'Shared List';
   const returnToKey = params?.returnToKey ? String(params.returnToKey) : null;
-  const resumeSelectedListId = params?.selectedListId ? String(params.selectedListId) : null;
   const [isSending, setIsSending] = useState(false);
   const { sendTextMessage } = useChatSession({
     roomId,
@@ -62,11 +61,9 @@ export default function SelectedPreview() {
       roomId,
       roomKey,
       peerId,
-      listId: resumeSelectedListId,
       listTitle,
     },
-    resumeSelectedListId,
-    resumeShowListPicker: true,
+    closeTodoOverlay: true,
   });
 
   const navigateBackToChat = (serializedPayload, messageId) => {

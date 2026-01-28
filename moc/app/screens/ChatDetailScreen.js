@@ -993,12 +993,19 @@ export default function ChatDetailScreen() {
       const pendingPreview = currentRoute?.params?.pendingTodoPreview;
       const resumeSelectedListId = currentRoute?.params?.resumeSelectedListId;
       const resumeShowListPicker = currentRoute?.params?.resumeShowListPicker;
+      const closeTodoOverlay = currentRoute?.params?.closeTodoOverlay;
 
-      if (resumeSelectedListId || resumeShowListPicker) {
+      if (resumeSelectedListId || resumeShowListPicker || closeTodoOverlay) {
         navigation.setParams({
           resumeSelectedListId: undefined,
           resumeShowListPicker: undefined,
+          closeTodoOverlay: undefined,
         });
+      }
+
+      if (closeTodoOverlay) {
+        setShowListPicker(false);
+        setSelectedListId(null);
       }
 
       if (resumeSelectedListId) {
@@ -1016,6 +1023,7 @@ export default function ChatDetailScreen() {
         pendingTodoPreview: undefined,
         resumeSelectedListId: undefined,
         resumeShowListPicker: undefined,
+        closeTodoOverlay: undefined,
       });
 
       if (roomId && pendingPreview?.roomId != null && Number(pendingPreview.roomId) !== Number(roomId)) {
@@ -1026,8 +1034,8 @@ export default function ChatDetailScreen() {
       const messageId = String(previewMessageId).startsWith('local-')
         ? String(previewMessageId)
         : `local-${previewMessageId}`;
-      setSelectedListId(pendingPreview.listId ?? resumeSelectedListId ?? selectedListId);
       setShowListPicker(false);
+      setSelectedListId(null);
       setLocalMessages(prev => {
         const existsInLocal = prev.some(m => m.id === messageId);
         const existsInMessages = messagesRef.current.some(m => m.id === messageId);
