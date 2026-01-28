@@ -41,6 +41,33 @@ const MIC_SIZE = 48;
 const DECRYPTION_PENDING_TEXT = 'Waiting for this message. This may take a while.';
 const HELP_CENTER_URL = 'https://mocconnect.in/';
 
+const getIsoTs = msg =>
+  msg?.serverTs ||
+  msg?.raw?.serverTs ||
+  null;
+
+const dayKeyFromIso = iso => {
+  if (!iso) return 'unknown';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return 'unknown';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+const formatDayLabel = iso => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+
+  const now = new Date();
+  const startOf = x => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+
+  const diffDays = Math.round((startOf(now) - startOf(d)) / (24 * 60 * 60 * 1000));
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+
+  return d.toLocaleDateString(undefined, { day: '2-digit', month: 'long', year: 'numeric' });
+};
+
 export const formatDurationText = millis => {
   const totalSeconds = Math.max(0, Math.floor((millis || 0) / 1000));
   const minutes = Math.floor(totalSeconds / 60);
@@ -583,6 +610,37 @@ export default function ChatDetailScreen() {
     () => messages.filter(message => !deletedMessageIds.includes(message.id)),
     [messages, deletedMessageIds],
   );
+  const chatItems = useMemo(() => {
+    const sorted = filteredMessages
+      .slice()
+      .sort((a, b) => {
+        const aIso = getIsoTs(a) ?? '';
+        const bIso = getIsoTs(b) ?? '';
+        if (aIso === bIso) return String(a.id).localeCompare(String(b.id));
+        return aIso.localeCompare(bIso);
+      });
+
+    const items = [];
+    let lastDayKey = null;
+
+    for (const msg of sorted) {
+      const iso = getIsoTs(msg);
+      const dayKey = dayKeyFromIso(iso);
+
+      if (dayKey !== lastDayKey) {
+        lastDayKey = dayKey;
+        items.push({
+          kind: 'date',
+          id: `date-${dayKey}`,
+          label: formatDayLabel(iso),
+        });
+      }
+
+      items.push({ kind: 'msg', id: `msg-${msg.id}`, msg });
+    }
+
+    return items;
+  }, [filteredMessages]);
   const messagesRef = useRef([]);
   useEffect(() => {
     messagesRef.current = filteredMessages;
@@ -694,6 +752,7 @@ export default function ChatDetailScreen() {
         copyToCacheDirectory: true,
       });
       if (res.type === 'cancel') return;
+      const nowIso = new Date().toISOString();
 
       const file = {
         id: createLocalMessageId(),
@@ -702,6 +761,7 @@ export default function ChatDetailScreen() {
         name: res.name,
         mimeType: res.mimeType,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        serverTs: nowIso,
         sender: 'me',
         isFile: true,
         pending: true,
@@ -1369,6 +1429,7 @@ export default function ChatDetailScreen() {
     if (!recordedUri) return;
     const duration = recordingDuration;
     const uri = recordedUri;
+    const nowIso = new Date().toISOString();
     setLocalMessages(prev => [
       ...prev,
       {
@@ -1376,6 +1437,7 @@ export default function ChatDetailScreen() {
         audio: uri,
         duration,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        serverTs: nowIso,
         sender: 'me',
         pending: true,
       },
@@ -1652,7 +1714,7 @@ export default function ChatDetailScreen() {
           ) : null}
           <FlatList
             ref={flatListRef}
-            data={filteredMessages}
+            data={chatItems}
             keyExtractor={i => i.id}
             contentContainerStyle={{
               padding: 12,
@@ -1666,26 +1728,35 @@ export default function ChatDetailScreen() {
               ) : null
             }
             renderItem={({ item }) => {
-              const isSelected = selectedMessages.some(m => m.id === item.id);
-              const tableMessage = isTableMessage(item.text ?? item?.raw?.body ?? null);
+              if (item.kind === 'date') {
+                return (
+                  <View style={styles.dateSeparatorRow}>
+                    <Text style={styles.dateSeparatorText}>{item.label}</Text>
+                  </View>
+                );
+              }
+
+              const msg = item.msg;
+              const isSelected = selectedMessages.some(m => m.id === msg.id);
+              const tableMessage = isTableMessage(msg.text ?? msg?.raw?.body ?? null);
               return (
                 <TouchableOpacity
                   activeOpacity={0.9}
                   onLongPress={() => {
                     setSelectedMessages(prev => {
-                      if (prev.some(m => m.id === item.id)) return prev;
-                      return [...prev, item];
+                      if (prev.some(m => m.id === msg.id)) return prev;
+                      return [...prev, msg];
                     });
                     setMoreMenuVisible(false);
                   }}
                   onPress={() => {
                     if (selectedMessages.length) {
                       setSelectedMessages(prev => {
-                        const exists = prev.some(m => m.id === item.id);
+                        const exists = prev.some(m => m.id === msg.id);
                         if (exists) {
-                          return prev.filter(m => m.id !== item.id);
+                          return prev.filter(m => m.id !== msg.id);
                         }
-                        return [...prev, item];
+                        return [...prev, msg];
                       });
                     }
                   }}
@@ -1695,13 +1766,13 @@ export default function ChatDetailScreen() {
                     style={[
                       styles.bubble,
                       tableMessage ? styles.tableBubble : null,
-                      item.sender === 'me' ? styles.myBubble : styles.theirBubble,
-                      item.failed ? styles.failedBubble : null,
+                      msg.sender === 'me' ? styles.myBubble : styles.theirBubble,
+                      msg.failed ? styles.failedBubble : null,
                       isSelected ? styles.selectedBubble : null,
                     ]}
                   >
                   <MessageContent
-                      item={item}
+                      item={msg}
                       playingMessageId={playingMessageId}
                       onTogglePlayback={toggleMessagePlayback}
                       onRetryDecrypt={retryDecryptMessage}
@@ -2120,6 +2191,18 @@ const styles = StyleSheet.create({
     color: '#d8e8f6',
     fontSize: 12,
     marginTop: 2,
+  },
+  dateSeparatorRow: {
+    alignItems: 'center',
+    marginVertical: 10,
+  },
+  dateSeparatorText: {
+    backgroundColor: 'rgba(0,0,0,0.08)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    fontSize: 12,
+    color: '#333',
   },
   messageRow: {
     paddingVertical: 4,
