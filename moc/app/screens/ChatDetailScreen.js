@@ -571,6 +571,10 @@ export default function ChatDetailScreen() {
 
   const [localMessages, setLocalMessages] = useState([]);
   const [deletedMessageIds, setDeletedMessageIds] = useState([]);
+  const createLocalMessageId = useCallback(
+    () => `local-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+    [],
+  );
   const messages = useMemo(
     () => [...sessionMessages, ...localMessages],
     [sessionMessages, localMessages],
@@ -692,7 +696,7 @@ export default function ChatDetailScreen() {
       if (res.type === 'cancel') return;
 
       const file = {
-        id: Date.now().toString(),
+        id: createLocalMessageId(),
         text: `📄 ${res.name}`,
         uri: res.uri,
         name: res.name,
@@ -1018,7 +1022,10 @@ export default function ChatDetailScreen() {
         return;
       }
 
-      const messageId = pendingPreview.messageId ?? `local-${Date.now()}`;
+      const previewMessageId = pendingPreview.messageId ?? createLocalMessageId();
+      const messageId = String(previewMessageId).startsWith('local-')
+        ? String(previewMessageId)
+        : `local-${previewMessageId}`;
       setSelectedListId(pendingPreview.listId ?? resumeSelectedListId ?? selectedListId);
       setShowListPicker(false);
       setLocalMessages(prev => {
@@ -1044,7 +1051,7 @@ export default function ChatDetailScreen() {
 
     const unsubscribe = navigation.addListener('focus', onFocus);
     return unsubscribe;
-  }, [navigation, route.key, roomId, selectedListId, clearSelection]);
+  }, [navigation, route.key, roomId, selectedListId, clearSelection, createLocalMessageId]);
 
   const clearSelection = useCallback(() => {
     setSelectedMessages([]);
@@ -1384,7 +1391,7 @@ export default function ChatDetailScreen() {
     setLocalMessages(prev => [
       ...prev,
       {
-        id: Date.now().toString(),
+        id: createLocalMessageId(),
         audio: uri,
         duration,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
