@@ -80,8 +80,8 @@ export default function SelectedPreview() {
         merge: true,
       });
     }
-    if (router.canGoBack()) {
-      router.back();
+    if (navigation.canGoBack()) {
+      navigation.goBack();
       return;
     }
     router.replace({
