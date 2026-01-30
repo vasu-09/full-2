@@ -239,7 +239,7 @@ export const useChatSession = ({
         !msg.keyRef &&
         Boolean(msg.ciphertext) &&
         Boolean(msg.iv) &&
-        !msg.body &&
+        (!msg.body || msg.body === DECRYPTION_PENDING_MESSAGE) &&
         !msg.decryptionFailed,
     );
     if (!candidates.length) {
@@ -326,7 +326,7 @@ export const useChatSession = ({
         Boolean(msg.ciphertext) &&
         Boolean(msg.iv) &&
         Boolean(msg.aad) &&
-        !msg.body &&
+        (!msg.body || msg.body === DECRYPTION_PENDING_MESSAGE) &&
         !msg.decryptionFailed,
     );
 
@@ -765,9 +765,12 @@ export const useChatSession = ({
       if (payload.e2ee) {
         const fromSelf = currentUserId != null && base.senderId === currentUserId;
         if (fromSelf) {
+          const fallbackIsPending = fallbackBody === DECRYPTION_PENDING_MESSAGE;
           const selfUpdate: InternalMessage = {
             ...base,
-            body: fallbackBody,
+            ...(fallbackBody != null ? { body: fallbackBody } : {}),
+            decryptionFailed: fallbackIsPending,
+            debugBody: fallbackIsPending ? fallbackBody : null,
             ciphertext: payloadCiphertext ?? null,
             iv: payloadIv ?? null,
             aad: payloadAad ?? null,

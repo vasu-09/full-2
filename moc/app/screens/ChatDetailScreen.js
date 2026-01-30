@@ -122,7 +122,8 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
 
   const fallbackText = item.text ?? item?.raw?.body ?? 'Encrypted message';
   const messageText = overrideText ?? fallbackText;
-  
+
+  const isPendingPlaceholder = messageText === DECRYPTION_PENDING_TEXT;
   const statusColor = item.failed
     ? '#b3261e'
     : item.pending
@@ -133,14 +134,15 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
   const showClock = item.pending || item.failed;
   const decryptionFailed = Boolean(item?.raw?.decryptionFailed);
   const showEncryptedPlaceholder = decryptionFailed && !overrideText;
-  const showWaitingMessage = showEncryptedPlaceholder || retryStatus !== 'idle';
+  const showWaitingMessage =
+    showEncryptedPlaceholder || retryStatus !== 'idle' || isPendingPlaceholder;
   const handleLearnMore = useCallback(() => {
     Linking.openURL(HELP_CENTER_URL).catch(() => {
       Alert.alert('Error', 'Unable to open Help Center');
     });
   }, []);
   const structuredPayload = useMemo(() => {
-    if (showEncryptedPlaceholder  || !messageText || typeof messageText !== 'string') {
+    if (showEncryptedPlaceholder || isPendingPlaceholder || !messageText || typeof messageText !== 'string') {
       return null;
     }
     try {
@@ -148,7 +150,7 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
     } catch {
       return null;
     }
-  }, [decryptionFailed, messageText]);
+  }, [decryptionFailed, isPendingPlaceholder, messageText]);
   const todoPayload = useMemo(() => {
     if (structuredPayload?.type === 'todo_table' && Array.isArray(structuredPayload?.rows)) {
       return structuredPayload;
@@ -1740,7 +1742,12 @@ export default function ChatDetailScreen() {
               const msg = item.msg;
               const isSelected = selectedMessages.some(m => m.id === msg.id);
               const tableMessage = isTableMessage(msg.text ?? msg?.raw?.body ?? null);
-              const showWaitingBubble = Boolean(msg?.raw?.decryptionFailed) || Boolean(msg?.failed);
+              const isDecryptionPlaceholder =
+                (msg?.text ?? msg?.raw?.body ?? null) === DECRYPTION_PENDING_TEXT;
+              const showWaitingBubble =
+                Boolean(msg?.raw?.decryptionFailed) ||
+                Boolean(msg?.failed) ||
+                isDecryptionPlaceholder;
               return (
                 <TouchableOpacity
                   activeOpacity={0.9}
