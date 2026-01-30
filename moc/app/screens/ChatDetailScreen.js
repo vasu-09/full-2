@@ -859,6 +859,29 @@ export default function ChatDetailScreen() {
         .filter(list => list.id);
 
       setSharedLists(normalizedLists);
+      try {
+        await initializeDatabase();
+        const memberPhone = phoneNumber ? String(phoneNumber) : null;
+
+        for (const entry of normalizedLists) {
+          if (!entry?.id) continue;
+
+          await saveListSummaryToDb({
+            id: String(entry.id),
+            title: entry.title ?? 'Untitled List',
+            // Mark this list as shared with the current chat peer.
+            members: memberPhone ? [{ phone: memberPhone }] : null,
+            // Keep other fields empty; they'll be filled by fetchSelectedList.
+            listType: null,
+            createdAt: null,
+            updatedAt: null,
+            createdByUserId: null,
+            description: null,
+          });
+        }
+      } catch (dbError) {
+        console.error('Failed to cache shared list headers', dbError);
+      }
     } catch (err) {
       console.error('Failed to fetch shared lists', err);
       if (!cachedLists.length) {
