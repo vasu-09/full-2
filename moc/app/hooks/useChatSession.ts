@@ -63,6 +63,9 @@ const SHOULD_LOG_DECRYPT = __DEV__ && process.env.EXPO_PUBLIC_DEBUG_DECRYPT !== 
 const SHOULD_LOG_E2EE = __DEV__ && process.env.EXPO_PUBLIC_DEBUG_E2EE !== '0';
 const DECRYPTION_PENDING_MESSAGE = 'Waiting for this message. This may take a while.';
 
+const isDecryptionPlaceholder = (text?: string | null) =>
+  text === DECRYPTION_PENDING_MESSAGE;
+
 const formatTime = (iso?: string | null) => {
   if (!iso) {
     return '';
@@ -116,7 +119,7 @@ const toStoredMessage = (record: MessageRecordInput): InternalMessage => ({
   roomId: record.conversationId,
   senderId: record.senderId ?? null,
   type: MESSAGE_TYPE_TEXT,
-  body: record.plaintext ?? null,
+  body: isDecryptionPlaceholder(record.plaintext) ? null : record.plaintext ?? null,
   serverTs: record.createdAt ?? null,
   ciphertext: record.ciphertext ?? null,
   aad: record.aad ?? null,
@@ -126,6 +129,10 @@ const toStoredMessage = (record: MessageRecordInput): InternalMessage => ({
   error: record.error,
   readByPeer: record.readByPeer,
   e2ee: record.e2ee,
+  decryptionFailed:
+    Boolean(record.e2ee) &&
+    Boolean(record.ciphertext || record.iv || record.keyRef) &&
+    (record.plaintext == null || isDecryptionPlaceholder(record.plaintext)),
 });
 
 const parseFrameBody = (frame: StompFrame) => {
@@ -261,7 +268,7 @@ export const useChatSession = ({
           updates[msg.messageId] = { text, failed: false };
         } catch (err) {
           console.warn('Failed to decrypt cached message', { messageId: msg.messageId }, err);
-          updates[msg.messageId] = { text: DECRYPTION_PENDING_MESSAGE, failed: true };
+          updates[msg.messageId] = { text: null, failed: true };
         }
       }
 
@@ -353,7 +360,7 @@ export const useChatSession = ({
           updates[msg.messageId] = { text, failed: false };
         } catch (err) {
           console.warn('Failed to decrypt cached envelope', { messageId: msg.messageId }, err);
-          updates[msg.messageId] = { text: DECRYPTION_PENDING_MESSAGE, failed: true };
+          updates[msg.messageId] = { text: null, failed: true };
         }
       }
 
@@ -509,7 +516,7 @@ export const useChatSession = ({
           const aad = normalizeBinary(dto.aad);
           const iv = normalizeBinary(dto.iv);
           const ciphertext = normalizeBinary(dto.ciphertext);
-          let text = dto.body ?? null;
+          let text = isDecryptionPlaceholder(dto.body) ? null : dto.body ?? null;
           let failed = false;
           let debugBody: string | null = null;
           const encryptedPayload: EncryptedPayload | null =
@@ -537,9 +544,10 @@ export const useChatSession = ({
                 });
               } catch (decryptErr) {
                 console.warn('Failed to decrypt history message', decryptErr);
-                text = dto.body ?? DECRYPTION_PENDING_MESSAGE;
-                failed = dto.body == null;
-                debugBody = dto.body ?? null;
+                const placeholder = isDecryptionPlaceholder(dto.body);
+                text = placeholder ? null : dto.body ?? null;
+                failed = dto.body == null || placeholder;
+                debugBody = placeholder ? null : dto.body ?? null;
               }
             } else {
               text = dto.body ?? null;
@@ -549,9 +557,10 @@ export const useChatSession = ({
               text = await decryptMessage(encryptedPayload, sharedRoomKey);
             } catch (decryptErr) {
               console.warn('Failed to decrypt symmetric history message', decryptErr);
-              text = dto.body ?? DECRYPTION_PENDING_MESSAGE;
-              failed = dto.body == null;
-              debugBody = dto.body ?? null;
+              const placeholder = isDecryptionPlaceholder(dto.body);
+              text = placeholder ? null : dto.body ?? null;
+              failed = dto.body == null || placeholder;
+              debugBody = placeholder ? null : dto.body ?? null;
             }
           } else if (dto.e2ee && encryptedPayload) {
             text = dto.body ?? null;
@@ -759,7 +768,7 @@ export const useChatSession = ({
         }
       };
 
-      const fallbackBody = payload.body ?? null;
+      const fallbackBody = isDecryptionPlaceholder(payload.body) ? null : payload.body ?? null;
 
 
       if (payload.e2ee) {
@@ -807,9 +816,9 @@ export const useChatSession = ({
                   });
                 }
                 finalize(
-                  fallbackBody ?? DECRYPTION_PENDING_MESSAGE,
+                  fallbackBody ?? null,
                   true,
-                  fallbackBody ?? payload.body ?? null,
+                  fallbackBody ?? null,
                 );
               });
           } else {
@@ -853,7 +862,7 @@ export const useChatSession = ({
                   hasFallback: Boolean(fallbackBody),
                 });
               }
-              finalize(fallbackBody ?? DECRYPTION_PENDING_MESSAGE, true, fallbackBody);
+              finalize(fallbackBody ?? null, true, fallbackBody);
             });
           return;
         }
