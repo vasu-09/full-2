@@ -150,7 +150,7 @@ describe('MessageContent', () => {
     expect(getByText('Recovered text')).toBeTruthy();
   });
 
-  it('shows session rebuild hint when retry fails', async () => {
+  it('keeps the waiting message when retry fails', async () => {
     const message = {
       id: 'm3',
       messageId: 'm3',
@@ -182,8 +182,7 @@ describe('MessageContent', () => {
       />,
     );
 
-    await waitFor(() => expect(getByText('Re-establishing secure session…')).toBeTruthy());
-    expect(getByText('Waiting for this message. This may take a while.')).toBeTruthy();
+    await waitFor(() => expect(getByText('Waiting for this message. This may take a while.')).toBeTruthy());
     expect(getByText('Learn more')).toBeTruthy();
   });
 });

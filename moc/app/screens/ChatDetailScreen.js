@@ -120,7 +120,6 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
     };
   }, [item.id, item.failed, item?.raw?.decryptionFailed, onRetryDecrypt]);
 
-  const showRetryStatus = retryStatus === 'failed' && Boolean(item.failed || item?.raw?.decryptionFailed);
   const fallbackText = item.text ?? item?.raw?.body ?? 'Encrypted message';
   const messageText = overrideText ?? fallbackText;
   
@@ -134,6 +133,7 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
   const showClock = item.pending || item.failed;
   const decryptionFailed = Boolean(item?.raw?.decryptionFailed);
   const showEncryptedPlaceholder = decryptionFailed && !overrideText;
+  const showWaitingMessage = showEncryptedPlaceholder || retryStatus !== 'idle';
   const handleLearnMore = useCallback(() => {
     Linking.openURL(HELP_CENTER_URL).catch(() => {
       Alert.alert('Error', 'Unable to open Help Center');
@@ -401,20 +401,21 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
                 </View>
               )}
             </View>
-            ) : showEncryptedPlaceholder ? (
-            <Text style={[styles.messageText, styles.waitingMessageText]}>
-              {DECRYPTION_PENDING_TEXT}
-              {'\n'}
-              <Text style={styles.learnMoreLink} onPress={handleLearnMore}>
-                Learn more
-              </Text>
-            </Text>
+             ) : showWaitingMessage ? (
+            <View style={styles.waitingMessageRow}>
+              <Icon name="schedule" size={16} color="#1f6ea7" style={styles.waitingMessageIcon} />
+              <View style={styles.waitingMessageContent}>
+                <Text style={[styles.messageTextwaiting, styles.waitingMessageText]}>
+                  {DECRYPTION_PENDING_TEXT}
+                </Text>
+                <Text style={styles.learnMoreLink} onPress={handleLearnMore}>
+                  Learn more
+                </Text>
+              </View>
+            </View>
           ) : (
             <Text style={styles.messageText}>{messageText}</Text>
           )}
-          {showRetryStatus ? (
-            <Text style={styles.retryStatusText}>Re-establishing secure session…</Text>
-          ) : null}
         </View>
       )}
        {todoPayload ? null : locationPayload ? null : showClock ? (
@@ -1739,6 +1740,7 @@ export default function ChatDetailScreen() {
               const msg = item.msg;
               const isSelected = selectedMessages.some(m => m.id === msg.id);
               const tableMessage = isTableMessage(msg.text ?? msg?.raw?.body ?? null);
+              const showWaitingBubble = Boolean(msg?.raw?.decryptionFailed) || Boolean(msg?.failed);
               return (
                 <TouchableOpacity
                   activeOpacity={0.9}
@@ -1766,6 +1768,7 @@ export default function ChatDetailScreen() {
                     style={[
                       styles.bubble,
                       tableMessage ? styles.tableBubble : null,
+                      showWaitingBubble ? styles.waitingBubble : null,
                       msg.sender === 'me' ? styles.myBubble : styles.theirBubble,
                       msg.failed ? styles.failedBubble : null,
                       isSelected ? styles.selectedBubble : null,
@@ -2242,6 +2245,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   messageText: { fontSize: 16, lineHeight: 20 },
+  messageTextwaiting: { fontSize: 12, lineHeight: 10 },
   messageTextWrapper: {
     flexDirection: 'column',
     alignItems: 'flex-start',
@@ -2409,6 +2413,20 @@ const styles = StyleSheet.create({
   messageTextFlex: {
     flexShrink: 1,
   },
+  waitingBubble: {
+    opacity: 0.7,
+  },
+  waitingMessageRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  waitingMessageContent: {
+    flexShrink: 1,
+  },
+  waitingMessageIcon: {
+    marginRight: 8,
+    marginTop: 2,
+  },
   waitingMessageText: {
     color: '#475569',
     lineHeight: 18,
@@ -2416,12 +2434,8 @@ const styles = StyleSheet.create({
   learnMoreLink: {
     color: '#1f6ea7',
     fontWeight: '600',
+    fontSize:13,
     textDecorationLine: 'underline',
-  },
-  retryStatusText: {
-    color: '#1f6ea7',
-    fontSize: 12,
-    marginTop: 4,
   },
   messageTime: {
     fontSize: 10,
