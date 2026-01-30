@@ -406,10 +406,10 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
               <Icon name="schedule" size={16} color="#1f6ea7" style={styles.waitingMessageIcon} />
               <View style={styles.waitingMessageContent}>
                 <Text style={[styles.messageTextwaiting, styles.waitingMessageText]}>
-                  {DECRYPTION_PENDING_TEXT}
-                </Text>
-                <Text style={styles.learnMoreLink} onPress={handleLearnMore}>
-                  Learn more
+                  {DECRYPTION_PENDING_TEXT}{' '}
+                  <Text style={styles.learnMoreLink} onPress={handleLearnMore}>
+                    Learn more
+                  </Text>
                 </Text>
               </View>
             </View>
