@@ -25,17 +25,5 @@ public class MessagesRestController {
         List<MessageDto> messages = messageService.getGroupMessageHistory(chatRoomId, currentUserId);
         return ResponseEntity.ok(messages);
     }
-
-    @DeleteMapping("/{messageId}/delete-for-me")
-    public ResponseEntity<?> deleteMessageForMe(@PathVariable String messageId, Principal principal) {
-        messageService.deleteMessageForMe(messageId, principal.getName());
-        return ResponseEntity.ok("Message deleted for you");
-    }
-
-    @DeleteMapping("/{messageId}/delete-for-everyone")
-    public ResponseEntity<?> deleteMessageForEveryone(@PathVariable String messageId, Principal principal) {
-        messageService.deleteMessageForEveryone(messageId, principal.getName());
-        return ResponseEntity.ok("Message deleted for everyone");
-    }
 }
 

@@ -125,6 +125,16 @@ public class MessageController {
                 receipt.get("messageId"));
     }
 
+    @MessageMapping("/messages/{messageId}/delete-for-me")
+    public void deleteForMe(@DestinationVariable String messageId, Principal principal) {
+        messageService.deleteMessageForMe(messageId, principal.getName());
+    }
+
+    @MessageMapping("/messages/{messageId}/delete-for-everyone")
+    public void deleteForEveryone(@DestinationVariable String messageId, Principal principal) {
+        messageService.deleteMessageForEveryone(messageId, principal.getName());
+    }
+
 
     public String extractRoomIdFromMetadata(String metadata) {
         try {

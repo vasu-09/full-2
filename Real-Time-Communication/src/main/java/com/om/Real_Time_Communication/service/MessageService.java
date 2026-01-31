@@ -368,6 +368,7 @@ public class MessageService {
             message.setDeletedByReceiver(true);
         }
         chatMessageRepository.save(message);
+        broadcastMessageUpdate(message);
     }
 
     public void deleteMessageForEveryone(String messageId, String userId) {
@@ -385,6 +386,7 @@ public class MessageService {
             message.setBody("This message was deleted");
         }
         chatMessageRepository.save(message);
+        broadcastMessageUpdate(message);
     }
 
     private Message toEntity(MessageDto messageDto) {
@@ -522,6 +524,10 @@ public class MessageService {
         e.put("type", m.getType().name());
         e.put("serverTs", m.getServerTs());
         e.put("e2ee", m.isE2ee());
+        e.put("deletedBySender", m.isDeletedBySender());
+        e.put("deletedByReceiver", m.isDeletedByReceiver());
+        e.put("deletedForEveryone", m.isDeletedForEveryone());
+        e.put("systemMessage", m.isSystemMessage());
         if (m.isE2ee()) {
             e.put("e2eeVer", m.getE2eeVer());
             e.put("algo", m.getAlgo());
@@ -535,5 +541,19 @@ public class MessageService {
         return e;
     }
 
+    private void broadcastMessageUpdate(ChatMessage message) {
+        String roomKey = resolveRoomKey(message.getRoomId());
+        Map<String, Object> event = toRoomEvent(message);
+        messagingTemplate.convertAndSend("/topic/room/" + roomKey, event);
+    }
 
+    private String resolveRoomKey(Long roomId) {
+        if (roomId == null) {
+            return "unknown";
+        }
+        return chatRoomRepository.findById(roomId)
+                .map(ChatRoom::getRoomId)
+                .filter(key -> key != null && !key.isBlank())
+                .orElse(String.valueOf(roomId));
+    }
 }
