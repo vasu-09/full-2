@@ -1,4 +1,6 @@
+import { sendDeleteForEveryone, sendDeleteForMe } from '../constants/stompEndpoints';
 import apiClient from './apiClient';
+import stompClient from './stompClient';
 
 export const fetchMessageHistory = async (roomKey: string) => {
   const { data } = await apiClient.get(`/api/messages/${roomKey}/history`);
@@ -6,19 +8,11 @@ export const fetchMessageHistory = async (roomKey: string) => {
 };
 
 export const deleteMessageForMe = async (messageId: string | number) => {
-  await apiClient.delete(`/api/messages/${messageId}/delete-for-me`);
+  await stompClient.publish(sendDeleteForMe(messageId), {});
 };
 
 export const deleteMessageForEveryone = async (messageId: string | number) => {
-  await apiClient.delete(`/api/messages/${messageId}/delete-for-everyone`);
-};
-
-export const restoreMessageForMe = async (messageId: string | number) => {
-  await apiClient.put(`/api/messages/${messageId}/delete-for-me`);
-};
-
-export const restoreMessageForEveryone = async (messageId: string | number) => {
-  await apiClient.put(`/api/messages/${messageId}/delete-for-everyone`);
+  await stompClient.publish(sendDeleteForEveryone(messageId), {});
 };
 
 export const fetchPendingMessages = async (since?: string) => {

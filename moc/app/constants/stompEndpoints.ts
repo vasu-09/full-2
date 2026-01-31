@@ -14,3 +14,7 @@ export const sendRoomTyping = (roomId: string | number) => `/app/room/${roomId}/
 export const sendRoomRead = (roomId: string | number) => `/app/room/${roomId}/read`;
 export const sendDirectTyping = (userId: string | number) => `/app/dm/${userId}/typing`;
 export const sendDirectRead = (userId: string | number) => `/app/dm/${userId}/read`;
+export const sendDeleteForMe = (messageId: string | number) =>
+  `/app/messages/${messageId}/delete-for-me`;
+export const sendDeleteForEveryone = (messageId: string | number) =>
+  `/app/messages/${messageId}/delete-for-everyone`;
