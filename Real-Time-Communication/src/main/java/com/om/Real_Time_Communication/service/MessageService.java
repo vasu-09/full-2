@@ -15,6 +15,8 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.stereotype.Service;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.socket.WebSocketSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -355,6 +357,14 @@ public class MessageService {
     public void deleteMessageForMe(String messageId, String userId) {
         Message message = findMessageByIdOrMessageId(messageId);
 
+        if (Boolean.TRUE.equals(message.getGroupMessage())) {
+            if (message.getDeletedByUserIds().add(userId)) {
+                log.warn("Group message deleted for user messageId={} userId={}", messageId, userId);
+            }
+            messageRepository.save(message);
+            return;
+        }
+
         if (userId.equals(message.getSenderId())) {
             message.setDeletedBySender(true);
             log.warn("Message is deleted successfully for the sender messageId={} ", messageId);
@@ -362,7 +372,7 @@ public class MessageService {
             message.setDeletedByReceiver(true);
             log.warn("Message is deleted successfully for both users messageId={} ", messageId);
         } else {
-            throw new RuntimeException("User not authorized");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,"User not authorized");
         }
 
         messageRepository.save(message);
@@ -372,7 +382,7 @@ public class MessageService {
         Message message = findMessageByIdOrMessageId(messageId);
 
         if (!userId.equals(message.getSenderId())) {
-            throw new RuntimeException("Only sender can delete for everyone");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only sender can delete for everyone");
         }
 
         message.setDeletedBySender(true);
@@ -431,7 +441,7 @@ public class MessageService {
 
     private Message findMessageByIdOrMessageId(String messageId) {
         if (messageId == null || messageId.isBlank()) {
-            throw new RuntimeException("Message not found");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Message not found");
         }
 
         try {
@@ -445,7 +455,7 @@ public class MessageService {
         }
 
         return messageRepository.findByMessageId(messageId)
-                .orElseThrow(() -> new RuntimeException("Message not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Message not found"));
     }
 
     @Transactional
