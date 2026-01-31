@@ -17,6 +17,7 @@ import {
 import { useChatRegistry } from '../context/ChatContext';
 import { getStoredUserId } from '../services/authStorage';
 import {
+  deleteMessagesFromDb,
   getMessagesForConversationFromDb,
   saveMessagesToDb,
   updateMessageFlagsInDb,
@@ -103,6 +104,10 @@ const toInternalMessage = (dto: ChatMessageDto): InternalMessage => ({
   error: false,
   readByPeer: false,
   e2ee: dto.e2ee,
+  deletedBySender: dto.deletedBySender,
+  deletedByReceiver: dto.deletedByReceiver,
+  deletedForEveryone: dto.deletedForEveryone,
+  systemMessage: dto.systemMessage,
 });
 
 const generateMessageId = () => {
@@ -127,6 +132,10 @@ const toStoredMessage = (record: MessageRecordInput): InternalMessage => ({
   error: record.error,
   readByPeer: record.readByPeer,
   e2ee: record.e2ee,
+  deletedBySender: record.deletedBySender,
+  deletedByReceiver: record.deletedByReceiver,
+  deletedForEveryone: record.deletedForEveryone,
+  systemMessage: record.systemMessage,
 });
 
 const parseFrameBody = (frame: StompFrame) => {
@@ -190,8 +199,26 @@ export const useChatSession = ({
       pending: message.pending,
       error: message.error,
       readByPeer: message.readByPeer,
+      deletedBySender: message.deletedBySender,
+      deletedByReceiver: message.deletedByReceiver,
+      deletedForEveryone: message.deletedForEveryone,
+      systemMessage: message.systemMessage,
     }),
     [],
+  );
+
+  const isDeletedForUser = useCallback(
+    (message: InternalMessage) => {
+      if (!currentUserId || message.deletedForEveryone) {
+        return false;
+      }
+      const fromCurrentUser = message.senderId === currentUserId;
+      if (fromCurrentUser) {
+        return Boolean(message.deletedBySender);
+      }
+      return Boolean(message.deletedByReceiver);
+    },
+    [currentUserId],
   );
 
   useEffect(() => {
@@ -457,16 +484,27 @@ export const useChatSession = ({
           return;
         }
         if (stored.length) {
-          setRawMessages(stored.map(toStoredMessage));
-          const last = stored[stored.length - 1];
-          latestMessageIdRef.current = last?.id ?? null;
+          const storedMessages = stored.map(toStoredMessage);
+          const deletedForUser = storedMessages.filter(isDeletedForUser);
+          const deletedIds = deletedForUser.map(message => message.messageId);
+          const visibleMessages = storedMessages.filter(
+            message => !deletedIds.includes(message.messageId),
+          );
+          if (deletedIds.length) {
+            deleteMessagesFromDb(deletedIds).catch(err =>
+              console.warn('Failed to purge locally deleted messages', err),
+            );
+          }
+          setRawMessages(visibleMessages);
+          const last = visibleMessages[visibleMessages.length - 1];
+          latestMessageIdRef.current = last?.messageId ?? null;
         }
       }).catch(err => console.warn('Failed to load cached messages', err));
 
     return () => {
       cancelled = true;
     };
-  }, [roomId]);
+  }, [roomId, deleteMessagesFromDb, isDeletedForUser]);
 
   useEffect(() => {
     if (!roomId || !resolvedRoomKey) {
@@ -569,19 +607,29 @@ export const useChatSession = ({
           };
         }),
       );
+      const deletedForUser = processed.filter(isDeletedForUser);
+      const deletedIds = deletedForUser.map(message => message.messageId);
+      const visibleMessages = processed.filter(
+        message => !deletedIds.includes(message.messageId),
+      );
       setRawMessages(prev => {
-        let merged = prev;
-        for (const msg of processed) {
+        let merged = prev.filter(message => !deletedIds.includes(message.messageId));
+        for (const msg of visibleMessages) {
           merged = mergeIncomingMessage(merged, msg);
         }
         return merged;
       });
       if (roomId) {
-        const records = processed.map(msg => toDbRecord(msg));
+        const records = visibleMessages.map(msg => toDbRecord(msg));
         try {
           await saveMessagesToDb(records);
         } catch (dbErr) {
           console.warn('Failed to persist history messages', dbErr);
+        }
+        if (deletedIds.length) {
+          deleteMessagesFromDb(deletedIds).catch(err =>
+            console.warn('Failed to delete messages removed for user', err),
+          );
         }
       }
       const last = ordered[ordered.length - 1];
@@ -613,6 +661,8 @@ export const useChatSession = ({
     sharedRoomKey,
     toDbRecord,
     saveMessagesToDb,
+    deleteMessagesFromDb,
+    isDeletedForUser,
   ]);
 
   const lastLoadedRef = useRef<{ roomId: number | null; key: string | null } | null>(null);
@@ -729,6 +779,10 @@ export const useChatSession = ({
         aad: payloadAad ?? undefined,
         keyRef: payload.keyRef ?? undefined,
         e2ee: payload.e2ee,
+        deletedBySender: payload.deletedBySender,
+        deletedByReceiver: payload.deletedByReceiver,
+        deletedForEveryone: payload.deletedForEveryone,
+        systemMessage: payload.systemMessage,
       } as Partial<ChatMessageDto>;
       const base: InternalMessage = {
         messageId: payload.messageId,
@@ -739,6 +793,10 @@ export const useChatSession = ({
         pending: false,
         error: false,
         e2ee: Boolean(payload.e2ee),
+        deletedBySender: payload.deletedBySender,
+        deletedByReceiver: payload.deletedByReceiver,
+        deletedForEveryone: payload.deletedForEveryone,
+        systemMessage: payload.systemMessage,
       };
        const finalize = (
         text: string | null,
@@ -755,6 +813,13 @@ export const useChatSession = ({
           aad: payloadAad ?? null,
           keyRef: payload.keyRef ?? null,
         } as InternalMessage;
+        if (isDeletedForUser(merged)) {
+          setRawMessages(prev => prev.filter(message => message.messageId !== merged.messageId));
+          deleteMessagesFromDb([merged.messageId]).catch(err =>
+            console.warn('Failed to delete message removed for user', err),
+          );
+          return;
+        }
         mergeMessage(merged);
         saveMessagesToDb([toDbRecord(merged, normalizedPayload)]).catch(err =>
           console.warn('Failed to persist incoming message', err),
@@ -798,6 +863,13 @@ export const useChatSession = ({
             aad: payloadAad ?? null,
             keyRef: payload.keyRef ?? null,
           };
+          if (isDeletedForUser(selfUpdate)) {
+            setRawMessages(prev => prev.filter(message => message.messageId !== selfUpdate.messageId));
+            deleteMessagesFromDb([selfUpdate.messageId]).catch(err =>
+              console.warn('Failed to delete message removed for user', err),
+            );
+            return;
+          }
           mergeMessage(selfUpdate);
           saveMessagesToDb([toDbRecord(selfUpdate, normalizedPayload)]).catch(err =>
             console.warn('Failed to persist self-echo message', err),
@@ -854,6 +926,13 @@ export const useChatSession = ({
               aad: payloadAad ?? null,
               keyRef: payload.keyRef ?? null,
             };
+            if (isDeletedForUser(merged)) {
+              setRawMessages(prev => prev.filter(message => message.messageId !== merged.messageId));
+              deleteMessagesFromDb([merged.messageId]).catch(err =>
+                console.warn('Failed to delete message removed for user', err),
+              );
+              return;
+            }
             mergeMessage(merged);
             saveMessagesToDb([toDbRecord(merged, normalizedPayload)]).catch(err =>
               console.warn('Failed to persist incoming message', err),
@@ -892,6 +971,13 @@ export const useChatSession = ({
           aad: payloadAad ?? null,
           keyRef: payload.keyRef ?? null,
         };
+        if (isDeletedForUser(merged)) {
+          setRawMessages(prev => prev.filter(message => message.messageId !== merged.messageId));
+          deleteMessagesFromDb([merged.messageId]).catch(err =>
+            console.warn('Failed to delete message removed for user', err),
+          );
+          return;
+        }
         mergeMessage(merged);
         saveMessagesToDb([toDbRecord(merged, normalizedPayload)]).catch(err =>
           console.warn('Failed to persist incoming message', err),
@@ -1039,7 +1125,9 @@ export const useChatSession = ({
     sharedRoomKey,
     toDbRecord,
     saveMessagesToDb,
+    deleteMessagesFromDb,
     updateMessageFlagsInDb,
+    isDeletedForUser,
     sendInboxDeliveryAck,
   ]);
 

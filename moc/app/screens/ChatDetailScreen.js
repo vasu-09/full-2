@@ -642,6 +642,29 @@ export default function ChatDetailScreen() {
   const [localMessages, setLocalMessages] = useState([]);
   const [deletedMessageIds, setDeletedMessageIds] = useState([]);
   const [deletedForEveryoneIds, setDeletedForEveryoneIds] = useState([]);
+  const isDeletedForEveryone = useCallback(
+    msg =>
+      deletedForEveryoneIds.includes(msg.id) ||
+      msg?.raw?.deletedForEveryone ||
+      msg?.text === DELETED_MESSAGE_TEXT ||
+      msg?.raw?.body === DELETED_MESSAGE_TEXT,
+    [deletedForEveryoneIds],
+  );
+  const isDeletedForMe = useCallback(
+    msg => {
+      if (deletedMessageIds.includes(msg.id)) {
+        return true;
+      }
+      if (!currentUserId || isDeletedForEveryone(msg)) {
+        return false;
+      }
+      if (msg.sender === 'me') {
+        return Boolean(msg?.raw?.deletedBySender);
+      }
+      return Boolean(msg?.raw?.deletedByReceiver);
+    },
+    [currentUserId, deletedMessageIds, isDeletedForEveryone],
+  );
   const createLocalMessageId = useCallback(
     () => `local-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
     [],
@@ -651,8 +674,8 @@ export default function ChatDetailScreen() {
     [sessionMessages, localMessages],
   );
   const filteredMessages = useMemo(
-    () => messages.filter(message => !deletedMessageIds.includes(message.id)),
-    [messages, deletedMessageIds],
+    () => messages.filter(message => !isDeletedForMe(message)),
+    [messages, isDeletedForMe],
   );
   const chatItems = useMemo(() => {
     const sorted = filteredMessages
@@ -1272,14 +1295,6 @@ export default function ChatDetailScreen() {
       Alert.alert('Delete failed', 'Unable to delete the message for everyone.');
     }
   };
-  const isDeletedForEveryone = useCallback(
-    msg =>
-      deletedForEveryoneIds.includes(msg.id) ||
-      msg?.raw?.deletedForEveryone ||
-      msg?.text === DELETED_MESSAGE_TEXT ||
-      msg?.raw?.body === DELETED_MESSAGE_TEXT,
-    [deletedForEveryoneIds],
-  );
 
   const handleCopySelected = async () => {
     const textMessages = selectedMessages.filter(m => m.text);

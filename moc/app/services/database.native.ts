@@ -65,7 +65,7 @@ let localContactCounter = 0;
 let writeQueue: Promise<unknown> = Promise.resolve();
 
 const DB_NAME = 'moc-app.db';
-const CURRENT_SCHEMA_VERSION = 3;
+const CURRENT_SCHEMA_VERSION = 4;
 
 type MetaRow = {
   value: string;
@@ -692,7 +692,7 @@ export const deleteMessagesFromDb = async (messageIds: string[]): Promise<void> 
     const placeholders = messageIds.map(() => '?').join(', ');
     await db.runAsync(`DELETE FROM messages WHERE id IN (${placeholders})`, messageIds);
   });
-  
+
 export const getMessagesForConversationFromDb = async (
   conversationId: number,
   limit = 50,
