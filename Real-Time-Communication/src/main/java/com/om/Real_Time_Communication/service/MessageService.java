@@ -366,7 +366,7 @@ public class MessageService {
         messageRepository.save(message);
     }
 
-    public void deleteMessageForMe(String messageId, String userId) {
+    public void deleteMessageForEveryone(String messageId, String userId) {
         Message message = findMessageByIdOrMessageId(messageId);
 
         if (!userId.equals(message.getSenderId())) {
@@ -409,7 +409,7 @@ public class MessageService {
 
 
 
-    public void deleteMessageForMe(String messageId, String userId) {
+    public void deleteMessageForUser(String messageId, String userId) {
         Message msg = findMessageByIdOrMessageId(messageId);
 
         msg.getDeletedByUserIds().add(userId);
