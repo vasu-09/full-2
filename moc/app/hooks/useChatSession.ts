@@ -1007,6 +1007,9 @@ export const useChatSession = ({
       if (!ackMessageId) {
         return;
       }
+      const deliveryStatus =
+        typeof payload.deliveryStatus === 'string' ? payload.deliveryStatus : 'SENT_TO_WS';
+      const isReadStatus = deliveryStatus === 'READ';
       mergeMessage({
         messageId: ackMessageId,
         roomId: roomId,
@@ -1015,8 +1018,14 @@ export const useChatSession = ({
         serverTs: payload.serverTs,
         pending: false,
         error: false,
+        deliveryStatus,
+        readByPeer: isReadStatus ? true : undefined,
       });
-      updateMessageFlagsInDb(ackMessageId, { pending: false, error: false }).catch(err =>
+       updateMessageFlagsInDb(ackMessageId, {
+        pending: false,
+        error: false,
+        ...(isReadStatus ? { readByPeer: true } : {}),
+      }).catch(err =>
         console.warn('Failed to clear pending flag for message', err),
       );
     });

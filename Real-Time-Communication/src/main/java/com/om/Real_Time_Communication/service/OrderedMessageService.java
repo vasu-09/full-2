@@ -62,7 +62,7 @@ public class OrderedMessageService {
             messagingTemplate.convertAndSendToUser(
                     String.valueOf(senderId),
                     "/queue/ack",
-                    new AckDto(roomId, saved.getMessageId(), saved.getServerTs())
+                    new AckDto(roomId, saved.getMessageId(), saved.getServerTs(), "SENT_TO_WS")
             );
             log.info("Acknowledged message {} to sender {}", saved.getMessageId(), senderId);
 

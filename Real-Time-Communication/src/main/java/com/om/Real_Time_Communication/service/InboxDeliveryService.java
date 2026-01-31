@@ -142,6 +142,7 @@ public class InboxDeliveryService {
                 delivery.setDeliveredAt(Instant.now());
             }
             deliveryRepository.save(delivery);
+            notifySender(delivery);
         });
     }
 
@@ -219,5 +220,31 @@ public class InboxDeliveryService {
             e.put("body", m.getBody());
         }
         return e;
+    }
+
+    private void notifySender(MessageDelivery delivery) {
+        if (delivery == null || delivery.getRoomId() == null || delivery.getMsgId() == null) {
+            return;
+        }
+        ChatRoom room = chatRoomRepository.findById(delivery.getRoomId()).orElse(null);
+        if (room == null) {
+            return;
+        }
+        ChatMessage msg = chatMessageRepository.findByRoomIdAndMessageId(room.getId(), delivery.getMsgId())
+                .orElse(null);
+        if (msg == null || msg.getSenderId() == null) {
+            return;
+        }
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("roomId", room.getRoomId());
+        payload.put("messageId", msg.getMessageId());
+        payload.put("serverTs", msg.getServerTs());
+        payload.put("deliveryStatus", delivery.getStatus().name());
+        payload.put("type", "delivery");
+        messagingTemplate.convertAndSendToUser(
+                String.valueOf(msg.getSenderId()),
+                "/queue/ack",
+                payload
+        );
     }
 }
