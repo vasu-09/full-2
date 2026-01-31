@@ -27,26 +27,26 @@ public class MessagesRestController {
     }
 
     @DeleteMapping("/{messageId}/delete-for-me")
-    public ResponseEntity<?> deleteMessageForMe(@PathVariable Long messageId, Principal principal) {
+    public ResponseEntity<?> deleteMessageForMe(@PathVariable String messageId, Principal principal) {
         messageService.deleteMessageForMe(messageId, principal.getName());
         return ResponseEntity.ok("Message deleted for you");
     }
 
     @DeleteMapping("/{messageId}/delete-for-everyone")
-    public ResponseEntity<?> deleteMessageForEveryone(@PathVariable Long messageId, Principal principal) {
+    public ResponseEntity<?> deleteMessageForEveryone(@PathVariable String messageId, Principal principal) {
         messageService.deleteMessageForEveryone(messageId, principal.getName());
         return ResponseEntity.ok("Message deleted for everyone");
     }
 
     // If you prefer PUT style:
     @PutMapping("/{messageId}/delete-for-me")
-    public ResponseEntity<Void> deleteForMe(@PathVariable Long messageId, Principal principal) {
+    public ResponseEntity<Void> deleteForMe(@PathVariable String messageId, Principal principal) {
         messageService.deleteMessageForUser(messageId, principal.getName());
         return ResponseEntity.ok().build();
     }
 
     @PutMapping("/{messageId}/delete-for-everyone")
-    public ResponseEntity<Void> deleteForEveryone(@PathVariable Long messageId, Principal principal)
+    public ResponseEntity<Void> deleteForEveryone(@PathVariable String messageId, Principal principal)
             throws java.nio.file.AccessDeniedException {
         messageService.deleteForEveryone(messageId, principal.getName());
         return ResponseEntity.ok().build();

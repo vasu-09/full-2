@@ -352,9 +352,8 @@ public class MessageService {
                 .collect(Collectors.toList());
     }
 
-    public void deleteMessageForMe(Long messageId, String userId) {
-        Message message = messageRepository.findById(messageId)
-                .orElseThrow(() -> new RuntimeException("Message not found"));
+    public void deleteMessageForMe(String messageId, String userId) {
+        Message message = findMessageByIdOrMessageId(messageId);
 
         if (userId.equals(message.getSenderId())) {
             message.setDeletedBySender(true);
@@ -367,9 +366,8 @@ public class MessageService {
         messageRepository.save(message);
     }
 
-    public void deleteMessageForEveryone(Long messageId, String userId) {
-        Message message = messageRepository.findById(messageId)
-                .orElseThrow(() -> new RuntimeException("Message not found"));
+    public void deleteMessageForMe(String messageId, String userId) {
+        Message message = findMessageByIdOrMessageId(messageId);
 
         if (!userId.equals(message.getSenderId())) {
             throw new RuntimeException("Only sender can delete for everyone");
@@ -411,17 +409,15 @@ public class MessageService {
 
 
 
-    public void deleteMessageForUser(Long messageId, String userId) {
-        Message msg = messageRepository.findById(messageId)
-                .orElseThrow(() -> new RuntimeException("Message not found"));
+    public void deleteMessageForMe(String messageId, String userId) {
+        Message msg = findMessageByIdOrMessageId(messageId);
 
         msg.getDeletedByUserIds().add(userId);
         messageRepository.save(msg);
     }
 
-    public void deleteForEveryone(Long messageId, String userId) throws AccessDeniedException {
-        Message msg = messageRepository.findById(messageId)
-                .orElseThrow(() -> new RuntimeException("Message not found"));
+    public void deleteForEveryone(String messageId, String userId) throws AccessDeniedException {
+        Message msg = findMessageByIdOrMessageId(messageId);
 
         if (!msg.getSenderId().equals(userId)) {
             throw new AccessDeniedException("Only sender can delete for everyone");
@@ -429,6 +425,25 @@ public class MessageService {
 
         msg.setDeletedForEveryone(true);
         messageRepository.save(msg);
+    }
+
+    private Message findMessageByIdOrMessageId(String messageId) {
+        if (messageId == null || messageId.isBlank()) {
+            throw new RuntimeException("Message not found");
+        }
+
+        try {
+            Long numericId = Long.valueOf(messageId);
+            Optional<Message> numericMatch = messageRepository.findById(numericId);
+            if (numericMatch.isPresent()) {
+                return numericMatch.get();
+            }
+        } catch (NumberFormatException ignored) {
+            // Ignore and fall back to messageId lookup.
+        }
+
+        return messageRepository.findByMessageId(messageId)
+                .orElseThrow(() -> new RuntimeException("Message not found"));
     }
 
     @Transactional
