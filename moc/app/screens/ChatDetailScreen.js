@@ -130,33 +130,33 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
     (item.readByPeer ? 'READ' : item.pending ? 'PENDING' : 'SENT_TO_WS');
   const isSender = item.sender === 'me';
   const isPendingState = item.pending || deliveryStatus === 'PENDING';
+  const isSentToWs = deliveryStatus === 'SENT_TO_WS';
   const isDelivered = deliveryStatus === 'DELIVERED_TO_DEVICE';
   const isRead = deliveryStatus === 'READ';
   const statusColor = item.failed
     ? '#b3261e'
-    : isPendingState
-      ? '#1f6ea7'
-      : item.sender === 'me'
-        ? '#555'
-        : '#777';
-  const showClock = isSender && (isPendingState || item.failed);
-  const showSingleTick = isSender && !showClock && deliveryStatus === 'SENT_TO_WS';
+    : item.sender === 'me'
+      ? '#7a7a7a'
+      : '#777';
+  const statusIconColor = isRead ? '#1f6ea7' : '#7a7a7a';
+  const showClock = isSender && isPendingState;
+  const showSingleTick = isSender && !showClock && isSentToWs;
   const showDoubleTick = isSender && !showClock && (isDelivered || isRead);
   const showStatusRow = isSender && (showClock || showSingleTick || showDoubleTick);
   const renderStatusIcon = size => {
     if (!isSender) return null;
     if (showClock) {
-      return <Icon name="schedule" size={size} color={statusColor} style={styles.statusIcon} />;
+      return <Icon name="schedule" size={size} color={statusIconColor} style={styles.statusIcon} />;
     }
     if (showSingleTick) {
-      return <Icon name="check" size={size} color={statusColor} style={styles.statusIcon} />;
+      return <Icon name="check" size={size} color={statusIconColor} style={styles.statusIcon} />;
     }
     if (showDoubleTick) {
       return (
         <Icon
           name="done-all"
           size={size}
-          color={isRead ? '#1f6ea7' : statusColor}
+          color={statusIconColor}
           style={styles.statusIcon}
         />
       );
