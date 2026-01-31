@@ -13,7 +13,9 @@ import {
   Image,
   KeyboardAvoidingView,
   Linking,
+  Modal,
   Platform,
+  Pressable,
   StatusBar,
   StyleSheet,
   Text,
@@ -33,6 +35,10 @@ import {
   initializeDatabase,
   saveListSummaryToDb,
 } from '../services/database';
+import {
+  deleteMessageForEveryone,
+  deleteMessageForMe,
+} from '../services/messagesService';
 
 const BAR_HEIGHT = 56;
 const MESSAGE_BAR_HEIGHT = 48;
@@ -40,6 +46,7 @@ const MARGIN = 8;
 const MIC_SIZE = 48;
 const DECRYPTION_PENDING_TEXT = 'Waiting for this message. This may take a while.';
 const HELP_CENTER_URL = 'https://mocconnect.in/';
+const DELETED_MESSAGE_TEXT = 'This message was deleted';
 
 const getIsoTs = msg =>
   msg?.serverTs ||
@@ -76,7 +83,14 @@ export const formatDurationText = millis => {
 };
 
 
-export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRetryDecrypt }) => {
+export const MessageContent = ({
+  item,
+  playingMessageId,
+  onTogglePlayback,
+  onRetryDecrypt,
+  deletedForEveryone = false,
+  deletedLabel,
+}) => {
   const [overrideText, setOverrideText] = useState(null);
   const [retryStatus, setRetryStatus] = useState('idle');
 
@@ -219,6 +233,7 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
   const isTablePayload = todoPayload?.type === 'todo_table';
   const tableRows = isTablePayload ? (todoPayload?.rows ?? []) : [];
   const listItems = todoPayload?.type === 'todo_list' ? (todoPayload?.items ?? []) : [];
+  const showDeletedMessage = Boolean(deletedForEveryone);
   const { primaryMapUrl, fallbackMapUrl } = useMemo(() => {
     if (!locationPayload) {
       return { primaryMapUrl: null, fallbackMapUrl: null };
@@ -286,7 +301,14 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
         </View>
       ) : (
         <View style={[styles.messageTextFlex, styles.messageTextWrapper]}>
-          {todoPayload ? (
+          {showDeletedMessage ? (
+            <View style={styles.deletedMessageRow}>
+              <Icon name="block" size={16} color="#8f8f8f" style={styles.deletedMessageIcon} />
+              <Text style={styles.deletedMessageText}>
+                {deletedLabel || DELETED_MESSAGE_TEXT}
+              </Text>
+            </View>
+          ) : todoPayload ? (
             <View style={styles.tableWrapper}>
               {todoPayload.title ? (
                 <Text style={styles.tableTitle}>{todoPayload.title}</Text>
@@ -617,6 +639,7 @@ export default function ChatDetailScreen() {
 
   const [localMessages, setLocalMessages] = useState([]);
   const [deletedMessageIds, setDeletedMessageIds] = useState([]);
+  const [deletedForEveryoneIds, setDeletedForEveryoneIds] = useState([]);
   const createLocalMessageId = useCallback(
     () => `local-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
     [],
@@ -681,6 +704,8 @@ export default function ChatDetailScreen() {
   const [playingMessageId, setPlayingMessageId] = useState(null);
   const [selectedMessages, setSelectedMessages] = useState([]);
   const [moreMenuVisible, setMoreMenuVisible] = useState(false);
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [pendingDeleteMessages, setPendingDeleteMessages] = useState([]);
   const lastLocationRef = useRef(null);
   
 
@@ -1144,6 +1169,7 @@ export default function ChatDetailScreen() {
   useEffect(() => {
     setLocalMessages([]);
     setDeletedMessageIds([]);
+    setDeletedForEveryoneIds([]);
     clearSelection();
   }, [roomId, roomKey, clearSelection]);
 
@@ -1183,13 +1209,66 @@ export default function ChatDetailScreen() {
 
   const handleDeleteSelected = () => {
     if (!selectedMessages.length) return;
+    setPendingDeleteMessages(selectedMessages);
+    setDeleteModalVisible(true);
+  };
+  const closeDeleteModal = () => {
+    setDeleteModalVisible(false);
+    setPendingDeleteMessages([]);
+  };
+  const canDeleteForEveryone =
+    pendingDeleteMessages.length > 0 && pendingDeleteMessages.every(msg => msg.sender === 'me');
+  const deleteModalTitle =
+    pendingDeleteMessages.length > 1 ? 'Delete messages?' : 'Delete message?';
+  const applyDeleteForMe = async () => {
+    if (!pendingDeleteMessages.length) return;
+    const targetIds = pendingDeleteMessages.map(message => message.id);
     setDeletedMessageIds(prev => {
       const idSet = new Set(prev);
-      selectedMessages.forEach(message => idSet.add(message.id));
+      targetIds.forEach(id => idSet.add(id));
       return Array.from(idSet);
     });
+    closeDeleteModal();
     clearSelection();
+    try {
+      await Promise.all(
+        targetIds
+          .filter(id => id && !String(id).startsWith('local-'))
+          .map(id => deleteMessageForMe(id)),
+      );
+    } catch (err) {
+      console.warn('Delete for me failed', err);
+      Alert.alert('Delete failed', 'Unable to delete the message for you.');
+    }
   };
+  const applyDeleteForEveryone = async () => {
+    if (!pendingDeleteMessages.length) return;
+    const targetIds = pendingDeleteMessages.map(message => message.id);
+    setDeletedForEveryoneIds(prev => {
+      const idSet = new Set(prev);
+      targetIds.forEach(id => idSet.add(id));
+      return Array.from(idSet);
+    });
+    closeDeleteModal();
+    clearSelection();
+    try {
+      await Promise.all(
+        targetIds
+          .filter(id => id && !String(id).startsWith('local-'))
+          .map(id => deleteMessageForEveryone(id)),
+      );
+    } catch (err) {
+      console.warn('Delete for everyone failed', err);
+      Alert.alert('Delete failed', 'Unable to delete the message for everyone.');
+    }
+  };
+  const isDeletedForEveryone = useCallback(
+    msg =>
+      deletedForEveryoneIds.includes(msg.id) ||
+      msg?.text === DELETED_MESSAGE_TEXT ||
+      msg?.raw?.body === DELETED_MESSAGE_TEXT,
+    [deletedForEveryoneIds],
+  );
 
   const handleCopySelected = async () => {
     const textMessages = selectedMessages.filter(m => m.text);
@@ -1787,6 +1866,9 @@ export default function ChatDetailScreen() {
                 Boolean(msg?.raw?.decryptionFailed) ||
                 Boolean(msg?.failed) ||
                 isDecryptionPlaceholder;
+                const deletedForEveryone = isDeletedForEveryone(msg);
+                const deletedLabel =
+                  msg.sender === 'me' ? 'You deleted this message' : DELETED_MESSAGE_TEXT;
               return (
                 <TouchableOpacity
                   activeOpacity={0.9}
@@ -1814,6 +1896,7 @@ export default function ChatDetailScreen() {
                     style={[
                       styles.bubble,
                       tableMessage ? styles.tableBubble : null,
+                      deletedForEveryone ? styles.deletedBubble : null,
                       showWaitingBubble ? styles.waitingBubble : null,
                       msg.sender === 'me' ? styles.myBubble : styles.theirBubble,
                       msg.failed ? styles.failedBubble : null,
@@ -1825,12 +1908,38 @@ export default function ChatDetailScreen() {
                       playingMessageId={playingMessageId}
                       onTogglePlayback={toggleMessagePlayback}
                       onRetryDecrypt={retryDecryptMessage}
+                      deletedForEveryone={deletedForEveryone}
+                      deletedLabel={deletedLabel}
                     />
                   </View>
                 </TouchableOpacity>
               );
             }}
           />
+
+          <Modal
+        transparent
+        animationType="fade"
+        visible={deleteModalVisible}
+        onRequestClose={closeDeleteModal}
+      >
+        <Pressable style={styles.deleteModalBackdrop} onPress={closeDeleteModal}>
+          <Pressable style={styles.deleteModalCard} onPress={() => {}}>
+            <Text style={styles.deleteModalTitle}>{deleteModalTitle}</Text>
+            {canDeleteForEveryone ? (
+              <TouchableOpacity style={styles.deleteModalOption} onPress={applyDeleteForEveryone}>
+                <Text style={styles.deleteModalOptionText}>Delete for everyone</Text>
+              </TouchableOpacity>
+            ) : null}
+            <TouchableOpacity style={styles.deleteModalOption} onPress={applyDeleteForMe}>
+              <Text style={styles.deleteModalOptionText}>Delete for me</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.deleteModalOption} onPress={closeDeleteModal}>
+              <Text style={styles.deleteModalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Attach grid */}
       {attachMenuVisible && (
@@ -2157,6 +2266,45 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 15,
   },
+  deleteModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  deleteModalCard: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  deleteModalTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1f1f1f',
+    marginBottom: 12,
+  },
+  deleteModalOption: {
+    paddingVertical: 10,
+  },
+  deleteModalOptionText: {
+    fontSize: 16,
+    color: '#1f6ea7',
+    fontWeight: '500',
+  },
+  deleteModalCancelText: {
+    fontSize: 16,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
 
   historyErrorBanner: {
     marginHorizontal: 16,
@@ -2292,6 +2440,18 @@ const styles = StyleSheet.create({
   },
   messageText: { fontSize: 16, lineHeight: 20 },
   messageTextwaiting: { fontSize: 12, lineHeight: 10 },
+  deletedMessageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  deletedMessageIcon: {
+    marginRight: 6,
+  },
+  deletedMessageText: {
+    fontSize: 15,
+    color: '#6b6b6b',
+    fontStyle: 'italic',
+  },
   messageTextWrapper: {
     flexDirection: 'column',
     alignItems: 'flex-start',
@@ -2461,6 +2621,9 @@ const styles = StyleSheet.create({
   },
   waitingBubble: {
     opacity: 0.7,
+  },
+  deletedBubble: {
+    backgroundColor: '#f0f0f0',
   },
   waitingMessageRow: {
     flexDirection: 'row',

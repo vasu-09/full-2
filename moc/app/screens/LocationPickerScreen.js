@@ -121,25 +121,15 @@ export default function LocationPickerScreen() {
   return (
     <SafeAreaView style={styles.container}>
       {/* HEADER */}
-      <View style={[styles.header, { paddingTop: insets.top }]}>
-        <TouchableOpacity
-          onPress={() => setIsFullScreen(f => !f)}
-          style={styles.fullscreenBtn}
-        >
-          <Icon
-            name={isFullScreen ? 'fullscreen-exit' : 'fullscreen'}
-            size={24}
-            color="#fff"
-          />
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <Icon name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
 
-        <Text style={styles.title}>send location</Text>
+        <Text style={styles.title}>Send Location</Text>
 
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={styles.iconBtn}
-        >
-          <Icon name="close" size={24} color="#fff" />
+         <TouchableOpacity onPress={() => {}} style={styles.iconBtn}>
+          <Icon name="search" size={24} color="#fff" />
         </TouchableOpacity>
       </View>
 
@@ -154,6 +144,16 @@ export default function LocationPickerScreen() {
          showsMyLocationButton={false}
           liteMode={false}
         />
+        <TouchableOpacity
+          onPress={() => setIsFullScreen(f => !f)}
+          style={styles.fullscreenBtn}
+        >
+          <Icon
+            name={isFullScreen ? 'fullscreen-exit' : 'fullscreen'}
+            size={24}
+            color="#1f6ea7"
+          />
+        </TouchableOpacity>
         {/* Center Marker */}
         <View style={styles.markerFixed}>
           <Icon name="place" size={40} color="red" />
@@ -193,13 +193,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 8,
   },
-  fullscreenBtn: { padding: 8 },
+  backBtn: { padding: 8 },
   title: {
     flex: 1,
     color: '#fff',
     fontSize: 18,
     textAlign: 'center',
-    fontWeight: '600',
+    fontWeight: 'bold',
   },
   iconBtn: { padding: 8 },
 
@@ -214,6 +214,15 @@ const styles = StyleSheet.create({
     left: '50%',
     marginLeft: -20,
     marginTop: -40,
+  },
+  fullscreenBtn: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: '#fff',
+    padding: 8,
+    borderRadius: 24,
+    elevation: 3,
   },
   locateBtn: {
     position: 'absolute',
