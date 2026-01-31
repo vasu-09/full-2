@@ -9,6 +9,7 @@ import {
   roomTypingTopic,
   sendDirectRead,
   sendDirectTyping,
+  sendInboxAck,
   sendRoomMessage,
   sendRoomRead,
   sendRoomTyping,
@@ -671,6 +672,23 @@ export const useChatSession = ({
     };
   }, [disableSubscriptions, roomId]);
 
+  const sendInboxDeliveryAck = useCallback(
+    (messageId: string | null | undefined, status: 'DELIVERED' | 'READ') => {
+      if (!messageId || !resolvedRoomKey) {
+        return;
+      }
+      const deviceId = typeof e2eeClient?.getDeviceId === 'function' ? e2eeClient.getDeviceId() : undefined;
+      stompClient
+        .publish(sendInboxAck, {
+          msgId: String(messageId),
+          roomKey: resolvedRoomKey,
+          status,
+          deviceId,
+        })
+        .catch(err => console.warn('[WS][INBOX] ack failed', err));
+    },
+    [e2eeClient, resolvedRoomKey],
+  );
 
   useEffect(() => {
     if (!roomId || !resolvedRoomKey || disableSubscriptions) {
@@ -749,12 +767,16 @@ export const useChatSession = ({
           senderId: base.senderId ?? null,
         });
         if (base.senderId != null && currentUserId != null && base.senderId !== currentUserId) {
-           incrementUnread(resolvedRoomKey);
+          incrementUnread(resolvedRoomKey);
           const ackId = Number(payload.messageId);
           if (!Number.isNaN(ackId)) {
             stompClient
               .publish('/app/ack', { messageId: ackId })
               .catch(err => console.warn('Failed to acknowledge message delivery', err));
+          }
+          const deliveredId = base.messageId ? String(base.messageId) : null;
+          if (deliveredId) {
+            sendInboxDeliveryAck(deliveredId, 'DELIVERED');
           }
         }
       };
@@ -874,6 +896,12 @@ export const useChatSession = ({
         saveMessagesToDb([toDbRecord(merged, normalizedPayload)]).catch(err =>
           console.warn('Failed to persist incoming message', err),
         );
+        if (base.senderId != null && currentUserId != null && base.senderId !== currentUserId) {
+          const deliveredId = base.messageId ? String(base.messageId) : null;
+          if (deliveredId) {
+            sendInboxDeliveryAck(deliveredId, 'DELIVERED');
+          }
+        }
         return;
       }
       finalize(payload.body ?? null);
@@ -1012,6 +1040,7 @@ export const useChatSession = ({
     toDbRecord,
     saveMessagesToDb,
     updateMessageFlagsInDb,
+    sendInboxDeliveryAck,
   ]);
 
   useEffect(() => {
@@ -1420,11 +1449,12 @@ export const useChatSession = ({
           messageId: lastMessageId,
         });
       }
+      sendInboxDeliveryAck(lastMessageId, 'READ');
       resetUnread(resolvedRoomKey);
     } catch (err) {
       console.warn('Failed to mark messages as read', err);
     }
-  }, [roomId, resolvedRoomKey, resetUnread, peerId]);
+  }, [roomId, resolvedRoomKey, resetUnread, peerId, sendInboxDeliveryAck]);
 
   const typingUsers = useMemo(
     () =>
