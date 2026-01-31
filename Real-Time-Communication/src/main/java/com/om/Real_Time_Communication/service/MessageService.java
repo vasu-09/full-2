@@ -357,8 +357,10 @@ public class MessageService {
 
         if (userId.equals(message.getSenderId())) {
             message.setDeletedBySender(true);
+            log.warn("Message is deleted successfully for the sender messageId={} ", messageId);
         } else if (userId.equals(message.getReceiverId())) {
             message.setDeletedByReceiver(true);
+            log.warn("Message is deleted successfully for both users messageId={} ", messageId);
         } else {
             throw new RuntimeException("User not authorized");
         }
@@ -378,7 +380,7 @@ public class MessageService {
         message.setDeletedForEveryone(true);
         message.setContent("This message was deleted");
         message.setMetadata(null); // Optionally clear media info
-
+        log.warn("Message is deleted successfully for both users messageId={} ", messageId);
         messageRepository.save(message);
     }
 
