@@ -30,10 +30,12 @@ import useCallSignalingHook from '../hooks/useCallSignaling';
 import { useChatSession } from '../hooks/useChatSession';
 import apiClient from '../services/apiClient';
 import {
+  deleteMessagesFromDb,
   getListSummaryFromDb,
   getListsFromDb,
   initializeDatabase,
   saveListSummaryToDb,
+  updateMessageDeletionInDb,
 } from '../services/database';
 import {
   deleteMessageForEveryone,
@@ -1223,6 +1225,7 @@ export default function ChatDetailScreen() {
   const applyDeleteForMe = async () => {
     if (!pendingDeleteMessages.length) return;
     const targetIds = pendingDeleteMessages.map(message => message.id);
+    const persistedIds = targetIds.filter(id => id && !String(id).startsWith('local-'));
     setDeletedMessageIds(prev => {
       const idSet = new Set(prev);
       targetIds.forEach(id => idSet.add(id));
@@ -1231,9 +1234,9 @@ export default function ChatDetailScreen() {
     closeDeleteModal();
     clearSelection();
     try {
+      await deleteMessagesFromDb(persistedIds);
       await Promise.all(
-        targetIds
-          .filter(id => id && !String(id).startsWith('local-'))
+        persistedIds
           .map(id => deleteMessageForMe(id)),
       );
     } catch (err) {
@@ -1244,6 +1247,7 @@ export default function ChatDetailScreen() {
   const applyDeleteForEveryone = async () => {
     if (!pendingDeleteMessages.length) return;
     const targetIds = pendingDeleteMessages.map(message => message.id);
+    const persistedIds = targetIds.filter(id => id && !String(id).startsWith('local-'));
     setDeletedForEveryoneIds(prev => {
       const idSet = new Set(prev);
       targetIds.forEach(id => idSet.add(id));
@@ -1253,8 +1257,14 @@ export default function ChatDetailScreen() {
     clearSelection();
     try {
       await Promise.all(
-        targetIds
-          .filter(id => id && !String(id).startsWith('local-'))
+        persistedIds.map(id =>
+          updateMessageDeletionInDb(id, {
+            deletedForEveryone: true,
+          }),
+        ),
+      );
+      await Promise.all(
+        persistedIds
           .map(id => deleteMessageForEveryone(id)),
       );
     } catch (err) {
@@ -1265,6 +1275,7 @@ export default function ChatDetailScreen() {
   const isDeletedForEveryone = useCallback(
     msg =>
       deletedForEveryoneIds.includes(msg.id) ||
+      msg?.raw?.deletedForEveryone ||
       msg?.text === DELETED_MESSAGE_TEXT ||
       msg?.raw?.body === DELETED_MESSAGE_TEXT,
     [deletedForEveryoneIds],

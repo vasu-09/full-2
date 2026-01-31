@@ -41,4 +41,8 @@ export const getMessagesForConversationFromDb = async () => {
 
 export const updateMessageFlagsInDb = async () => {};
 
+export const updateMessageDeletionInDb = async () => {};
+
+export const deleteMessagesFromDb = async () => {};
+
 export const setConversationUnreadInDb = async () => {};
