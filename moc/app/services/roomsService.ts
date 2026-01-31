@@ -21,6 +21,10 @@ export interface ChatMessageDto {
   iv?: string;
   ciphertext?: string;
   keyRef?: string;
+  deletedBySender?: boolean;
+  deletedByReceiver?: boolean;
+  deletedForEveryone?: boolean;
+  systemMessage?: boolean;
 }
 
 type HistoryParams = {

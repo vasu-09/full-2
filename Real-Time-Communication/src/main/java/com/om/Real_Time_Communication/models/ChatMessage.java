@@ -64,6 +64,18 @@ public class ChatMessage {
     @Column(name = "key_ref", length = 64)
     private String keyRef;                 // "senderKey:v3" or per-recipient ref
 
+    @Column(name = "deleted_by_sender", nullable = false)
+    private boolean deletedBySender = false;
+
+    @Column(name = "deleted_by_receiver", nullable = false)
+    private boolean deletedByReceiver = false;
+
+    @Column(name = "deleted_for_everyone", nullable = false)
+    private boolean deletedForEveryone = false;
+
+    @Column(name = "system_message", nullable = false)
+    private boolean systemMessage = false;
+
     // ----- getters/setters -----
     public Long getId() { return id; }
 
@@ -105,4 +117,16 @@ public class ChatMessage {
 
     public String getKeyRef() { return keyRef; }
     public void setKeyRef(String keyRef) { this.keyRef = keyRef; }
+
+    public boolean isDeletedBySender() { return deletedBySender; }
+    public void setDeletedBySender(boolean deletedBySender) { this.deletedBySender = deletedBySender; }
+
+    public boolean isDeletedByReceiver() { return deletedByReceiver; }
+    public void setDeletedByReceiver(boolean deletedByReceiver) { this.deletedByReceiver = deletedByReceiver; }
+
+    public boolean isDeletedForEveryone() { return deletedForEveryone; }
+    public void setDeletedForEveryone(boolean deletedForEveryone) { this.deletedForEveryone = deletedForEveryone; }
+
+    public boolean isSystemMessage() { return systemMessage; }
+    public void setSystemMessage(boolean systemMessage) { this.systemMessage = systemMessage; }
 }

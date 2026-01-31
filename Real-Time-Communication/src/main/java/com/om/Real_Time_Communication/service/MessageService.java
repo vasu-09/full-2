@@ -355,43 +355,36 @@ public class MessageService {
     }
 
     public void deleteMessageForMe(String messageId, String userId) {
-        Message message = findMessageByIdOrMessageId(messageId);
-
-        if (Boolean.TRUE.equals(message.getGroupMessage())) {
-            if (message.getDeletedByUserIds().add(userId)) {
-                log.warn("Group message deleted for user messageId={} userId={}", messageId, userId);
-            }
-            messageRepository.save(message);
-            return;
+        ChatMessage message = chatMessageRepository.findByMessageId(messageId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Message not found"));
+        Optional<Long> maybeUserId = parseUserId(userId);
+        if (maybeUserId.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "User not authorized");
         }
-
-        if (userId.equals(message.getSenderId())) {
+        Long id = maybeUserId.get();
+        if (id.equals(message.getSenderId())) {
             message.setDeletedBySender(true);
-            log.warn("Message is deleted successfully for the sender messageId={} ", messageId);
-        } else if (userId.equals(message.getReceiverId())) {
-            message.setDeletedByReceiver(true);
-            log.warn("Message is deleted successfully for both users messageId={} ", messageId);
         } else {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN,"User not authorized");
+            message.setDeletedByReceiver(true);
         }
-
-        messageRepository.save(message);
+        chatMessageRepository.save(message);
     }
 
     public void deleteMessageForEveryone(String messageId, String userId) {
-        Message message = findMessageByIdOrMessageId(messageId);
+        ChatMessage message = chatMessageRepository.findByMessageId(messageId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Message not found"));
 
-        if (!userId.equals(message.getSenderId())) {
+        Optional<Long> maybeUserId = parseUserId(userId);
+        if (maybeUserId.isEmpty() || !maybeUserId.get().equals(message.getSenderId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only sender can delete for everyone");
         }
-
         message.setDeletedBySender(true);
         message.setDeletedByReceiver(true);
         message.setDeletedForEveryone(true);
-        message.setContent("This message was deleted");
-        message.setMetadata(null); // Optionally clear media info
-        log.warn("Message is deleted successfully for both users messageId={} ", messageId);
-        messageRepository.save(message);
+        if (!message.isE2ee()) {
+            message.setBody("This message was deleted");
+        }
+        chatMessageRepository.save(message);
     }
 
     private Message toEntity(MessageDto messageDto) {
@@ -417,45 +410,6 @@ public class MessageService {
         callRoom.setCallType(callType);
         callRoom.setCreatedAt(LocalDateTime.now());
         return callRoomRepository.save(callRoom);
-    }
-
-
-
-    public void deleteMessageForUser(String messageId, String userId) {
-        Message msg = findMessageByIdOrMessageId(messageId);
-
-        msg.getDeletedByUserIds().add(userId);
-        messageRepository.save(msg);
-    }
-
-    public void deleteForEveryone(String messageId, String userId) throws AccessDeniedException {
-        Message msg = findMessageByIdOrMessageId(messageId);
-
-        if (!msg.getSenderId().equals(userId)) {
-            throw new AccessDeniedException("Only sender can delete for everyone");
-        }
-
-        msg.setDeletedForEveryone(true);
-        messageRepository.save(msg);
-    }
-
-    private Message findMessageByIdOrMessageId(String messageId) {
-        if (messageId == null || messageId.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Message not found");
-        }
-
-        try {
-            Long numericId = Long.valueOf(messageId);
-            Optional<Message> numericMatch = messageRepository.findById(numericId);
-            if (numericMatch.isPresent()) {
-                return numericMatch.get();
-            }
-        } catch (NumberFormatException ignored) {
-            // Ignore and fall back to messageId lookup.
-        }
-
-        return messageRepository.findByMessageId(messageId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Message not found"));
     }
 
     @Transactional

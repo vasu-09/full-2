@@ -167,7 +167,16 @@ public class RoomsController {
             throw new IllegalArgumentException("Forbidden");
 
         return paging.list(roomId, beforeTs, beforeId, limit)
-                .stream().map(mapper::toDto).toList();
+                .stream()
+                .filter(message -> !message.isDeletedForEveryone())
+                .filter(message -> {
+                    if (userId.equals(message.getSenderId())) {
+                        return !message.isDeletedBySender();
+                    }
+                    return !message.isDeletedByReceiver();
+                })
+                .map(mapper::toDto)
+                .toList();
     }
 
 

@@ -31,6 +31,11 @@ public class ChatMessageDto {
     private byte[] ciphertext;
     private String keyRef;
 
+    private boolean deletedBySender;
+    private boolean deletedByReceiver;
+    private boolean deletedForEveryone;
+    private boolean systemMessage;
+
     public Long getRoomId() {
         return roomId;
     }
@@ -134,6 +139,37 @@ public class ChatMessageDto {
     public void setKeyRef(String keyRef) {
         this.keyRef = keyRef;
     }
+    public boolean isDeletedBySender() {
+        return deletedBySender;
+    }
+
+    public void setDeletedBySender(boolean deletedBySender) {
+        this.deletedBySender = deletedBySender;
+    }
+
+    public boolean isDeletedByReceiver() {
+        return deletedByReceiver;
+    }
+
+    public void setDeletedByReceiver(boolean deletedByReceiver) {
+        this.deletedByReceiver = deletedByReceiver;
+    }
+
+    public boolean isDeletedForEveryone() {
+        return deletedForEveryone;
+    }
+
+    public void setDeletedForEveryone(boolean deletedForEveryone) {
+        this.deletedForEveryone = deletedForEveryone;
+    }
+
+    public boolean isSystemMessage() {
+        return systemMessage;
+    }
+
+    public void setSystemMessage(boolean systemMessage) {
+        this.systemMessage = systemMessage;
+    }
 
     public static ChatMessageDto fromEntity(ChatMessage entity) {
         return ChatMessageDto.builder().messageId(entity.getMessageId())
@@ -149,6 +185,10 @@ public class ChatMessageDto {
                 .iv(entity.getIv())
                 .ciphertext(entity.getCiphertext())
                 .keyRef(entity.getKeyRef())
+                .deletedBySender(entity.isDeletedBySender())
+                .deletedByReceiver(entity.isDeletedByReceiver())
+                .deletedForEveryone(entity.isDeletedForEveryone())
+                .systemMessage(entity.isSystemMessage())
                 .build();
     }
 
@@ -168,6 +208,10 @@ public class ChatMessageDto {
         this.iv = b.iv;
         this.ciphertext = b.ciphertext;
         this.keyRef = b.keyRef;
+        this.deletedBySender = b.deletedBySender;
+        this.deletedByReceiver = b.deletedByReceiver;
+        this.deletedForEveryone = b.deletedForEveryone;
+        this.systemMessage = b.systemMessage;
     }
 
     public static Builder builder() { return new Builder(); }
@@ -186,7 +230,11 @@ public class ChatMessageDto {
                 .aad(aad)
                 .iv(iv)
                 .ciphertext(ciphertext)
-                .keyRef(keyRef);
+                .keyRef(keyRef)
+                .deletedBySender(deletedBySender)
+                .deletedByReceiver(deletedByReceiver)
+                .deletedForEveryone(deletedForEveryone)
+                .systemMessage(systemMessage);
     }
 
     public static final class Builder {
@@ -203,6 +251,10 @@ public class ChatMessageDto {
         private byte[] iv;
         private byte[] ciphertext;
         private String keyRef;
+        private boolean deletedBySender;
+        private boolean deletedByReceiver;
+        private boolean deletedForEveryone;
+        private boolean systemMessage;
 
         public Builder roomId(Long roomId) { this.roomId = roomId; return this; }
         public Builder messageId(String messageId) { this.messageId = messageId; return this; }
@@ -217,6 +269,10 @@ public class ChatMessageDto {
         public Builder iv(byte[] iv) { this.iv = iv; return this; }
         public Builder ciphertext(byte[] ciphertext) { this.ciphertext = ciphertext; return this; }
         public Builder keyRef(String keyRef) { this.keyRef = keyRef; return this; }
+        public Builder deletedBySender(boolean deletedBySender) { this.deletedBySender = deletedBySender; return this; }
+        public Builder deletedByReceiver(boolean deletedByReceiver) { this.deletedByReceiver = deletedByReceiver; return this; }
+        public Builder deletedForEveryone(boolean deletedForEveryone) { this.deletedForEveryone = deletedForEveryone; return this; }
+        public Builder systemMessage(boolean systemMessage) { this.systemMessage = systemMessage; return this; }
 
         public ChatMessageDto build() { return new ChatMessageDto(this); }
     }

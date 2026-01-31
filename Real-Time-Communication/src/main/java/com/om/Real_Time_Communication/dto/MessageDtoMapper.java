@@ -14,6 +14,10 @@ public class MessageDtoMapper {
         d.setType(m.getType());
         d.setServerTs(m.getServerTs());
         d.setE2ee(m.isE2ee());
+        d.setDeletedBySender(m.isDeletedBySender());
+        d.setDeletedByReceiver(m.isDeletedByReceiver());
+        d.setDeletedForEveryone(m.isDeletedForEveryone());
+        d.setSystemMessage(m.isSystemMessage());
         if (m.isE2ee()) {
             d.setE2eeVer(m.getE2eeVer());
             d.setAlgo(m.getAlgo());
@@ -35,6 +39,10 @@ public class MessageDtoMapper {
         m.setSenderId(d.getSenderId());
         m.setType(d.getType());
         m.setServerTs(d.getServerTs() != null ? d.getServerTs() : java.time.Instant.now());
+        m.setDeletedBySender(d.isDeletedBySender());
+        m.setDeletedByReceiver(d.isDeletedByReceiver());
+        m.setDeletedForEveryone(d.isDeletedForEveryone());
+        m.setSystemMessage(d.isSystemMessage());
         m.setE2ee(d.isE2ee());
         if (d.isE2ee()) {
             m.setE2eeVer(d.getE2eeVer());
