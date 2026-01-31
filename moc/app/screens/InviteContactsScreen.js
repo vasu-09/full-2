@@ -12,7 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { getAllContactsFromDb, syncAndPersistContacts } from '../services/contactStorage';
 
@@ -43,7 +43,6 @@ const loadDeviceContacts = async () => {
 
 export default function InviteContactsScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const [contacts, setContacts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
@@ -172,7 +171,7 @@ export default function InviteContactsScreen() {
   );
 
   return (
-    <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
+     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#1f6ea7" barStyle="light-content" />
       <View style={styles.header}>
         <TouchableOpacity style={styles.iconButton} onPress={() => router.back()}>

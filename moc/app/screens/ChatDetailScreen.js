@@ -124,14 +124,45 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
   const messageText = overrideText ?? fallbackText;
 
   const isPendingPlaceholder = messageText === DECRYPTION_PENDING_TEXT;
+  const deliveryStatus =
+    item?.raw?.deliveryStatus ??
+    item?.raw?.status ??
+    (item.readByPeer ? 'READ' : item.pending ? 'PENDING' : 'SENT_TO_WS');
+  const isSender = item.sender === 'me';
+  const isPendingState = item.pending || deliveryStatus === 'PENDING';
+  const isDelivered = deliveryStatus === 'DELIVERED_TO_DEVICE';
+  const isRead = deliveryStatus === 'READ';
   const statusColor = item.failed
     ? '#b3261e'
-    : item.pending
+    : isPendingState
       ? '#1f6ea7'
       : item.sender === 'me'
         ? '#555'
         : '#777';
-  const showClock = item.pending || item.failed;
+  const showClock = isSender && (isPendingState || item.failed);
+  const showSingleTick = isSender && !showClock && deliveryStatus === 'SENT_TO_WS';
+  const showDoubleTick = isSender && !showClock && (isDelivered || isRead);
+  const showStatusRow = isSender && (showClock || showSingleTick || showDoubleTick);
+  const renderStatusIcon = size => {
+    if (!isSender) return null;
+    if (showClock) {
+      return <Icon name="schedule" size={size} color={statusColor} style={styles.statusIcon} />;
+    }
+    if (showSingleTick) {
+      return <Icon name="check" size={size} color={statusColor} style={styles.statusIcon} />;
+    }
+    if (showDoubleTick) {
+      return (
+        <Icon
+          name="done-all"
+          size={size}
+          color={isRead ? '#1f6ea7' : statusColor}
+          style={styles.statusIcon}
+        />
+      );
+    }
+    return null;
+  };
   const decryptionFailed = Boolean(item?.raw?.decryptionFailed);
   const showEncryptedPlaceholder = decryptionFailed && !overrideText;
   const showWaitingMessage =
@@ -335,13 +366,8 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
                   >
                     {item.time}
                   </Text>
-                  {showClock ? (
-                    <Icon
-                      name="schedule"
-                      size={12}
-                      color={statusColor}
-                      style={styles.statusIcon}
-                    />
+                  {showStatusRow ? (
+                    renderStatusIcon(12)
                   ) : null}
                 </View>
               ) : null}
@@ -392,13 +418,8 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
                       {item.time}
                     </Text>
                   ) : null}
-                  {showClock ? (
-                    <Icon
-                      name="schedule"
-                      size={12}
-                      color={statusColor}
-                      style={styles.statusIcon}
-                    />
+                  {showStatusRow ? (
+                    renderStatusIcon(12)
                   ) : null}
                 </View>
               )}
@@ -420,7 +441,7 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
           )}
         </View>
       )}
-       {todoPayload ? null : locationPayload ? null : showClock ? (
+       {todoPayload ? null : locationPayload ? null : showStatusRow ? (
         <View style={styles.messageStatusRow}>
           {item.time ? (
             <Text
@@ -437,12 +458,7 @@ export const MessageContent = ({ item, playingMessageId, onTogglePlayback, onRet
               {item.time}
             </Text>
           ) : null}
-          <Icon
-            name="schedule"
-            size={12}
-            color={statusColor}
-            style={styles.statusIcon}
-          />
+          {renderStatusIcon(12)}
         </View>
       ) : (
         <Text
