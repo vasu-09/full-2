@@ -521,6 +521,8 @@ export default function ChatDetailScreen() {
   const insets = useSafeAreaInsets();
   const [input, setInput] = useState('');
   const [replyTo, setReplyTo] = useState(null);
+  const inputRef = useRef(null);
+  const [replyBarHeight, setReplyBarHeight] = useState(0);
   const [showListPicker, setShowListPicker] = useState(false);
   const [selectedListId, setSelectedListId] = useState(null);
   const flatListRef = useRef();
@@ -861,6 +863,12 @@ export default function ChatDetailScreen() {
     setShowListPicker(false);
     setAttachMenuVisible(false);
   };
+
+  const focusComposer = useCallback(() => {
+    requestAnimationFrame(() => {
+      inputRef.current?.focus?.();
+    });
+  }, []);
 
   const normalizeSubQuantities = useCallback(raw => {
     if (!raw) return [];
@@ -1245,11 +1253,13 @@ export default function ChatDetailScreen() {
       isMine,
     });
     clearSelection();
+    focusComposer();
   };
 
   const cancelReply = useCallback(() => {
     setReplyTo(null);
-  }, []);
+    focusComposer();
+  }, [focusComposer]);
 
   const handleDeleteSelected = () => {
     if (!selectedMessages.length) return;
@@ -1719,7 +1729,6 @@ export default function ChatDetailScreen() {
   };
 
   const topInset = Platform.OS === 'android' ? 0 : insets.top;
-  const replyBarHeight = replyTo ? 46 : 0;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -2195,20 +2204,27 @@ export default function ChatDetailScreen() {
             )}
 
             {replyTo ? (
-              <View style={styles.replyPreviewContainer}>
-                <View style={styles.replyPreviewLeftBar} />
-                <View style={styles.replyPreviewContent}>
-                  <Text style={styles.replyPreviewName} numberOfLines={1}>
-                    {replyTo.senderLabel}
-                  </Text>
-                  <Text style={styles.replyPreviewText} numberOfLines={1}>
+              <View
+                style={styles.replyBar}
+                onLayout={event => setReplyBarHeight(event.nativeEvent.layout.height)}
+              >
+                <View style={styles.replyBarStripe} />
+                <TouchableOpacity
+                  activeOpacity={0.9}
+                  onPress={focusComposer}
+                  style={styles.replyBarBody}
+                >
+                  <Text style={styles.replyBarTitle}>{replyTo.senderLabel}</Text>
+                  <Text numberOfLines={1} style={styles.replyBarSubtitle}>
                     {replyTo.previewText}
                   </Text>
-                </View>
-                <TouchableOpacity onPress={cancelReply} style={styles.replyPreviewClose}>
-                  <Icon name="close" size={18} color="#555" />
+                 </TouchableOpacity>
+                <TouchableOpacity onPress={cancelReply} style={styles.replyBarClose}>
+                  <Icon name="close" size={18} color="#666" />
                 </TouchableOpacity>
               </View>
+              ) : replyBarHeight ? (
+              <View onLayout={() => setReplyBarHeight(0)} />
             ) : null}
 
             <View style={styles.messageBar}>
@@ -2223,6 +2239,7 @@ export default function ChatDetailScreen() {
               </TouchableOpacity>
 
               <TextInput
+                ref={inputRef}
                 style={styles.textInput}
                 placeholder="Message"
                 placeholderTextColor="#888"
@@ -2963,45 +2980,40 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-replyPreviewContainer: {
+  replyBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    paddingVertical: 8,
+    backgroundColor: '#f3f4f6',
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
     paddingHorizontal: 10,
+    paddingVertical: 8,
     marginBottom: 6,
-    marginHorizontal: 8,
-    borderWidth: 1,
-    borderColor: '#e6eef5',
   },
-  replyPreviewLeftBar: {
-    width: 3,
+   replyBarStripe: {
+    width: 4,
     height: '100%',
+    borderRadius: 4,
     backgroundColor: '#1f6ea7',
-    borderRadius: 2,
     marginRight: 10,
   },
-  replyPreviewContent: {
+  replyBarBody: {
     flex: 1,
-    minWidth: 0,
   },
-  replyPreviewName: {
-    fontSize: 13,
-    fontWeight: '700',
+  replyBarTitle: {
     color: '#1f6ea7',
-  },
-  replyPreviewText: {
-    marginTop: 2,
+    fontWeight: '700',
     fontSize: 13,
-    color: '#444',
   },
-  replyPreviewClose: {
+  replyBarSubtitle: {
+    marginTop: 2,
+    color: '#374151',
+    fontSize: 13,
+  },
+  replyBarClose: {
     padding: 6,
-    marginLeft: 6,
-    borderRadius: 16,
   },
-  
+
  attachOverlay:{
     ...StyleSheet.absoluteFillObject,
     backgroundColor:'transparent'
