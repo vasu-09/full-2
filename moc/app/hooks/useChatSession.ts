@@ -1100,6 +1100,7 @@ export const useChatSession = ({
               ? {
                   ...msg,
                   readByPeer: true,
+                  deliveryStatus: 'READ',
                 }
               : msg,
           ),

@@ -140,10 +140,10 @@ export const MessageContent = ({
   const messageText = overrideText ?? fallbackText;
 
   const isPendingPlaceholder = messageText === DECRYPTION_PENDING_TEXT;
+  const rawDeliveryStatus = item?.raw?.deliveryStatus ?? item?.raw?.status;
+  const readFlag = item.readByPeer || item?.raw?.readByPeer;
   const deliveryStatus =
-    item?.raw?.deliveryStatus ??
-    item?.raw?.status ??
-    (item.readByPeer ? 'READ' : item.pending ? 'PENDING' : 'SENT_TO_WS');
+    readFlag ? 'READ' : rawDeliveryStatus ?? (item.pending ? 'PENDING' : 'SENT_TO_WS');
   const isSender = item.sender === 'me';
   const isPendingState = item.pending || deliveryStatus === 'PENDING';
   const isSentToWs = deliveryStatus === 'SENT_TO_WS';
@@ -520,6 +520,7 @@ const isTableMessage = message => {
 export default function ChatDetailScreen() {
   const insets = useSafeAreaInsets();
   const [input, setInput] = useState('');
+  const [replyTo, setReplyTo] = useState(null);
   const [showListPicker, setShowListPicker] = useState(false);
   const [selectedListId, setSelectedListId] = useState(null);
   const flatListRef = useRef();
@@ -733,6 +734,15 @@ export default function ChatDetailScreen() {
   const [pendingDeleteMessages, setPendingDeleteMessages] = useState([]);
   const lastLocationRef = useRef(null);
   
+  const getReplyPreviewText = useCallback(msg => {
+    if (!msg) return '';
+    if (msg.audio) return 'Audio message';
+    if (msg.image) return 'Photo';
+    if (msg.isFile) return msg.text || 'Document';
+    const text = msg.text ?? msg?.raw?.body ?? '';
+    if (!text) return 'Message';
+    return String(text).replace(/\s+/g, ' ').trim();
+  }, []);
 
   const handleCallRoomEvent = useCallback(
     event => {
@@ -1225,12 +1235,21 @@ export default function ChatDetailScreen() {
       return;
     }
     const [selectedMessage] = selectedMessages;
-    setInput(prev => {
-      const prefix = selectedMessage.text || 'Audio message';
-      return prev ? `${prev}\nReplying to: ${prefix}` : `Replying to: ${prefix}`;
+    const isMine = selectedMessage.sender === 'me';
+    const senderLabel = isMine ? 'You' : chatTitle;
+    const previewText = getReplyPreviewText(selectedMessage);
+    setReplyTo({
+      messageId: selectedMessage.id,
+      senderLabel,
+      previewText,
+      isMine,
     });
     clearSelection();
   };
+
+  const cancelReply = useCallback(() => {
+    setReplyTo(null);
+  }, []);
 
   const handleDeleteSelected = () => {
     if (!selectedMessages.length) return;
@@ -1700,6 +1719,7 @@ export default function ChatDetailScreen() {
   };
 
   const topInset = Platform.OS === 'android' ? 0 : insets.top;
+  const replyBarHeight = replyTo ? 46 : 0;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -1865,7 +1885,7 @@ export default function ChatDetailScreen() {
             keyExtractor={i => i.id}
             contentContainerStyle={{
               padding: 12,
-              paddingBottom: MESSAGE_BAR_HEIGHT + bottomOffset,
+              paddingBottom: MESSAGE_BAR_HEIGHT + bottomOffset + replyBarHeight,
             }}
             ListEmptyComponent={
               isHistoryLoading ? (
@@ -2173,6 +2193,23 @@ export default function ChatDetailScreen() {
                 </TouchableOpacity>
               </View>
             )}
+
+            {replyTo ? (
+              <View style={styles.replyPreviewContainer}>
+                <View style={styles.replyPreviewLeftBar} />
+                <View style={styles.replyPreviewContent}>
+                  <Text style={styles.replyPreviewName} numberOfLines={1}>
+                    {replyTo.senderLabel}
+                  </Text>
+                  <Text style={styles.replyPreviewText} numberOfLines={1}>
+                    {replyTo.previewText}
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={cancelReply} style={styles.replyPreviewClose}>
+                  <Icon name="close" size={18} color="#555" />
+                </TouchableOpacity>
+              </View>
+            ) : null}
 
             <View style={styles.messageBar}>
               <TouchableOpacity
@@ -2926,7 +2963,45 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-
+replyPreviewContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    marginBottom: 6,
+    marginHorizontal: 8,
+    borderWidth: 1,
+    borderColor: '#e6eef5',
+  },
+  replyPreviewLeftBar: {
+    width: 3,
+    height: '100%',
+    backgroundColor: '#1f6ea7',
+    borderRadius: 2,
+    marginRight: 10,
+  },
+  replyPreviewContent: {
+    flex: 1,
+    minWidth: 0,
+  },
+  replyPreviewName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1f6ea7',
+  },
+  replyPreviewText: {
+    marginTop: 2,
+    fontSize: 13,
+    color: '#444',
+  },
+  replyPreviewClose: {
+    padding: 6,
+    marginLeft: 6,
+    borderRadius: 16,
+  },
+  
  attachOverlay:{
     ...StyleSheet.absoluteFillObject,
     backgroundColor:'transparent'
